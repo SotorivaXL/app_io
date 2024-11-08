@@ -8,15 +8,15 @@ class AppTheme {
 
   static final lightTheme = ThemeData(
     primaryColor: const Color(0xFF6B00E3),
-    scaffoldBackgroundColor: const Color(0xFFFFFFFF),
+    scaffoldBackgroundColor: const Color(0xFFF0F4FE),
     colorScheme: const ColorScheme.light(
       primary: Color(0xFF6B00E3),
       secondary: Color(0xFFFFFFFF),
       tertiary: Color(0xFF933FFC),
-      background: Color(0xFFE4E9F7),
+      background: Color(0xFFF5F8FF),
       surface: Color(0xFFDED0E0),
       onPrimary: Color(0xFFFFFFFF),
-      onSecondary: Color(0xFF242321),
+      onSecondary: Color(0xFF3A3939),
       onBackground: Color(0xFF18191A),
       onSurface: Color(0xFF000000),
       error: Color(0xFFFF5963),

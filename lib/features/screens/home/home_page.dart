@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:app_io/util/utils.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -16,25 +18,97 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int _selectedIndex = 0;
+  bool hasGerenciarParceirosAccess = false;
+  bool hasGerenciarColaboradoresAccess = false;
+  bool hasConfigurarDashAccess = false;
+  bool hasCriarFormAccess = false;
+  bool hasCriarCampanhaAccess = false;
+  bool isLoading = true;
+
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userDocSubscription;
+
   String? userName;
-
-  static final List<Widget> _pages = <Widget>[
-    LeadsPage(),
-    ProfilePage(),
-  ];
-
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-    Navigator.pop(context); // Fecha o Drawer após a seleção
-  }
 
   @override
   void initState() {
     super.initState();
+    _determineUserDocumentAndListen();
     _getUserData();
+  }
+
+  Future<void> _determineUserDocumentAndListen() async {
+    setState(() {
+      isLoading = true;
+    });
+
+    final authProvider = Provider.of<custom_auth_provider.AuthProvider>(context, listen: false);
+    final user = authProvider.user;
+
+    if (user != null) {
+      try {
+        // Verifica se o documento existe na coleção 'empresas'
+        DocumentSnapshot<Map<String, dynamic>> userDoc = await FirebaseFirestore.instance
+            .collection('empresas')
+            .doc(user.uid)
+            .get();
+
+        if (userDoc.exists) {
+          _listenToUserDocument('empresas', user.uid);
+        } else {
+          // Se não existir em 'empresas', verifica em 'users'
+          userDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
+
+          if (userDoc.exists) {
+            _listenToUserDocument('users', user.uid);
+          } else {
+            print("Documento do usuário não encontrado nas coleções 'empresas' ou 'users'.");
+            setState(() {
+              isLoading = false;
+            });
+          }
+        }
+      } catch (e) {
+        print("Erro ao recuperar as permissões do usuário: $e");
+        setState(() {
+          isLoading = false;
+        });
+      }
+    } else {
+      print("Usuário não está autenticado.");
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
+  void _listenToUserDocument(String collectionName, String userId) {
+    _userDocSubscription = FirebaseFirestore.instance
+        .collection(collectionName)
+        .doc(userId)
+        .snapshots()
+        .listen((userDoc) {
+      if (userDoc.exists) {
+        _updatePermissions(userDoc);
+      } else {
+        print("Documento do usuário não encontrado na coleção '$collectionName'.");
+      }
+    });
+  }
+
+  void _updatePermissions(DocumentSnapshot<Map<String, dynamic>> userDoc) {
+    final userData = userDoc.data();
+
+    setState(() {
+      hasGerenciarParceirosAccess = userData?['gerenciarParceiros'] ?? false;
+      hasGerenciarColaboradoresAccess = userData?['gerenciarColaboradores'] ?? false;
+      hasConfigurarDashAccess = userData?['configurarDash'] ?? false;
+      hasCriarFormAccess = userData?['criarForm'] ?? false;
+      hasCriarCampanhaAccess = userData?['criarCampanha'] ?? false;
+      isLoading = false;
+    });
   }
 
   Future<void> _getUserData() async {
@@ -112,7 +186,7 @@ class _HomePageState extends State<HomePage> {
             const curve = Curves.easeInOut;
 
             var tween =
-                Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+            Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
             var offsetAnimation = animation.drive(tween);
 
             return SlideTransition(
@@ -139,14 +213,24 @@ class _HomePageState extends State<HomePage> {
   }
 
   @override
+  void dispose() {
+    _userDocSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final authProvider =
-        Provider.of<custom_auth_provider.AuthProvider>(context);
+    Provider.of<custom_auth_provider.AuthProvider>(context);
 
-    return Scaffold(
-      body: Padding(
+    return ConnectivityBanner(
+      child: Scaffold(
+        backgroundColor: Theme.of(context).colorScheme.background,
+        body: Padding(
           padding: const EdgeInsets.all(16.0),
-          child: SingleChildScrollView(
+          child: isLoading
+              ? Center(child: CircularProgressIndicator())
+              : SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -175,7 +259,7 @@ class _HomePageState extends State<HomePage> {
                     iconColor: Theme.of(context).colorScheme.outline,
                     onTap: () async {
                       showErrorDialog(
-                          context, "Função estará disponivel em breve...", 'Aguarde');
+                          context, "Função estará disponível em breve...", 'Aguarde');
                     },
                   ),
                 ),
@@ -214,30 +298,38 @@ class _HomePageState extends State<HomePage> {
                     iconColor: Theme.of(context).colorScheme.outline,
                     onTap: () {
                       showErrorDialog(
-                          context, "Função estará disponivel em breve...", 'Aguarde');
+                          context, "Função estará disponível em breve...", 'Aguarde');
                     },
                   ),
                 ),
                 SizedBox(height: 20),
-                Card(
-                  color: Theme.of(context).colorScheme.primary,
-                  child: ListTile(
-                    leading: Icon(Icons.admin_panel_settings),
-                    title: Text(
-                      'Painel Administrativo',
-                      style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.outline),
+                // Exibir o card do Painel Administrativo somente se pelo menos uma permissão for verdadeira
+                if (hasGerenciarParceirosAccess ||
+                    hasGerenciarColaboradoresAccess ||
+                    hasConfigurarDashAccess ||
+                    hasCriarFormAccess ||
+                    hasCriarCampanhaAccess)
+                  Card(
+                    color: Theme.of(context).colorScheme.primary,
+                    child: ListTile(
+                      leading: Icon(Icons.admin_panel_settings),
+                      title: Text(
+                        'Painel Administrativo',
+                        style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.outline),
+                      ),
+                      textColor: Theme.of(context).colorScheme.outline,
+                      iconColor: Theme.of(context).colorScheme.outline,
+                      onTap: () => _navigateTo(context, '/admin'),
                     ),
-                    textColor: Theme.of(context).colorScheme.outline,
-                    iconColor: Theme.of(context).colorScheme.outline,
-                    onTap: () => _navigateTo(context, '/admin'),
                   ),
-                ),
               ],
             ),
-          )),
+          ),
+        ),
+      ),
     );
   }
 }

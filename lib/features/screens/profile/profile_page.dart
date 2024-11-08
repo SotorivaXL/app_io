@@ -1,3 +1,4 @@
+import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:app_io/util/utils.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -97,51 +98,41 @@ class _ProfilePageState extends State<ProfilePage> {
     final authProvider = Provider.of<appAuthProvider.AuthProvider>(context);
     final user = authProvider.user;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Perfil do Usuário'),
-        centerTitle: true,
-        titleTextStyle: TextStyle(
-          fontFamily: 'BrandingSF',
-          fontWeight: FontWeight.w900,
-          fontSize: 26,
-          color: Theme.of(context).colorScheme.outline,
+    return ConnectivityBanner(
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('Perfil do Usuário'),
+          centerTitle: true,
+          titleTextStyle: TextStyle(
+            fontFamily: 'BrandingSF',
+            fontWeight: FontWeight.w900,
+            fontSize: 26,
+            color: Theme.of(context).colorScheme.outline,
+          ),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          foregroundColor: Theme.of(context).colorScheme.outline,
         ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Theme.of(context).colorScheme.outline,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: userName == null
-              ? CircularProgressIndicator()
-              : Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                '$userName',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.onSecondary,
-                ),
-              ),
-              SizedBox(height: 30),
-              Text(
-                '${user?.email ?? 'Email não disponível'}',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
-                ),
-              ),
-              SizedBox(height: 10),
-              if (cnpj != null) ...[
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: userName == null
+                ? CircularProgressIndicator()
+                : Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
                 Text(
-                  'CNPJ: ${cnpj ?? 'CNPJ não disponível'}',
+                  '$userName',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                ),
+                SizedBox(height: 30),
+                Text(
+                  '${user?.email ?? 'Email não disponível'}',
                   style: TextStyle(
                     fontFamily: 'Poppins',
                     fontSize: 14,
@@ -150,40 +141,52 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ),
                 SizedBox(height: 10),
-                Text(
-                  'Final do contrato: ${contract ?? 'Contrato não disponível'}',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Theme.of(context).colorScheme.onSecondary,
+                if (cnpj != null) ...[
+                  Text(
+                    'CNPJ: ${cnpj ?? 'CNPJ não disponível'}',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                  Text(
+                    'Final do contrato: ${contract ?? 'Contrato não disponível'}',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                ],
+                if (role != null) ...[
+                  Text(
+                    'Função: ${role ?? 'Função não disponível'}',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                ],
+                SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    _sendPasswordResetEmail(); // Chama a função para enviar o e-mail
+                  },
+                  child: Text('Alterar senha'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.tertiary,
+                    foregroundColor: Theme.of(context).colorScheme.outline,
                   ),
                 ),
-                SizedBox(height: 10),
               ],
-              if (role != null) ...[
-                Text(
-                  'Função: ${role ?? 'Função não disponível'}',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Theme.of(context).colorScheme.onSecondary,
-                  ),
-                ),
-              ],
-              SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () {
-                  _sendPasswordResetEmail(); // Chama a função para enviar o e-mail
-                },
-                child: Text('Alterar senha'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.tertiary,
-                  foregroundColor: Theme.of(context).colorScheme.outline,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),

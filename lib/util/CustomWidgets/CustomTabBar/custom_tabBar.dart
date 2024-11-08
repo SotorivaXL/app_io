@@ -1,5 +1,7 @@
+import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:app_io/auth/providers/auth_provider.dart' as authProviderApp;
 import 'package:app_io/features/screens/dasboard/dashboard_page.dart';
@@ -12,7 +14,8 @@ class CustomTabBarPage extends StatefulWidget {
   _CustomTabBarPageState createState() => _CustomTabBarPageState();
 }
 
-class _CustomTabBarPageState extends State<CustomTabBarPage> with TickerProviderStateMixin {
+class _CustomTabBarPageState extends State<CustomTabBarPage>
+    with TickerProviderStateMixin {
   late TabController _tabController;
   late PageController _pageController;
 
@@ -87,10 +90,12 @@ class _CustomTabBarPageState extends State<CustomTabBarPage> with TickerProvider
 
     if (hasDashboardAccess) {
       pages.insert(1, DashboardPage());
-      tabs.insert(1, Tab(
-        icon: Icon(Icons.dashboard),
-        text: 'Dashboard',
-      ));
+      tabs.insert(
+          1,
+          Tab(
+            icon: Icon(Icons.dashboard),
+            text: 'Dashboard',
+          ));
     }
 
     if (hasLeadsAccess) {
@@ -140,12 +145,15 @@ class _CustomTabBarPageState extends State<CustomTabBarPage> with TickerProvider
       context: context,
       shape: RoundedRectangleBorder(
         side: BorderSide(
-          color: Theme.of(context).primaryColor,
+          color: Theme
+              .of(context)
+              .primaryColor,
           width: 2,
         ),
         borderRadius: BorderRadius.vertical(top: Radius.circular(25.0)),
       ),
-      backgroundColor: Theme.of(context)
+      backgroundColor: Theme
+          .of(context)
           .colorScheme
           .background,
       builder: (BuildContext context) {
@@ -161,7 +169,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage> with TickerProvider
                   fontFamily: 'Poppins',
                   fontWeight: FontWeight.bold,
                   fontSize: 20,
-                  color: Theme.of(context)
+                  color: Theme
+                      .of(context)
                       .colorScheme
                       .onSecondary,
                 ),
@@ -172,7 +181,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage> with TickerProvider
                 style: TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 16,
-                  color: Theme.of(context)
+                  color: Theme
+                      .of(context)
                       .colorScheme
                       .onSecondary,
                 ),
@@ -189,7 +199,10 @@ class _CustomTabBarPageState extends State<CustomTabBarPage> with TickerProvider
                       'Cancelar',
                       style: TextStyle(
                         fontFamily: 'Poppins',
-                        color: Theme.of(context).colorScheme.onSecondary,
+                        color: Theme
+                            .of(context)
+                            .colorScheme
+                            .onSecondary,
                       ),
                     ),
                   ),
@@ -197,7 +210,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage> with TickerProvider
                   ElevatedButton(
                     onPressed: () async {
                       final authProvider =
-                      Provider.of<authProviderApp.AuthProvider>(context, listen: false);
+                      Provider.of<authProviderApp.AuthProvider>(context,
+                          listen: false);
                       await authProvider.signOut();
                       Navigator.of(context).pushReplacementNamed('/login');
                     },
@@ -205,13 +219,17 @@ class _CustomTabBarPageState extends State<CustomTabBarPage> with TickerProvider
                       'Sair',
                       style: TextStyle(
                         fontFamily: 'Poppins',
-                        color: Theme.of(context)
+                        color: Theme
+                            .of(context)
                             .colorScheme
                             .outline,
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      backgroundColor: Theme
+                          .of(context)
+                          .colorScheme
+                          .primary,
                     ),
                   ),
                 ],
@@ -223,74 +241,149 @@ class _CustomTabBarPageState extends State<CustomTabBarPage> with TickerProvider
     );
   }
 
+  String _getPrefix() {
+    switch (_currentIndex) {
+      case 1:
+        return "Bem-vindo(a) às"; // Página de Campanhas
+      case 2:
+        return "Bem-vindo(a) aos"; // Página de Leads
+      default:
+        return "Bem-vindo(a) ao"; // Padrão para outras páginas
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: AnimatedSwitcher(
-          duration: Duration(milliseconds: 300),
-          child: Text(
-            _getTitle(),
-            key: ValueKey<String>(_getTitle()),
-            style: TextStyle(
-              fontFamily: 'BrandingSF',
-              fontWeight: FontWeight.w900,
-              fontSize: 30,
-              color: Theme.of(context).colorScheme.outline,
-            ),
-          ),
-          transitionBuilder: (Widget child, Animation<double> animation) {
-            final fadeInAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(animation);
-            final slideAnimation = Tween<Offset>(begin: Offset(1, 0), end: Offset.zero).animate(animation);
+    return ConnectivityBanner(
+      child: Scaffold(
+        backgroundColor: Theme
+            .of(context)
+            .colorScheme
+            .background,
+        appBar: AppBar(
+          toolbarHeight: 100,
+          // Aumenta a altura da AppBar
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _getPrefix(), // Utiliza o prefixo com base na página
+                    style: TextStyle(
+                      fontFamily: 'BrandingSF',
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                      color: Theme
+                          .of(context)
+                          .colorScheme
+                          .onSecondary,
+                    ),
+                  ),
+                  AnimatedSwitcher(
+                    duration: Duration(milliseconds: 300),
+                    child: Text(
+                      _getTitle(),
+                      key: ValueKey<String>(_getTitle()),
+                      style: TextStyle(
+                        fontFamily: 'BrandingSF',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 35,
+                        color: Theme
+                            .of(context)
+                            .colorScheme
+                            .onSurface,
+                      ),
+                    ),
+                    transitionBuilder: (Widget child,
+                        Animation<double> animation) {
+                      final fadeInAnimation = Tween<double>(
+                          begin: 0.0, end: 1.0).animate(animation);
+                      final slideAnimation = Tween<Offset>(begin: Offset(1, 0),
+                          end: Offset.zero).animate(animation);
 
-            return SlideTransition(
-              position: slideAnimation,
-              child: FadeTransition(
-                opacity: fadeInAnimation,
-                child: child,
+                      return SlideTransition(
+                        position: slideAnimation,
+                        child: FadeTransition(
+                          opacity: fadeInAnimation,
+                          child: child,
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
+              Stack(
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.notifications),
+                    color: Theme
+                        .of(context)
+                        .colorScheme
+                        .onSurface,
+                    onPressed: () async {},
+                  ),
+                  Positioned(
+                    right: 6,
+                    top: 6,
+                    child: CircleAvatar(
+                      radius: 8,
+                      backgroundColor: Colors.purple,
+                      child: Text(
+                        '3',
+                        style: TextStyle(color: Colors.white, fontSize: 10),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          centerTitle: false,
+          automaticallyImplyLeading: false,
+          backgroundColor: Theme
+              .of(context)
+              .colorScheme
+              .secondary,
+          foregroundColor: Theme
+              .of(context)
+              .colorScheme
+              .outline,
+        ),
+        body: PageView(
+          controller: _pageController,
+          onPageChanged: (index) {
+            setState(() {
+              _currentIndex = index;
+              _tabController.index = index;
+            });
+          },
+          children: _pages,
+        ),
+        bottomNavigationBar: _tabs.isNotEmpty
+            ? TabBar(
+          controller: _tabController,
+          labelColor: Theme
+              .of(context)
+              .colorScheme
+              .primary,
+          unselectedLabelColor: Theme
+              .of(context)
+              .colorScheme
+              .onSecondary,
+          indicator: BoxDecoration(),
+          onTap: (index) {
+            _pageController.animateToPage(
+              index,
+              duration: Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
             );
           },
-        ),
-        centerTitle: true,
-        automaticallyImplyLeading: false,
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Theme.of(context).colorScheme.outline,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.logout_rounded),
-            onPressed: () async {
-              _showLogoutConfirmationDialog(context);
-            },
-          ),
-        ],
+          tabs: _tabs,
+        )
+            : null,
       ),
-      body: PageView(
-        controller: _pageController,
-        onPageChanged: (index) {
-          setState(() {
-            _currentIndex = index;
-            _tabController.index = index;
-          });
-        },
-        children: _pages,
-      ),
-      bottomNavigationBar: _tabs.isNotEmpty
-          ? TabBar(
-        controller: _tabController,
-        labelColor: Theme.of(context).colorScheme.primary,
-        unselectedLabelColor: Theme.of(context).colorScheme.onSecondary,
-        indicator: BoxDecoration(),
-        onTap: (index) {
-          _pageController.animateToPage(
-            index,
-            duration: Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
-        },
-        tabs: _tabs,
-      )
-          : null,
     );
   }
 }

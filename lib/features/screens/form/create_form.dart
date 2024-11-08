@@ -1,3 +1,4 @@
+import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:app_io/util/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -66,195 +67,197 @@ class _CreateFormState extends State<CreateForm> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.background,
-        appBar: AppBar(
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          iconTheme:
-          IconThemeData(color: Theme.of(context).colorScheme.outline),
-          automaticallyImplyLeading: true,
-          title: Text(
-            'Criar Formulário',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: 'BrandingSF',
-              fontSize: 26,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0,
-              color: Theme.of(context).colorScheme.outline,
+    return ConnectivityBanner(
+      child: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Scaffold(
+          backgroundColor: Theme.of(context).colorScheme.background,
+          appBar: AppBar(
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            iconTheme:
+            IconThemeData(color: Theme.of(context).colorScheme.outline),
+            automaticallyImplyLeading: true,
+            title: Text(
+              'Criar Formulário',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'BrandingSF',
+                fontSize: 26,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0,
+                color: Theme.of(context).colorScheme.outline,
+              ),
             ),
+            centerTitle: true,
+            elevation: 2,
           ),
-          centerTitle: true,
-          elevation: 2,
-        ),
-        body: SafeArea(
-          top: true,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.max,
-              children: [
-                _buildDropdowns(context),
-                _buildDynamicFields(context),
-                Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: TextFormField(
-                    controller: _redirectUrlController,
-                    decoration: InputDecoration(
-                      labelText: 'URL de Redirecionamento',
-                      enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(
-                          color: Theme.of(context).primaryColor,
-                          width: 2,
+          body: SafeArea(
+            top: true,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.max,
+                children: [
+                  _buildDropdowns(context),
+                  _buildDynamicFields(context),
+                  Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: TextFormField(
+                      controller: _redirectUrlController,
+                      decoration: InputDecoration(
+                        labelText: 'URL de Redirecionamento',
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: Theme.of(context).primaryColor,
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(15),
                         ),
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(
-                          color: Theme.of(context).colorScheme.tertiary,
-                          width: 2,
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.tertiary,
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(15),
                         ),
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      errorBorder: OutlineInputBorder(
-                        borderSide: BorderSide(
-                          color: Theme.of(context).colorScheme.error,
-                          width: 2,
+                        errorBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.error,
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(15),
                         ),
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      focusedErrorBorder: OutlineInputBorder(
-                        borderSide: BorderSide(
-                          color: Theme.of(context).colorScheme.error,
-                          width: 2,
+                        focusedErrorBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.error,
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(15),
                         ),
-                        borderRadius: BorderRadius.circular(15),
                       ),
+                      keyboardType: TextInputType.url,
                     ),
-                    keyboardType: TextInputType.url,
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: ElevatedButton.icon(
-                    onPressed: _addField,
-                    icon: Icon(
-                      Icons.add,
-                      color: Theme.of(context).colorScheme.outline,
-                      size: 25,
-                    ),
-                    label: Text(
-                      'Adicionar Campo',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0,
+                  Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: ElevatedButton.icon(
+                      onPressed: _addField,
+                      icon: Icon(
+                        Icons.add,
                         color: Theme.of(context).colorScheme.outline,
+                        size: 25,
                       ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding: EdgeInsetsDirectional.fromSTEB(30, 15, 30, 15),
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      elevation: 3,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(25),
+                      label: Text(
+                        'Adicionar Campo',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
                       ),
-                      side: BorderSide(
-                        color: Colors.transparent,
-                        width: 1,
+                      style: ElevatedButton.styleFrom(
+                        padding: EdgeInsetsDirectional.fromSTEB(30, 15, 30, 15),
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        elevation: 3,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                        side: BorderSide(
+                          color: Colors.transparent,
+                          width: 1,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: _isLoading
-                      ? ElevatedButton(
-                    onPressed:
-                    null, // Desabilita o botão enquanto carrega
-                    style: ElevatedButton.styleFrom(
-                      padding: EdgeInsets.symmetric(
-                          horizontal: 25, vertical: 15),
-                      backgroundColor:
-                      Theme.of(context).colorScheme.primary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(25),
+                  Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: _isLoading
+                        ? ElevatedButton(
+                      onPressed:
+                      null, // Desabilita o botão enquanto carrega
+                      style: ElevatedButton.styleFrom(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 25, vertical: 15),
+                        backgroundColor:
+                        Theme.of(context).colorScheme.primary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                      ),
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          valueColor:
+                          AlwaysStoppedAnimation<Color>(Colors.white),
+                          strokeWidth: 2.0,
+                        ),
+                      ),
+                    )
+                        : ElevatedButton(
+                      onPressed: _generateHtmlForm,
+                      child: Text(
+                        'Gerar Formulário HTML',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        padding:
+                        EdgeInsetsDirectional.fromSTEB(30, 15, 30, 15),
+                        backgroundColor:
+                        Theme.of(context).colorScheme.primary,
+                        elevation: 3,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                        side: BorderSide(
+                          color: Colors.transparent,
+                          width: 1,
+                        ),
                       ),
                     ),
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        valueColor:
-                        AlwaysStoppedAnimation<Color>(Colors.white),
-                        strokeWidth: 2.0,
-                      ),
-                    ),
-                  )
-                      : ElevatedButton(
-                    onPressed: _generateHtmlForm,
-                    child: Text(
-                      'Gerar Formulário HTML',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: ElevatedButton.icon(
+                      onPressed: _clearForm,
+                      icon: Icon(
+                        Icons.clear,
                         color: Theme.of(context).colorScheme.outline,
+                        size: 25,
                       ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding:
-                      EdgeInsetsDirectional.fromSTEB(30, 15, 30, 15),
-                      backgroundColor:
-                      Theme.of(context).colorScheme.primary,
-                      elevation: 3,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(25),
+                      label: Text(
+                        'Limpar Campos',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
                       ),
-                      side: BorderSide(
-                        color: Colors.transparent,
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: ElevatedButton.icon(
-                    onPressed: _clearForm,
-                    icon: Icon(
-                      Icons.clear,
-                      color: Theme.of(context).colorScheme.outline,
-                      size: 25,
-                    ),
-                    label: Text(
-                      'Limpar Campos',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0,
-                        color: Theme.of(context).colorScheme.outline,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding: EdgeInsetsDirectional.fromSTEB(30, 15, 30, 15),
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      elevation: 3,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(25),
-                      ),
-                      side: BorderSide(
-                        color: Colors.transparent,
-                        width: 1,
+                      style: ElevatedButton.styleFrom(
+                        padding: EdgeInsetsDirectional.fromSTEB(30, 15, 30, 15),
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        elevation: 3,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                        side: BorderSide(
+                          color: Colors.transparent,
+                          width: 1,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
