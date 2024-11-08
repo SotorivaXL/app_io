@@ -1,22 +1,6 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * const {onCall} = require("firebase-functions/v2/https");
- * const {onDocumentWritten} = require("firebase-functions/v2/firestore");
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
 
 const {onRequest} = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
-
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
-
-// exports.helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
 
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
@@ -239,19 +223,73 @@ exports.updateCompany = functions.https.onRequest(async (req, res) => {
 });
 
 // Delete (Excluir uma empresa existente)
-exports.deleteCompany = functions.https.onRequest(async (req, res) => {
-    const { companyId } = req.body;
+exports.deleteCompany = functions.https.onCall(async (data, context) => {
+    // Verifica se o usuário está autenticado
+    if (!context.auth) {
+        throw new functions.https.HttpsError(
+            'unauthenticated',
+            'A função deve ser chamada enquanto autenticado.'
+        );
+    }
+
+    const companyId = data.companyId;
 
     if (!companyId) {
-        return res.status(400).send('Missing companyId');
+        throw new functions.https.HttpsError(
+            'invalid-argument',
+            'O ID da empresa é necessário.'
+        );
     }
 
     try {
+        // 1. Deletar a empresa do Firestore
         await admin.firestore().collection('empresas').doc(companyId).delete();
-        res.status(200).send("Empresa excluída com sucesso!");
+        console.log(`Empresa ${companyId} deletada do Firestore.`);
+
+        // 2. Deletar a conta da empresa no Firebase Authentication
+        try {
+            await admin.auth().deleteUser(companyId);
+            console.log(`Conta da empresa ${companyId} deletada do Authentication.`);
+        } catch (error) {
+            console.error(`Erro ao deletar a conta da empresa ${companyId}:`, error);
+            // Continua mesmo assim
+        }
+
+        // 3. Buscar todos os usuários com 'createdBy' igual ao companyId
+        const usersSnapshot = await admin.firestore()
+            .collection('users')
+            .where('createdBy', '==', companyId)
+            .get();
+
+        const userUids = [];
+
+        usersSnapshot.forEach(doc => {
+            const uid = doc.id; // Usando o ID do documento como UID do usuário
+            if (uid) {
+                userUids.push(uid);
+            }
+        });
+
+        // 4. Deletar usuários do Firebase Authentication e Firestore
+        for (const uid of userUids) {
+            try {
+                // Deletar do Firebase Authentication
+                await admin.auth().deleteUser(uid);
+                console.log(`Usuário ${uid} deletado do Authentication.`);
+
+                // Deletar do Firestore
+                await admin.firestore().collection('users').doc(uid).delete();
+                console.log(`Usuário ${uid} deletado do Firestore.`);
+            } catch (error) {
+                console.error(`Erro ao deletar usuário ${uid}:`, error);
+                // Continua tentando com os próximos usuários
+            }
+        }
+
+        return { success: true, message: 'Empresa e usuários vinculados excluídos com sucesso.' };
     } catch (error) {
-        console.error("Error deleting company: ", error);
-        res.status(500).send("Erro ao excluir empresa");
+        console.error('Erro ao excluir empresa e usuários vinculados:', error);
+        throw new functions.https.HttpsError('unknown', 'Erro ao excluir empresa e usuários vinculados.');
     }
 });
 
@@ -286,6 +324,7 @@ exports.createUserAndCompany = functions.https.onCall(async (data, context) => {
                 contract: contract || '',
                 countArtsValue: countArtsValue || 0,
                 countVideosValue: countVideosValue || 0,
+                isDevAccount: false,
             });
 
             return { success: true, message: 'Usuário e empresa criados com sucesso.' };

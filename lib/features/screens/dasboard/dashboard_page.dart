@@ -1,3 +1,4 @@
+import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:app_io/util/utils.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -131,17 +132,19 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<appAuthProvider.AuthProvider>(context);
 
-    return Scaffold(
-      body: Center(
-        child: Text(
-          'Em breve, as funções desta página estarão disponíveis.',
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: Theme.of(context).colorScheme.onSecondary,
+    return ConnectivityBanner(
+      child: Scaffold(
+        body: Center(
+          child: Text(
+            'Em breve, as funções desta página estarão disponíveis.',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSecondary,
+            ),
+            textAlign: TextAlign.center,
           ),
-          textAlign: TextAlign.center,
         ),
       ),
     );

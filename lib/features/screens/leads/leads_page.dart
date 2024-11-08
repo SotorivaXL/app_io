@@ -1,3 +1,4 @@
+import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:app_io/util/utils.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -282,39 +283,41 @@ class _LeadsPageState extends State<LeadsPage> {
     final authProvider = Provider.of<appAuthProvider.AuthProvider>(context, listen: false);
     final user = authProvider.user;
 
-    return Scaffold(
-      body: SafeArea(
-        top: true,
-        child: Container(
-          width: MediaQuery.of(context).size.width,
-          height: MediaQuery.of(context).size.height,
-          decoration: BoxDecoration(),
-          child: FutureBuilder<DocumentSnapshot>(
-            future: FirebaseFirestore.instance
-                .collection('users')
-                .doc(user?.uid)
-                .get(),
-            builder: (context, userSnapshot) {
-              if (userSnapshot.connectionState == ConnectionState.waiting) {
-                return Center(child: CircularProgressIndicator());
-              }
-              if (userSnapshot.hasError) {
-                return Center(
-                    child: Text(
-                        'Erro ao buscar o usuário: ${userSnapshot.error}'));
-              }
-
-              if (userSnapshot.hasData && userSnapshot.data!.exists) {
-                final userDocument = userSnapshot.data!;
-                final empresaId = userDocument['createdBy'];
-
-                if (empresaId != null && empresaId.isNotEmpty) {
-                  return _buildCampanhasStream(empresaId);
+    return ConnectivityBanner(
+      child: Scaffold(
+        body: SafeArea(
+          top: true,
+          child: Container(
+            width: MediaQuery.of(context).size.width,
+            height: MediaQuery.of(context).size.height,
+            decoration: BoxDecoration(),
+            child: FutureBuilder<DocumentSnapshot>(
+              future: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(user?.uid)
+                  .get(),
+              builder: (context, userSnapshot) {
+                if (userSnapshot.connectionState == ConnectionState.waiting) {
+                  return Center(child: CircularProgressIndicator());
                 }
-              }
+                if (userSnapshot.hasError) {
+                  return Center(
+                      child: Text(
+                          'Erro ao buscar o usuário: ${userSnapshot.error}'));
+                }
 
-              return _buildCampanhasStream(user!.uid);
-            },
+                if (userSnapshot.hasData && userSnapshot.data!.exists) {
+                  final userDocument = userSnapshot.data!;
+                  final empresaId = userDocument['createdBy'];
+
+                  if (empresaId != null && empresaId.isNotEmpty) {
+                    return _buildCampanhasStream(empresaId);
+                  }
+                }
+
+                return _buildCampanhasStream(user!.uid);
+              },
+            ),
           ),
         ),
       ),
