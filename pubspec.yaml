@@ -40,10 +40,12 @@ dev_dependencies:
 
 flutter:
   assets:
-    - assets/images/icons/logo.png
+    - 'assets/images/icons/logo.png'
     - 'assets/images/icons/icon camera.png'
     - 'assets/images/icons/logoLight.png'
     - 'assets/images/icons/logoDark.png'
+    - 'assets/images/icons/logoTransparente.png'
+    - 'assets/animations/no_internet.json'
 
   uses-material-design: true
 
