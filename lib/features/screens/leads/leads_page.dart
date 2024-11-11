@@ -387,7 +387,7 @@ class _LeadsPageState extends State<LeadsPage> {
                             return DropdownMenuItem<String>(
                               value: status,
                               child: Container(
-                                child: Text(
+                                child: Text(//
                                   status,
                                   style: TextStyle(
                                     fontFamily: 'Poppins',
@@ -489,7 +489,7 @@ class _LeadsPageState extends State<LeadsPage> {
                                   boxShadow: [
                                     BoxShadow(
                                       blurRadius: 10,
-                                      color: Theme.of(context).shadowColor,
+                                      color: Theme.of(context).colorScheme.shadow,
                                       offset: Offset(0, 0),
                                     ),
                                   ],

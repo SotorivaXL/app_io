@@ -1,3 +1,4 @@
+import 'package:app_io/features/screens/configurations/configurations.dart';
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,6 +8,7 @@ import 'package:app_io/features/screens/dasboard/dashboard_page.dart';
 import 'package:app_io/features/screens/home/home_page.dart';
 import 'package:app_io/features/screens/leads/leads_page.dart';
 import 'package:provider/provider.dart';
+import 'package:modal_side_sheet/modal_side_sheet.dart';
 
 class CustomTabBarPage extends StatefulWidget {
   @override
@@ -88,22 +90,33 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     ];
 
     if (hasDashboardAccess) {
-      pages.insert(1, DashboardPage());
-      tabs.insert(
-          1,
-          Tab(
-            icon: Icon(Icons.dashboard),
-            text: 'Dashboard',
-          ));
+      pages.add(DashboardPage());
+      tabs.add(
+        Tab(
+          icon: Icon(Icons.dashboard),
+          text: 'Dashboard',
+        ),
+      );
     }
 
     if (hasLeadsAccess) {
       pages.add(LeadsPage());
-      tabs.add(Tab(
-        icon: Icon(Icons.supervisor_account),
-        text: 'Leads',
-      ));
+      tabs.add(
+        Tab(
+          icon: Icon(Icons.supervisor_account),
+          text: 'Leads',
+        ),
+      );
     }
+
+    // Adiciona a página de configurações sempre como a última
+    pages.add(SettingsPage());
+    tabs.add(
+      Tab(
+        icon: Icon(Icons.settings),
+        text: 'Config.',
+      ),
+    );
 
     _pages = pages;
     _tabs = tabs;
@@ -131,137 +144,166 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
       case 0:
         return 'Início';
       case 1:
-        return 'Dashboard';
+        return hasDashboardAccess ? 'Dashboard' : hasLeadsAccess ? 'Leads' : 'Configurações';
       case 2:
-        return 'Leads';
+        return hasDashboardAccess && hasLeadsAccess ? 'Leads' : 'Configurações';
+      case 3:
+        return 'Configurações';
       default:
         return 'IO Connect';
     }
   }
 
-  void _showLogoutConfirmationDialog(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(
-          color: Theme
-              .of(context)
-              .primaryColor,
-          width: 2,
-        ),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(25.0)),
-      ),
-      backgroundColor: Theme
-          .of(context)
-          .colorScheme
-          .background,
-      builder: (BuildContext context) {
-        return Container(
-          padding: EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Confirmar Logout',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                  color: Theme
-                      .of(context)
-                      .colorScheme
-                      .onSecondary,
-                ),
-              ),
-              SizedBox(height: 10),
-              Text(
-                'Tem certeza que deseja sair?',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 16,
-                  color: Theme
-                      .of(context)
-                      .colorScheme
-                      .onSecondary,
-                ),
-              ),
-              SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    child: Text(
-                      'Cancelar',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        color: Theme
-                            .of(context)
-                            .colorScheme
-                            .onSecondary,
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 10),
-                  ElevatedButton(
-                    onPressed: () async {
-                      final authProvider =
-                      Provider.of<authProviderApp.AuthProvider>(context,
-                          listen: false);
-                      await authProvider.signOut();
-                      Navigator.of(context).pushReplacementNamed('/login');
-                    },
-                    child: Text(
-                      'Sair',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        color: Theme
-                            .of(context)
-                            .colorScheme
-                            .outline,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme
-                          .of(context)
-                          .colorScheme
-                          .primary,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   String _getPrefix() {
     switch (_currentIndex) {
       case 1:
-        return "Bem-vindo(a) às"; // Página de Campanhas
+        return hasDashboardAccess ? "Bem-vindo(a) ao" : "Bem-vindo(a) aos";
       case 2:
-        return "Bem-vindo(a) aos"; // Página de Leads
+        return hasDashboardAccess && hasLeadsAccess ? "Bem-vindo(a) aos" : "Bem-vindo(a) às";
+      case 3:
+        return "Bem-vindo(a) às";
       default:
-        return "Bem-vindo(a) ao"; // Padrão para outras páginas
+        return "Bem-vindo(a) ao";
     }
+  }
+
+  void _showNotificationsSidebar(BuildContext context) {
+    List<Map<String, String>> notifications = [
+      {'title': 'Exemplo de notificação 1', 'description': 'Descrição da notificação 1'},
+      {'title': 'Exemplo de notificação 2', 'description': 'Descrição da notificação 2'},
+      // Adicione mais notificações conforme necessário
+    ];
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '',
+      barrierColor: Colors.black54, // Cor do fundo ao abrir o modal
+      transitionDuration: Duration(milliseconds: 300), // Duração da animação
+      pageBuilder: (BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            return Align(
+              alignment: Alignment.centerRight, // Alinha o modal à direita da tela
+              child: Dismissible(
+                key: Key('notificationSidebar'), // Chave única para o Dismissible
+                direction: DismissDirection.startToEnd, // Permite deslizar para fechar da direita para esquerda
+                onDismissed: (direction) {
+                  Navigator.of(context).pop(); // Fecha o modal ao arrastar para o lado
+                },
+                child: Material(
+                  color: Colors.transparent, // Deixa o fundo transparente
+                  child: Container(
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    height: MediaQuery.of(context).size.height,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.background,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(25.0),
+                        bottomLeft: Radius.circular(25.0),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Theme.of(context).colorScheme.shadow,
+                          offset: Offset(-4, 0), // Sombra para a esquerda
+                          blurRadius: 10.0,
+                        ),
+                      ],
+                    ),
+                    padding: EdgeInsets.fromLTRB(30, 50, 30, 50),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Notificações',
+                          style: TextStyle(
+                            fontFamily: 'BrandingSF',
+                            fontWeight: FontWeight.w700,
+                            fontSize: 30,
+                            color: Theme.of(context).colorScheme.onBackground,
+                          ),
+                        ),
+                        SizedBox(height: 10),
+                        Expanded(
+                          child: ListView.builder(
+                            itemCount: notifications.length,
+                            itemBuilder: (context, index) {
+                              final notification = notifications[index];
+                              return Dismissible(
+                                key: Key(notification['title']!),
+                                direction: DismissDirection.startToEnd,
+                                background: Container(
+                                  child: Icon(
+                                    Icons.delete,
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
+                                  alignment: Alignment.centerLeft,
+                                ),
+                                onDismissed: (direction) {
+                                  setState(() {
+                                    notifications.removeAt(index); // Remove a notificação da lista
+                                  });
+                                },
+                                child: ListTile(
+                                  contentPadding: EdgeInsets.symmetric(vertical: 2),
+                                  tileColor: Theme.of(context).colorScheme.secondary.withOpacity(0.1),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  leading: Icon(Icons.notifications, color: Theme.of(context).colorScheme.primary),
+                                  title: Text(
+                                    notification['title']!,
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 16,
+                                      color: Theme.of(context).colorScheme.onSecondary,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    notification['description']!,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Theme.of(context).colorScheme.onSecondary.withOpacity(0.6),
+                                    ),
+                                  ),
+                                  onTap: () {
+                                    // Ação ao clicar na notificação
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final offsetAnimation = Tween<Offset>(
+          begin: Offset(1.0, 0.0), // Começa fora da tela à direita
+          end: Offset.zero,
+        ).animate(animation);
+
+        return SlideTransition(
+          position: offsetAnimation,
+          child: child,
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return ConnectivityBanner(
       child: Scaffold(
-        backgroundColor: Theme
-            .of(context)
-            .colorScheme
-            .background,
+        backgroundColor: Theme.of(context).colorScheme.secondary,
         appBar: AppBar(
-          toolbarHeight: 100,
-          // Aumenta a altura da AppBar
+          toolbarHeight: 100, // Aumenta a altura da AppBar
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -269,15 +311,12 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _getPrefix(), // Utiliza o prefixo com base na página
+                    _getPrefix(),
                     style: TextStyle(
                       fontFamily: 'BrandingSF',
                       fontWeight: FontWeight.w600,
                       fontSize: 16,
-                      color: Theme
-                          .of(context)
-                          .colorScheme
-                          .onSecondary,
+                      color: Theme.of(context).colorScheme.onBackground,
                     ),
                   ),
                   AnimatedSwitcher(
@@ -289,10 +328,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                         fontFamily: 'BrandingSF',
                         fontWeight: FontWeight.w700,
                         fontSize: 35,
-                        color: Theme
-                            .of(context)
-                            .colorScheme
-                            .onSurface,
+                        color: Theme.of(context).colorScheme.surfaceVariant,
                       ),
                     ),
                     transitionBuilder: (Widget child,
@@ -317,18 +353,18 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                 children: [
                   IconButton(
                     icon: Icon(Icons.notifications),
-                    color: Theme
-                        .of(context)
-                        .colorScheme
-                        .onSurface,
-                    onPressed: () async {},
+                    color: Theme.of(context).colorScheme.onSecondary,
+                    iconSize: 30,
+                    onPressed: () async {
+                      _showNotificationsSidebar(context);
+                    },
                   ),
                   Positioned(
                     right: 6,
                     top: 6,
                     child: CircleAvatar(
                       radius: 8,
-                      backgroundColor: Colors.purple,
+                      backgroundColor: Theme.of(context).colorScheme.tertiary,
                       child: Text(
                         '3',
                         style: TextStyle(color: Colors.white, fontSize: 10),
@@ -341,14 +377,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
           ),
           centerTitle: false,
           automaticallyImplyLeading: false,
-          backgroundColor: Theme
-              .of(context)
-              .colorScheme
-              .secondary,
-          foregroundColor: Theme
-              .of(context)
-              .colorScheme
-              .outline,
+          backgroundColor: Theme.of(context).colorScheme.secondary,
+          foregroundColor: Theme.of(context).colorScheme.outline,
         ),
         body: PageView(
           controller: _pageController,
@@ -363,14 +393,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
         bottomNavigationBar: _tabs.isNotEmpty
             ? TabBar(
           controller: _tabController,
-          labelColor: Theme
-              .of(context)
-              .colorScheme
-              .primary,
-          unselectedLabelColor: Theme
-              .of(context)
-              .colorScheme
-              .onSecondary,
+          labelColor: Theme.of(context).colorScheme.tertiary,
+          unselectedLabelColor: Theme.of(context).colorScheme.onSecondary,
           indicator: BoxDecoration(),
           onTap: (index) {
             _pageController.animateToPage(

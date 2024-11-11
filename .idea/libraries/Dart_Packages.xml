@@ -68,42 +68,42 @@
         <entry key="cloud_firestore">
           <value>
             <list>
-              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/cloud_firestore-5.4.4/lib" />
+              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/cloud_firestore-5.4.5/lib" />
             </list>
           </value>
         </entry>
         <entry key="cloud_firestore_platform_interface">
           <value>
             <list>
-              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/cloud_firestore_platform_interface-6.4.3/lib" />
+              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/cloud_firestore_platform_interface-6.4.4/lib" />
             </list>
           </value>
         </entry>
         <entry key="cloud_firestore_web">
           <value>
             <list>
-              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/cloud_firestore_web-4.3.2/lib" />
+              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/cloud_firestore_web-4.3.3/lib" />
             </list>
           </value>
         </entry>
         <entry key="cloud_functions">
           <value>
             <list>
-              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/cloud_functions-5.1.3/lib" />
+              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/cloud_functions-5.1.4/lib" />
             </list>
           </value>
         </entry>
         <entry key="cloud_functions_platform_interface">
           <value>
             <list>
-              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/cloud_functions_platform_interface-5.5.37/lib" />
+              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/cloud_functions_platform_interface-5.5.38/lib" />
             </list>
           </value>
         </entry>
         <entry key="cloud_functions_web">
           <value>
             <list>
-              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/cloud_functions_web-4.10.2/lib" />
+              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/cloud_functions_web-4.10.3/lib" />
             </list>
           </value>
         </entry>
@@ -517,6 +517,13 @@
           <value>
             <list>
               <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/mime-2.0.0/lib" />
+            </list>
+          </value>
+        </entry>
+        <entry key="modal_side_sheet">
+          <value>
+            <list>
+              <option value="$USER_HOME$/AppData/Local/Pub/Cache/hosted/pub.dev/modal_side_sheet-0.0.1/lib" />
             </list>
           </value>
         </entry>

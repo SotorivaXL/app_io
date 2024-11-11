@@ -151,7 +151,7 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Image.asset(
           'assets/images/icons/logoTransparente.png',
           fit: BoxFit.contain,
-          width: double.infinity,
+          width: 270,
           height: double.infinity,
         ),
       ),
