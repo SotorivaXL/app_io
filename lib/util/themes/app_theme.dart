@@ -26,6 +26,7 @@ class AppTheme {
       secondaryContainer: Color(0xFF716f6f), // Accent2
       outline: Color(0xFFFFFFFF),
       inverseSurface: Color(0xFF707070),
+      tertiaryContainer: Color(0xFFB7B3C6),
       shadow: Color(0x20000000),
       onTertiary: constantGreen,
     ),
@@ -65,6 +66,7 @@ class AppTheme {
       secondaryContainer: Color(0xFFe2e2e2), // Accent2
       outline: Color(0xFFFFFFFF),
       inverseSurface: Color(0xFF707070),
+      tertiaryContainer: Color(0xFF2F2E32),
       shadow: Color(0x20000000),
       onTertiary: constantGreen,
     ),

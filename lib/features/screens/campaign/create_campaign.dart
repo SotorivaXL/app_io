@@ -153,6 +153,16 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
             fontSize: 26,
             color: Theme.of(context).colorScheme.outline
           ),
+          leading: IconButton(
+            icon: Icon(
+              Icons.arrow_back_ios_new,
+              color: Theme.of(context).colorScheme.outline,
+              size: 24,
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+            },
+          ),
           shadowColor: Theme.of(context).colorScheme.outline,
           backgroundColor: Theme.of(context).colorScheme.primary,
           foregroundColor: Theme.of(context).colorScheme.outline,
