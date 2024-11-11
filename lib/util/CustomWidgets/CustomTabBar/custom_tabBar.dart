@@ -1,7 +1,6 @@
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:app_io/auth/providers/auth_provider.dart' as authProviderApp;
 import 'package:app_io/features/screens/dasboard/dashboard_page.dart';

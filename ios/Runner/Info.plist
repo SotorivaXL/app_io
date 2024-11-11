@@ -57,5 +57,9 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>NSFaceIDUsageDescription</key>
+    <string>Este aplicativo usa Face ID para autenticação.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Este aplicativo requer acesso à rede local para depuração.</string>
 </dict>
 </plist>

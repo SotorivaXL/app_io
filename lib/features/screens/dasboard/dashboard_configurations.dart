@@ -384,6 +384,16 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
               color: Theme.of(context).colorScheme.outline,
             ),
           ),
+          leading: IconButton(
+            icon: Icon(
+              Icons.arrow_back_ios_new,
+              color: Theme.of(context).colorScheme.outline,
+              size: 24,
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+            },
+          ),
           centerTitle: true,
           backgroundColor: Theme.of(context).colorScheme.primary,
         ),

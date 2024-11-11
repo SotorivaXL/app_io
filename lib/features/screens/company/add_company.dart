@@ -102,7 +102,7 @@ class _AddCompanyState extends State<AddCompany> {
             automaticallyImplyLeading: false,
             leading: IconButton(
               icon: Icon(
-                Icons.arrow_back_rounded,
+                Icons.arrow_back_ios_new,
                 color: Theme.of(context).colorScheme.outline,
                 size: 24,
               ),
