@@ -28,6 +28,8 @@ class AppTheme {
       inverseSurface: Color(0xFF707070),
       tertiaryContainer: Color(0xFFB7B3C6),
       shadow: Color(0x20000000),
+      scrim: Color(0xFF18191a),
+      onPrimaryContainer: Color(0xFFf5f8fe),
       onTertiary: constantGreen,
     ),
     textTheme: const TextTheme(
@@ -68,6 +70,8 @@ class AppTheme {
       inverseSurface: Color(0xFF707070),
       tertiaryContainer: Color(0xFF2F2E32),
       shadow: Color(0x20000000),
+      scrim: Color(0xFF18191a),
+      onPrimaryContainer: Color(0xFFf5f8fe),
       onTertiary: constantGreen,
     ),
     textTheme: const TextTheme(
