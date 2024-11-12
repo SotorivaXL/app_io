@@ -27,7 +27,8 @@ class _LeadsPageState extends State<LeadsPage> {
   bool hasDashboardAccess = false;
   String? selectedCampaignId;
   String? selectedCampaignName;
-  String? selectedStatus; // Variável para armazenar o status selecionado
+  String? selectedStatus;
+  List<DocumentSnapshot> allLeads = [];
 
   @override
   void initState() {
@@ -40,46 +41,30 @@ class _LeadsPageState extends State<LeadsPage> {
 
     if (user != null) {
       try {
-        // Tenta buscar o documento do usuário na coleção 'users'
         final userDoc = await FirebaseFirestore.instance
             .collection('users')
             .doc(user.uid)
             .get();
 
         if (userDoc.exists) {
-          // Se encontrado na coleção 'users', armazena e exibe o nome do usuário
-          final data = userDoc.data();
-          if (data != null) {
-            String userName = data['name'] ?? '';
-            SharedPreferences prefs = await SharedPreferences.getInstance();
-            await prefs.setString('userName', userName);
-
+          final createdBy = userDoc['createdBy'];
+          if (createdBy != null) {
             setState(() {
-              this.userName = userName;
+              _fetchAllLeads(createdBy); // Busca leads da empresa
             });
           }
         } else {
-          // Se não encontrado na coleção 'users', tenta buscar na coleção 'empresas'
           final empresaDoc = await FirebaseFirestore.instance
               .collection('empresas')
               .doc(user.uid)
               .get();
 
           if (empresaDoc.exists) {
-            final data = empresaDoc.data();
-            if (data != null) {
-              String userName = data['NomeEmpresa'] ?? '';
-              SharedPreferences prefs = await SharedPreferences.getInstance();
-              await prefs.setString('userName', userName);
-
-              setState(() {
-                this.userName = userName;
-              });
-            }
+            setState(() {
+              _fetchAllLeads(user.uid); // Busca leads do próprio usuário
+            });
           } else {
-            // Se não encontrado em nenhuma das coleções, exibe mensagem de erro
-            showErrorDialog(context,
-                'Documento do usuário não encontrado, aguarde e tente novamente mais tarde!.', 'Atenção');
+            showErrorDialog(context, 'Documento não encontrado.', 'Atenção');
           }
         }
       } catch (e) {
@@ -87,6 +72,21 @@ class _LeadsPageState extends State<LeadsPage> {
       }
     } else {
       showErrorDialog(context, 'Você não está autenticado.', 'Atenção');
+    }
+  }
+
+  Future<void> _fetchAllLeads(String empresaId) async {
+    final campanhasSnapshot = await FirebaseFirestore.instance
+        .collection('empresas')
+        .doc(empresaId)
+        .collection('campanhas')
+        .get();
+
+    for (var campanha in campanhasSnapshot.docs) {
+      final leadsSnapshot = await campanha.reference.collection('leads').get();
+      setState(() {
+        allLeads.addAll(leadsSnapshot.docs);
+      });
     }
   }
 
@@ -347,274 +347,332 @@ class _LeadsPageState extends State<LeadsPage> {
           children: [
             Row(
               children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(
-                        left: 10.0, top: 20.0, bottom: 20.0, right: 5.0),
-                    child: CustomDropdownButton<String>(
-                      value: selectedCampaignId,
-                      items: campanhas.map((campanha) {
-                        return DropdownMenuItem<String>(
-                          value: campanha.id,
-                          child: Text(campanha['nome_campanha']),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          selectedCampaignId = value;
-                          selectedCampaignName = campanhas.firstWhere(
-                                  (campanha) =>
-                              campanha.id == value)['nome_campanha'];
-                        });
-                      },
-                      hint: 'Selecione uma campanha',
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Padding(
-                      padding: const EdgeInsets.only(
-                          left: 5.0, top: 20.0, bottom: 20.0, right: 10.0),
-                      child: CustomDropdownButton<String>(
-                          value: selectedStatus,
-                          items: [
-                            'Sem Filtros',
-                            'Aguardando',
-                            'Atendendo',
-                            'Venda',
-                            'Recusado'
-                          ].map((status) {
-                            return DropdownMenuItem<String>(
-                              value: status,
-                              child: Container(
-                                child: Text(//
-                                  status,
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              selectedStatus = value;
-                            });
-                          },
-                          hint: 'Filtrar por status')),
-                ),
-              ],
-            ),
-            if (selectedCampaignId != null)
-              Expanded(
-                  child: StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('empresas')
-                        .doc(empresaId)
-                        .collection('campanhas')
-                        .doc(selectedCampaignId)
-                        .collection('leads')
-                        .orderBy('timestamp', descending: true)
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return Center(child: CircularProgressIndicator());
-                      }
-                      if (snapshot.hasError) {
-                        return Center(child: Text('Erro: ${snapshot.error}'));
-                      }
-                      final leads = snapshot.data?.docs ?? [];
-                      if (leads.isEmpty) {
-                        return Center(child: Text('Nenhum lead disponível'));
-                      }
-
-                      // Filtro de leads baseado no status
-                      final filteredLeads = leads.where((lead) {
-                        final data = lead.data() as Map<String, dynamic>;
-                        final status = data['status'] ?? 'Aguardando';
-                        return selectedStatus == null ||
-                            selectedStatus == 'Sem Filtros' ||
-                            status == selectedStatus;
-                      }).toList();
-
-                      return ListView.builder(
-                        itemCount: filteredLeads.length,
-                        itemBuilder: (context, index) {
-                          final lead = filteredLeads[index];
-                          final leadData =
-                          Map<String, dynamic>.from(lead.data() as Map);
-
-                          // Filtrar os campos 'empresa_id' e 'nome_campanha'
-                          leadData.remove('empresa_id');
-                          leadData.remove('nome_campanha');
-
-                          // Formatar o timestamp e alterar o nome do campo
-                          if (leadData.containsKey('timestamp') &&
-                              leadData['timestamp'] != null) {
-                            Timestamp timestamp = leadData['timestamp'];
-                            DateTime dateTime = timestamp
-                                .toDate()
-                                .toLocal(); // Ajusta para o horário local
-                            String formattedTime =
-                            DateFormat('HH:mm').format(dateTime);
-                            String formattedDate =
-                            DateFormat('dd/MM/yyyy').format(dateTime);
-
-                            // Remover o campo 'timestamp' original
-                            leadData.remove('timestamp');
-
-                            // Adicionar o novo campo com o nome desejado
-                            leadData['data_entrada'] =
-                            'Entrou às ${formattedTime} do dia ${formattedDate}';
-                          }
-
-                          // Adicionar o campo de status
-                          final status = leadData['status'] ??
-                              'Aguardando'; // Default para 'Aguardando'
-                          final color = _getStatusColor(status);
-
-                          return GestureDetector(
-                            onTap: () {
-                              _showLeadDetails(context, leadData);
-                            },
-                            child: Padding(
-                              padding: EdgeInsets.all(10),
-                              child: Container(
-                                width: MediaQuery.of(context).size.width * 0.9,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(25),
-                                  color: Theme.of(context).cardColor,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      blurRadius: 10,
-                                      color: Theme.of(context).colorScheme.shadow,
-                                      offset: Offset(0, 0),
-                                    ),
-                                  ],
-                                ),
-                                child: Padding(
-                                  padding: EdgeInsets.all(17),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      // Exibe a Tag de Status
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 1, horizontal: 12),
-                                        child: Row(
-                                          children: [
-                                            GestureDetector(
-                                              onTap: () {
-                                                _showStatusSelectionDialog(
-                                                    context,
-                                                    lead.id,
-                                                    empresaId,
-                                                    selectedCampaignId!);
-                                              },
-                                              child: Chip(
-                                                label: Text(
-                                                  status,
-                                                  style: TextStyle(
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .outline,
-                                                    fontFamily: 'Poppins',
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w500,
-                                                  ),
-                                                ),
-                                                backgroundColor: color,
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                  BorderRadius.circular(25),
-                                                  side: BorderSide(
-                                                    color: color, // Cor da borda
-                                                    width: 2, // Largura da borda
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      // Exibe a Data de Entrada do Lead
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 1, horizontal: 12),
-                                        child: Text(
-                                          leadData['data_entrada'] ?? '',
-                                          style: TextStyle(
-                                            fontFamily: 'Poppins',
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w500,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSecondary,
-                                          ),
-                                        ),
-                                      ),
-                                      // Exibe o Nome da Pessoa
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 1, horizontal: 12),
-                                        child: Text(
-                                          leadData['nome'] ?? '',
-                                          style: TextStyle(
-                                            fontFamily: 'Poppins',
-                                            fontSize: 24,
-                                            // Tamanho da fonte maior para o nome
-                                            fontWeight: FontWeight.w600,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSecondary,
-                                          ),
-                                        ),
-                                      ),
-                                      // Exibe o WhatsApp da Pessoa
-                                      if (leadData.containsKey('whatsapp'))
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 0),
-                                          child: Row(
-                                            children: [
-                                              IconButton(
-                                                icon: FaIcon(
-                                                  FontAwesomeIcons.whatsapp,
-                                                  color: Theme.of(context).colorScheme.onBackground,
-                                                  size: 25,
-                                                ),
-                                                onPressed: () => _openWhatsAppNative(leadData['whatsapp'] ?? ''),
-                                              ),
-                                              SizedBox(width: 0),
-                                              GestureDetector(
-                                                onTap: () => _openWhatsAppNative(leadData['whatsapp'] ?? ''),
-                                                child: Text(
-                                                  leadData['whatsapp'] ?? '',
-                                                  style: TextStyle(
-                                                    fontFamily: 'Poppins',
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w500,
-                                                    color: Theme.of(context).colorScheme.onSecondary,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
+                // Ícone de Campaign (fixo à esquerda)
+                Padding(
+                  padding: EdgeInsetsDirectional.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      PopupMenuButton<String>(
+                        color: Theme.of(context).colorScheme.secondary,
+                        icon: Icon(
+                          Icons.campaign,
+                          size: 35,
+                        ),
+                        offset: Offset(0, 40),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15), // Arredonda as bordas do menu
+                        ),
+                        onSelected: (value) {
+                          setState(() {
+                            selectedCampaignId = value;
+                            selectedCampaignName = campanhas
+                                .firstWhere((campanha) => campanha.id == value)['nome_campanha'];
+                          });
+                        },
+                        itemBuilder: (context) => campanhas.map((campanha) {
+                          return PopupMenuItem<String>(
+                            value: campanha.id,
+                            child: Text(
+                              campanha['nome_campanha'],
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Theme.of(context).colorScheme.onSecondary,
                               ),
                             ),
                           );
+                        }).toList(),
+                      ),
+                      SizedBox(height: 5),
+                      SizedBox(
+                        width: MediaQuery.of(context).size.width / 2 - 40,
+                        child: Text(
+                          selectedCampaignName ?? '',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Theme.of(context).colorScheme.onSecondary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                          softWrap: false,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Spacer(),
+                // Ícone de filtro (fixo à direita)
+                Padding(
+                  padding: EdgeInsetsDirectional.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      PopupMenuButton<String>(
+                        color: Theme.of(context).colorScheme.secondary,
+                        icon: Icon(
+                          Icons.filter_list,
+                          size: 35,
+                        ),
+                        offset: Offset(0, 40),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15), // Arredonda as bordas do menu
+                        ),
+                        onSelected: (value) {
+                          setState(() {
+                            selectedStatus = value;
+                          });
                         },
-                      );
-                    },
-                  )),
+                        itemBuilder: (context) => [
+                          'Sem Filtros',
+                          'Aguardando',
+                          'Atendendo',
+                          'Venda',
+                          'Recusado'
+                        ].map((status) {
+                          return PopupMenuItem<String>(
+                            value: status,
+                            child: Text(
+                              status,
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Theme.of(context).colorScheme.onSecondary,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      SizedBox(height: 5),
+                      SizedBox(
+                        width: MediaQuery.of(context).size.width / 2 - 40,
+                        child: Text(
+                          (selectedStatus == null || selectedStatus == 'Sem Filtros') ? '' : selectedStatus!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Theme.of(context).colorScheme.onSecondary,
+                          ),
+                          textAlign: TextAlign.right,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                          softWrap: false,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            Expanded(
+              child: selectedCampaignId != null
+                  ? _buildLeadsStream(empresaId, selectedCampaignId!)
+                  : _buildAllLeadsView(), // Exibe todos os leads
+            ),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildLeadsStream(String empresaId, String campaignId) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('empresas')
+          .doc(empresaId)
+          .collection('campanhas')
+          .doc(campaignId)
+          .collection('leads')
+          .orderBy('timestamp', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text('Erro: ${snapshot.error}'));
+        }
+        final leads = snapshot.data?.docs ?? [];
+        if (leads.isEmpty) {
+          return Center(child: Text('Nenhum lead disponível'));
+        }
+
+        final filteredLeads = leads.where((lead) {
+          final data = lead.data() as Map<String, dynamic>;
+          final status = data['status'] ?? 'Aguardando';
+          return selectedStatus == null ||
+              selectedStatus == 'Sem Filtros' ||
+              status == selectedStatus;
+        }).toList();
+
+        return ListView.builder(
+          itemCount: filteredLeads.length,
+          itemBuilder: (context, index) {
+            final lead = filteredLeads[index];
+            final leadData = Map<String, dynamic>.from(lead.data() as Map);
+
+            return _buildLeadItem(leadData);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildAllLeadsView() {
+    final filteredLeads = allLeads.where((lead) {
+      final data = lead.data() as Map<String, dynamic>;
+      final status = data['status'] ?? 'Aguardando';
+      return selectedStatus == null ||
+          selectedStatus == 'Sem Filtros' ||
+          status == selectedStatus;
+    }).toList();
+
+    return ListView.builder(
+      itemCount: filteredLeads.length,
+      itemBuilder: (context, index) {
+        final lead = filteredLeads[index];
+        final leadData = Map<String, dynamic>.from(lead.data() as Map);
+
+        return _buildLeadItem(leadData);
+      },
+    );
+  }
+
+  Widget _buildLeadItem(Map<String, dynamic> leadData) {
+    final status = leadData['status'] ?? 'Aguardando';
+    final color = _getStatusColor(status);
+
+    // Formata o timestamp para data e hora legíveis
+    String formattedDate = '';
+    if (leadData['timestamp'] != null && leadData['timestamp'] is Timestamp) {
+      final timestamp = leadData['timestamp'] as Timestamp;
+      final dateTime = timestamp.toDate();
+      formattedDate = 'Entrou em ${DateFormat('dd/MM/yyyy').format(dateTime)} às ${DateFormat('HH:mm').format(dateTime)}';
+    }
+
+    return GestureDetector(
+      onTap: () => _showLeadDetails(context, leadData),
+      child: Padding(
+        padding: EdgeInsets.all(10),
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(25),
+            color: Theme.of(context).cardColor,
+            boxShadow: [
+              BoxShadow(
+                blurRadius: 10,
+                color: Theme.of(context).colorScheme.shadow,
+                offset: Offset(0, 0),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(17),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Exibe a Tag de Status
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 12),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          _showStatusSelectionDialog(
+                            context,
+                            leadData['id'] ?? leadData['leadId'], // Verifica se há um id válido
+                            leadData['empresaId'] ?? '',
+                            leadData['campaignId'] ?? '',
+                          );
+                        },
+                        child: Chip(
+                          label: Text(
+                            status,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.outline,
+                              fontFamily: 'Poppins',
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          backgroundColor: color,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(25),
+                            side: BorderSide(
+                              color: color,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Exibe a Data de Entrada do Lead
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 12),
+                  child: Text(
+                    formattedDate,
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                ),
+                // Exibe o Nome da Pessoa
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 12),
+                  child: Text(
+                    leadData['nome'] ?? '',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 24,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                ),
+                // Exibe o WhatsApp da Pessoa
+                if (leadData.containsKey('whatsapp'))
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 0),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: FaIcon(
+                            FontAwesomeIcons.whatsapp,
+                            color: Theme.of(context).colorScheme.onBackground,
+                            size: 25,
+                          ),
+                          onPressed: () => _openWhatsAppNative(leadData['whatsapp'] ?? ''),
+                        ),
+                        SizedBox(width: 0),
+                        GestureDetector(
+                          onTap: () => _openWhatsAppNative(leadData['whatsapp'] ?? ''),
+                          child: Text(
+                            leadData['whatsapp'] ?? '',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 

@@ -1,14 +1,11 @@
 import 'package:app_io/features/screens/configurations/configurations.dart';
+import 'package:app_io/features/screens/dasboard/dashboard_page.dart';
+import 'package:app_io/features/screens/home/home_page.dart';
+import 'package:app_io/features/screens/leads/leads_page.dart';
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:app_io/auth/providers/auth_provider.dart' as authProviderApp;
-import 'package:app_io/features/screens/dasboard/dashboard_page.dart';
-import 'package:app_io/features/screens/home/home_page.dart';
-import 'package:app_io/features/screens/leads/leads_page.dart';
-import 'package:provider/provider.dart';
-import 'package:modal_side_sheet/modal_side_sheet.dart';
 
 class CustomTabBarPage extends StatefulWidget {
   @override
@@ -301,85 +298,85 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   Widget build(BuildContext context) {
     return ConnectivityBanner(
       child: Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.secondary,
+        backgroundColor: Theme.of(context).colorScheme.background,
         appBar: AppBar(
-          toolbarHeight: 100, // Aumenta a altura da AppBar
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _getPrefix(),
-                    style: TextStyle(
-                      fontFamily: 'BrandingSF',
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                      color: Theme.of(context).colorScheme.onBackground,
-                    ),
-                  ),
-                  AnimatedSwitcher(
-                    duration: Duration(milliseconds: 300),
-                    child: Text(
-                      _getTitle(),
-                      key: ValueKey<String>(_getTitle()),
+            toolbarHeight: 100, // Aumenta a altura da AppBar
+            title: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _getPrefix(),
                       style: TextStyle(
                         fontFamily: 'BrandingSF',
-                        fontWeight: FontWeight.w700,
-                        fontSize: 35,
-                        color: Theme.of(context).colorScheme.surfaceVariant,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: Theme.of(context).colorScheme.onBackground,
                       ),
                     ),
-                    transitionBuilder: (Widget child,
-                        Animation<double> animation) {
-                      final fadeInAnimation = Tween<double>(
-                          begin: 0.0, end: 1.0).animate(animation);
-                      final slideAnimation = Tween<Offset>(begin: Offset(1, 0),
-                          end: Offset.zero).animate(animation);
-
-                      return SlideTransition(
-                        position: slideAnimation,
-                        child: FadeTransition(
-                          opacity: fadeInAnimation,
-                          child: child,
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-              Stack(
-                children: [
-                  IconButton(
-                    icon: Icon(Icons.notifications),
-                    color: Theme.of(context).colorScheme.onSecondary,
-                    iconSize: 30,
-                    onPressed: () async {
-                      _showNotificationsSidebar(context);
-                    },
-                  ),
-                  Positioned(
-                    right: 6,
-                    top: 6,
-                    child: CircleAvatar(
-                      radius: 8,
-                      backgroundColor: Theme.of(context).colorScheme.tertiary,
+                    AnimatedSwitcher(
+                      duration: Duration(milliseconds: 300),
                       child: Text(
-                        '3',
-                        style: TextStyle(color: Colors.white, fontSize: 10),
+                        _getTitle(),
+                        key: ValueKey<String>(_getTitle()),
+                        style: TextStyle(
+                          fontFamily: 'BrandingSF',
+                          fontWeight: FontWeight.w700,
+                          fontSize: 28,
+                          color: Theme.of(context).colorScheme.surfaceVariant,
+                        ),
+                      ),
+                      transitionBuilder: (Widget child,
+                          Animation<double> animation) {
+                        final fadeInAnimation = Tween<double>(
+                            begin: 0.0, end: 1.0).animate(animation);
+                        final slideAnimation = Tween<Offset>(begin: Offset(-1, 0),
+                            end: Offset.zero).animate(animation);
+
+                        return SlideTransition(
+                          position: slideAnimation,
+                          child: FadeTransition(
+                            opacity: fadeInAnimation,
+                            child: child,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                Stack(
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.notifications),
+                      color: Theme.of(context).colorScheme.onSecondary,
+                      iconSize: 30,
+                      onPressed: () async {
+                        _showNotificationsSidebar(context);
+                      },
+                    ),
+                    Positioned(
+                      right: 6,
+                      top: 6,
+                      child: CircleAvatar(
+                        radius: 8,
+                        backgroundColor: Theme.of(context).colorScheme.tertiary,
+                        child: Text(
+                          '3',
+                          style: TextStyle(color: Colors.white, fontSize: 10),
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
+            centerTitle: false,
+            automaticallyImplyLeading: false,
+            backgroundColor: Theme.of(context).colorScheme.secondary,
+            foregroundColor: Theme.of(context).colorScheme.outline,
           ),
-          centerTitle: false,
-          automaticallyImplyLeading: false,
-          backgroundColor: Theme.of(context).colorScheme.secondary,
-          foregroundColor: Theme.of(context).colorScheme.outline,
-        ),
         body: PageView(
           controller: _pageController,
           onPageChanged: (index) {
