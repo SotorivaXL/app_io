@@ -1,19 +1,19 @@
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
+import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';
 import 'package:app_io/util/utils.dart';
+import 'package:async/async.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:app_io/auth/providers/auth_provider.dart' as appAuthProvider;
 import 'package:app_io/features/screens/dasboard/dashboard_page.dart';
-import 'package:app_io/features/screens/home/home_page.dart';
 import 'package:app_io/features/screens/panel/painel_adm.dart';
-import 'package:app_io/util/CustomWidgets/CustomDropDown/custom_dropDown.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class LeadsPage extends StatefulWidget {
@@ -28,12 +28,39 @@ class _LeadsPageState extends State<LeadsPage> {
   String? selectedCampaignId;
   String? selectedCampaignName;
   String? selectedStatus;
-  List<DocumentSnapshot> allLeads = [];
+  bool isScrollingDown = false;
+  List<Map<String, dynamic>> allLeads = [];
+
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _getUserData();
+    _scrollController.addListener(_scrollListener);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_scrollListener);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollListener() {
+    if (_scrollController.position.userScrollDirection == ScrollDirection.reverse) {
+      if (!isScrollingDown) {
+        setState(() {
+          isScrollingDown = true;
+        });
+      }
+    } else if (_scrollController.position.userScrollDirection == ScrollDirection.forward) {
+      if (isScrollingDown) {
+        setState(() {
+          isScrollingDown = false;
+        });
+      }
+    }
   }
 
   Future<void> _getUserData() async {
@@ -50,7 +77,7 @@ class _LeadsPageState extends State<LeadsPage> {
           final createdBy = userDoc['createdBy'];
           if (createdBy != null) {
             setState(() {
-              _fetchAllLeads(createdBy); // Busca leads da empresa
+              _getAllLeadsStream(createdBy); // Busca leads da empresa
             });
           }
         } else {
@@ -61,7 +88,7 @@ class _LeadsPageState extends State<LeadsPage> {
 
           if (empresaDoc.exists) {
             setState(() {
-              _fetchAllLeads(user.uid); // Busca leads do próprio usuário
+              _getAllLeadsStream(user.uid); // Busca leads do próprio usuário
             });
           } else {
             showErrorDialog(context, 'Documento não encontrado.', 'Atenção');
@@ -75,19 +102,36 @@ class _LeadsPageState extends State<LeadsPage> {
     }
   }
 
-  Future<void> _fetchAllLeads(String empresaId) async {
-    final campanhasSnapshot = await FirebaseFirestore.instance
+  Stream<List<Map<String, dynamic>>> _getAllLeadsStream(String empresaId) async* {
+    final campaignsSnapshot = await FirebaseFirestore.instance
         .collection('empresas')
         .doc(empresaId)
         .collection('campanhas')
         .get();
 
-    for (var campanha in campanhasSnapshot.docs) {
-      final leadsSnapshot = await campanha.reference.collection('leads').get();
-      setState(() {
-        allLeads.addAll(leadsSnapshot.docs);
+    List<Stream<List<Map<String, dynamic>>>> leadStreams = campaignsSnapshot.docs.map((campaignDoc) {
+      return campaignDoc.reference.collection('leads')
+          .snapshots().map((leadsSnapshot) {
+        return leadsSnapshot.docs.map((leadDoc) {
+          Map<String, dynamic> leadData = leadDoc.data();
+          leadData['leadId'] = leadDoc.id;
+          leadData['campaignId'] = campaignDoc.id;
+          leadData['empresaId'] = empresaId;
+          return leadData;
+        }).toList();
       });
-    }
+    }).toList();
+
+    yield* StreamZip(leadStreams).map((listOfLeadLists) {
+      final allLeads = listOfLeadLists.expand((leads) => leads).toList();
+      // Ordenando todos os leads pela data de forma decrescente
+      allLeads.sort((a, b) {
+        Timestamp timestampA = a['timestamp'];
+        Timestamp timestampB = b['timestamp'];
+        return timestampB.compareTo(timestampA);
+      });
+      return allLeads;
+    });
   }
 
   void _navigateTo(BuildContext context, String routeName) {
@@ -132,24 +176,36 @@ class _LeadsPageState extends State<LeadsPage> {
       case '/admin':
         return AdminPanelPage();
       default:
-        return HomePage();
+        return CustomTabBarPage();
     }
   }
 
   void _showLeadDetails(BuildContext context, Map<String, dynamic> leadData) {
-    // Remover o campo 'redirect_url'
-    leadData = Map<String, dynamic>.from(leadData); // Cria uma cópia dos dados para evitar modificações diretas
+    // Cria uma cópia dos dados para evitar modificações diretas
+    leadData = Map<String, dynamic>.from(leadData);
+
+    // Remove campos desnecessários
+    leadData.remove('empresa_id');
+    leadData.remove('nome_campanha');
     leadData.remove('redirect_url');
+
+    // Formatando o campo timestamp, caso exista
+    String? formattedDate;
+    if (leadData['timestamp'] != null && leadData['timestamp'] is Timestamp) {
+      final timestamp = leadData['timestamp'] as Timestamp;
+      final dateTime = timestamp.toDate();
+      formattedDate = 'Entrou em ${DateFormat('dd/MM/yyyy').format(dateTime)} às ${DateFormat('HH:mm').format(dateTime)}';
+      leadData.remove('timestamp'); // Remove o campo para evitar exibição duplicada
+    }
+
+    // Definindo os campos a serem exibidos
+    final String? nome = leadData.remove('nome');
+    final String? email = leadData.remove('email');
+    final String? whatsapp = leadData.remove('whatsapp');
 
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        // Obter os dados principais nas ordens desejadas
-        final String? dataEntrada = leadData.remove('data_entrada');
-        final String? nome = leadData.remove('nome');
-        final String? email = leadData.remove('email');
-        final String? whatsapp = leadData.remove('whatsapp');
-
         return AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(15),
@@ -168,11 +224,11 @@ class _LeadsPageState extends State<LeadsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (dataEntrada != null)
+                if (formattedDate != null)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
                     child: Text(
-                      dataEntrada,
+                      formattedDate,
                       style: TextStyle(
                         fontFamily: 'Poppins',
                         fontSize: 16,
@@ -287,37 +343,24 @@ class _LeadsPageState extends State<LeadsPage> {
       child: Scaffold(
         body: SafeArea(
           top: true,
-          child: Container(
-            width: MediaQuery.of(context).size.width,
-            height: MediaQuery.of(context).size.height,
-            decoration: BoxDecoration(),
-            child: FutureBuilder<DocumentSnapshot>(
-              future: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(user?.uid)
-                  .get(),
-              builder: (context, userSnapshot) {
-                if (userSnapshot.connectionState == ConnectionState.waiting) {
-                  return Center(child: CircularProgressIndicator());
-                }
-                if (userSnapshot.hasError) {
-                  return Center(
-                      child: Text(
-                          'Erro ao buscar o usuário: ${userSnapshot.error}'));
-                }
+          child: FutureBuilder<DocumentSnapshot>(
+            future: FirebaseFirestore.instance.collection('users').doc(user?.uid).get(),
+            builder: (context, userSnapshot) {
+              if (userSnapshot.connectionState == ConnectionState.waiting) {
+                return Center(child: CircularProgressIndicator());
+              }
+              if (userSnapshot.hasError) {
+                return Center(child: Text('Erro ao buscar o usuário: ${userSnapshot.error}'));
+              }
 
-                if (userSnapshot.hasData && userSnapshot.data!.exists) {
-                  final userDocument = userSnapshot.data!;
-                  final empresaId = userDocument['createdBy'];
+              if (userSnapshot.hasData && userSnapshot.data!.exists) {
+                final userDocument = userSnapshot.data!;
+                final empresaId = userDocument['createdBy'] ?? user!.uid;
 
-                  if (empresaId != null && empresaId.isNotEmpty) {
-                    return _buildCampanhasStream(empresaId);
-                  }
-                }
-
-                return _buildCampanhasStream(user!.uid);
-              },
-            ),
+                return _buildCampanhasStream(empresaId);
+              }
+              return Center(child: Text('Erro: Usuário não encontrado'));
+            },
           ),
         ),
       ),
@@ -338,139 +381,146 @@ class _LeadsPageState extends State<LeadsPage> {
         if (snapshot.hasError) {
           return Center(child: Text('Erro: ${snapshot.error}'));
         }
-        final campanhas = snapshot.data?.docs ?? [];
-        if (campanhas.isEmpty) {
-          return Center(child: Text('Nenhuma campanha disponível'));
-        }
 
-        return Column(
-          children: [
-            Row(
-              children: [
-                // Ícone de Campaign (fixo à esquerda)
-                Padding(
-                  padding: EdgeInsetsDirectional.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        final campanhas = snapshot.data?.docs ?? [];
+
+        return CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              pinned: false,
+              floating: true,
+              expandedHeight: 70, // Reduzindo a altura expandida
+              backgroundColor: Theme.of(context).colorScheme.background,
+              elevation: 0,
+              flexibleSpace: FlexibleSpaceBar(
+                background: Container(
+                  color: Theme.of(context).colorScheme.background,
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      PopupMenuButton<String>(
-                        color: Theme.of(context).colorScheme.secondary,
-                        icon: Icon(
-                          Icons.campaign,
-                          size: 35,
-                        ),
-                        offset: Offset(0, 40),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15), // Arredonda as bordas do menu
-                        ),
-                        onSelected: (value) {
-                          setState(() {
-                            selectedCampaignId = value;
-                            selectedCampaignName = campanhas
-                                .firstWhere((campanha) => campanha.id == value)['nome_campanha'];
-                          });
-                        },
-                        itemBuilder: (context) => campanhas.map((campanha) {
-                          return PopupMenuItem<String>(
-                            value: campanha.id,
-                            child: Text(
-                              campanha['nome_campanha'],
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: Theme.of(context).colorScheme.onSecondary,
-                              ),
+                      Row(
+                        children: [
+                          PopupMenuButton<String>(
+                            color: Theme.of(context).colorScheme.secondary,
+                            icon: Icon(Icons.campaign, size: 30), // Ícone menor
+                            offset: Offset(0, 40),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
                             ),
-                          );
-                        }).toList(),
-                      ),
-                      SizedBox(height: 5),
-                      SizedBox(
-                        width: MediaQuery.of(context).size.width / 2 - 40,
-                        child: Text(
-                          selectedCampaignName ?? '',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: Theme.of(context).colorScheme.onSecondary,
+                            onSelected: (value) {
+                              setState(() {
+                                selectedCampaignId = value == 'Todas' ? null : value;
+                                selectedCampaignName = value == 'Todas'
+                                    ? 'Todas'
+                                    : campanhas.firstWhere((campanha) => campanha.id == value)['nome_campanha'];
+                              });
+                            },
+                            itemBuilder: (context) {
+                              return [
+                                PopupMenuItem<String>(
+                                  value: 'Todas',
+                                  child: Text(
+                                    'Todas',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: Theme.of(context).colorScheme.onSecondary,
+                                    ),
+                                  ),
+                                ),
+                                ...campanhas.map((campanha) {
+                                  return PopupMenuItem<String>(
+                                    value: campanha.id,
+                                    child: Text(
+                                      campanha['nome_campanha'],
+                                      style: TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: Theme.of(context).colorScheme.onSecondary,
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ];
+                            },
                           ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                          softWrap: false,
-                        ),
+                          SizedBox(width: 4), // Menor espaçamento entre o botão e o texto
+                          Text(
+                            (selectedCampaignName == null || selectedCampaignName == 'Todas') ? '' : selectedCampaignName!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            softWrap: false,
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          Text(
+                            (selectedStatus == null || selectedStatus == 'Sem Filtros') ? '' : selectedStatus!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            softWrap: false,
+                          ),
+                          SizedBox(width: 4), // Menor espaçamento entre o texto e o botão
+                          PopupMenuButton<String>(
+                            color: Theme.of(context).colorScheme.secondary,
+                            icon: Icon(Icons.filter_list, size: 30), // Ícone menor
+                            offset: Offset(0, 40),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            onSelected: (value) {
+                              setState(() {
+                                selectedStatus = value;
+                              });
+                            },
+                            itemBuilder: (context) => [
+                              'Sem Filtros',
+                              'Aguardando',
+                              'Atendendo',
+                              'Venda',
+                              'Recusado'
+                            ].map((status) {
+                              return PopupMenuItem<String>(
+                                value: status,
+                                child: Text(
+                                  status,
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: Theme.of(context).colorScheme.onSecondary,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
-                Spacer(),
-                // Ícone de filtro (fixo à direita)
-                Padding(
-                  padding: EdgeInsetsDirectional.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      PopupMenuButton<String>(
-                        color: Theme.of(context).colorScheme.secondary,
-                        icon: Icon(
-                          Icons.filter_list,
-                          size: 35,
-                        ),
-                        offset: Offset(0, 40),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15), // Arredonda as bordas do menu
-                        ),
-                        onSelected: (value) {
-                          setState(() {
-                            selectedStatus = value;
-                          });
-                        },
-                        itemBuilder: (context) => [
-                          'Sem Filtros',
-                          'Aguardando',
-                          'Atendendo',
-                          'Venda',
-                          'Recusado'
-                        ].map((status) {
-                          return PopupMenuItem<String>(
-                            value: status,
-                            child: Text(
-                              status,
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: Theme.of(context).colorScheme.onSecondary,
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                      SizedBox(height: 5),
-                      SizedBox(
-                        width: MediaQuery.of(context).size.width / 2 - 40,
-                        child: Text(
-                          (selectedStatus == null || selectedStatus == 'Sem Filtros') ? '' : selectedStatus!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: Theme.of(context).colorScheme.onSecondary,
-                          ),
-                          textAlign: TextAlign.right,
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                          softWrap: false,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
-            Expanded(
-              child: selectedCampaignId != null
-                  ? _buildLeadsStream(empresaId, selectedCampaignId!)
-                  : _buildAllLeadsView(), // Exibe todos os leads
+            SliverList(
+              delegate: SliverChildListDelegate([
+                selectedCampaignId != null
+                    ? _buildLeadsStream(empresaId, selectedCampaignId!)
+                    : _buildAllLeadsView(empresaId),
+              ]),
             ),
           ],
         );
@@ -495,24 +545,31 @@ class _LeadsPageState extends State<LeadsPage> {
         if (snapshot.hasError) {
           return Center(child: Text('Erro: ${snapshot.error}'));
         }
-        final leads = snapshot.data?.docs ?? [];
+
+        List<DocumentSnapshot> leads = snapshot.data?.docs ?? [];
+
+        // Aplicando o filtro de status manualmente nos dados após a query
+        if (selectedStatus != null && selectedStatus != 'Sem Filtros') {
+          leads = leads.where((lead) {
+            final leadData = lead.data() as Map<String, dynamic>;
+            return leadData['status'] == selectedStatus;
+          }).toList();
+        }
+
         if (leads.isEmpty) {
           return Center(child: Text('Nenhum lead disponível'));
         }
 
-        final filteredLeads = leads.where((lead) {
-          final data = lead.data() as Map<String, dynamic>;
-          final status = data['status'] ?? 'Aguardando';
-          return selectedStatus == null ||
-              selectedStatus == 'Sem Filtros' ||
-              status == selectedStatus;
-        }).toList();
-
         return ListView.builder(
-          itemCount: filteredLeads.length,
+          shrinkWrap: true,
+          physics: NeverScrollableScrollPhysics(),
+          itemCount: leads.length,
           itemBuilder: (context, index) {
-            final lead = filteredLeads[index];
+            final lead = leads[index];
             final leadData = Map<String, dynamic>.from(lead.data() as Map);
+            leadData['leadId'] = lead.id;
+            leadData['empresaId'] = empresaId;
+            leadData['campaignId'] = campaignId;
 
             return _buildLeadItem(leadData);
           },
@@ -521,158 +578,197 @@ class _LeadsPageState extends State<LeadsPage> {
     );
   }
 
-  Widget _buildAllLeadsView() {
-    final filteredLeads = allLeads.where((lead) {
-      final data = lead.data() as Map<String, dynamic>;
-      final status = data['status'] ?? 'Aguardando';
-      return selectedStatus == null ||
-          selectedStatus == 'Sem Filtros' ||
-          status == selectedStatus;
-    }).toList();
+  Widget _buildAllLeadsView(String empresaId) {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _getAllLeadsStream(empresaId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text('Erro ao carregar os leads: ${snapshot.error}'));
+        }
 
-    return ListView.builder(
-      itemCount: filteredLeads.length,
-      itemBuilder: (context, index) {
-        final lead = filteredLeads[index];
-        final leadData = Map<String, dynamic>.from(lead.data() as Map);
+        final allLeads = snapshot.data ?? [];
+        final filteredLeads = allLeads.where((leadData) {
+          final status = leadData['status'] ?? 'Aguardando';
+          return selectedStatus == null ||
+              selectedStatus == 'Sem Filtros' ||
+              status == selectedStatus;
+        }).toList();
 
-        return _buildLeadItem(leadData);
+        if (filteredLeads.isEmpty) {
+          return Center(child: Text('Nenhum lead disponível'));
+        }
+
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: NeverScrollableScrollPhysics(),
+          itemCount: filteredLeads.length,
+          itemBuilder: (context, index) {
+            final leadData = filteredLeads[index];
+            return _buildLeadItem(leadData);
+          },
+        );
       },
     );
   }
 
   Widget _buildLeadItem(Map<String, dynamic> leadData) {
-    final status = leadData['status'] ?? 'Aguardando';
-    final color = _getStatusColor(status);
+    final leadId = leadData['leadId'] ?? '';
+    final empresaId = leadData['empresaId'] ?? '';
+    final campaignId = leadData['campaignId'] ?? '';
 
-    // Formata o timestamp para data e hora legíveis
-    String formattedDate = '';
-    if (leadData['timestamp'] != null && leadData['timestamp'] is Timestamp) {
-      final timestamp = leadData['timestamp'] as Timestamp;
-      final dateTime = timestamp.toDate();
-      formattedDate = 'Entrou em ${DateFormat('dd/MM/yyyy').format(dateTime)} às ${DateFormat('HH:mm').format(dateTime)}';
+    if (leadId.isEmpty || empresaId.isEmpty || campaignId.isEmpty) {
+      print('Identificadores ausentes ao tentar renderizar lead: leadId = $leadId, empresaId = $empresaId, campaignId = $campaignId');
+      return Container(); // Retorne um container vazio se os IDs não estiverem corretos
     }
 
-    return GestureDetector(
-      onTap: () => _showLeadDetails(context, leadData),
-      child: Padding(
-        padding: EdgeInsets.all(10),
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.9,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(25),
-            color: Theme.of(context).cardColor,
-            boxShadow: [
-              BoxShadow(
-                blurRadius: 10,
-                color: Theme.of(context).colorScheme.shadow,
-                offset: Offset(0, 0),
-              ),
-            ],
-          ),
+    // Utilize um StreamBuilder para observar diretamente o status do lead
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('empresas')
+          .doc(empresaId)
+          .collection('campanhas')
+          .doc(campaignId)
+          .collection('leads')
+          .doc(leadId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text('Erro ao carregar o lead'));
+        }
+
+        final leadData = snapshot.data!.data() as Map<String, dynamic>;
+        final status = leadData['status'] ?? 'Aguardando';
+        final color = _getStatusColor(status);
+
+        String formattedDate = '';
+        if (leadData['timestamp'] != null && leadData['timestamp'] is Timestamp) {
+          final timestamp = leadData['timestamp'] as Timestamp;
+          final dateTime = timestamp.toDate();
+          formattedDate = 'Entrou em ${DateFormat('dd/MM/yyyy').format(dateTime)} às ${DateFormat('HH:mm').format(dateTime)}';
+        }
+
+        return GestureDetector(
+          onTap: () => _showLeadDetails(context, leadData),
           child: Padding(
-            padding: EdgeInsets.all(17),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Exibe a Tag de Status
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 12),
-                  child: Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          _showStatusSelectionDialog(
-                            context,
-                            leadData['id'] ?? leadData['leadId'], // Verifica se há um id válido
-                            leadData['empresaId'] ?? '',
-                            leadData['campaignId'] ?? '',
-                          );
-                        },
-                        child: Chip(
-                          label: Text(
-                            status,
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.outline,
-                              fontFamily: 'Poppins',
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
+            padding: EdgeInsetsDirectional.fromSTEB(10, 0, 10, 20),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(25),
+                color: Theme.of(context).cardColor,
+                boxShadow: [
+                  BoxShadow(
+                    blurRadius: 10,
+                    color: Theme.of(context).colorScheme.shadow,
+                    offset: Offset(0, 0),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(17),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 12),
+                      child: Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              if (leadId.isNotEmpty && empresaId.isNotEmpty && campaignId.isNotEmpty) {
+                                _showStatusSelectionDialog(context, leadId, empresaId, campaignId);
+                              } else {
+                                print('Identificadores ausentes ao tentar alterar o status: leadId = $leadId, empresaId = $empresaId, campaignId = $campaignId');
+                              }
+                            },
+                            child: Chip(
+                              label: Text(
+                                status,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.outline,
+                                  fontFamily: 'Poppins',
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              backgroundColor: color,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(25),
+                                side: BorderSide(
+                                  color: color,
+                                  width: 2,
+                                ),
+                              ),
                             ),
                           ),
-                          backgroundColor: color,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(25),
-                            side: BorderSide(
-                              color: color,
-                              width: 2,
-                            ),
-                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 12),
+                      child: Text(
+                        formattedDate,
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Theme.of(context).colorScheme.onSecondary,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                // Exibe a Data de Entrada do Lead
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 12),
-                  child: Text(
-                    formattedDate,
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Theme.of(context).colorScheme.onSecondary,
                     ),
-                  ),
-                ),
-                // Exibe o Nome da Pessoa
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 12),
-                  child: Text(
-                    leadData['nome'] ?? '',
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 24,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.onSecondary,
-                    ),
-                  ),
-                ),
-                // Exibe o WhatsApp da Pessoa
-                if (leadData.containsKey('whatsapp'))
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 0),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          icon: FaIcon(
-                            FontAwesomeIcons.whatsapp,
-                            color: Theme.of(context).colorScheme.onBackground,
-                            size: 25,
-                          ),
-                          onPressed: () => _openWhatsAppNative(leadData['whatsapp'] ?? ''),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 12),
+                      child: Text(
+                        leadData['nome'] ?? '',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 24,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSecondary,
                         ),
-                        SizedBox(width: 0),
-                        GestureDetector(
-                          onTap: () => _openWhatsAppNative(leadData['whatsapp'] ?? ''),
-                          child: Text(
-                            leadData['whatsapp'] ?? '',
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: Theme.of(context).colorScheme.onSecondary,
+                      ),
+                    ),
+                    if (leadData.containsKey('whatsapp'))
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 0),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: FaIcon(
+                                FontAwesomeIcons.whatsapp,
+                                color: Theme.of(context).colorScheme.onBackground,
+                                size: 25,
+                              ),
+                              onPressed: () => _openWhatsAppNative(leadData['whatsapp'] ?? ''),
                             ),
-                          ),
+                            SizedBox(width: 0),
+                            GestureDetector(
+                              onTap: () => _openWhatsAppNative(leadData['whatsapp'] ?? ''),
+                              child: Text(
+                                leadData['whatsapp'] ?? '',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  color: Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-              ],
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -757,7 +853,7 @@ class _LeadsPageState extends State<LeadsPage> {
             .collection('leads')
             .doc(leadId)
             .update({'status': status});
-        Navigator.of(context).pop();
+        Navigator.of(context).pop(); // Fecha o diálogo após a atualização
       },
     );
   }

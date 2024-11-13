@@ -1,11 +1,11 @@
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
+import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';
 import 'package:app_io/util/utils.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:app_io/auth/providers/auth_provider.dart' as appAuthProvider;
-import 'package:app_io/features/screens/home/home_page.dart';
 import 'package:app_io/features/screens/leads/leads_page.dart';
 import 'package:app_io/features/screens/panel/painel_adm.dart';
 import 'package:provider/provider.dart';
@@ -124,7 +124,7 @@ class _DashboardPageState extends State<DashboardPage> {
       case '/admin':
         return AdminPanelPage();
       default:
-        return HomePage();
+        return CustomTabBarPage();
     }
   }
 
