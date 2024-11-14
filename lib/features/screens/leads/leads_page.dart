@@ -30,6 +30,8 @@ class _LeadsPageState extends State<LeadsPage> {
   String? selectedStatus;
   bool isScrollingDown = false;
   List<Map<String, dynamic>> allLeads = [];
+  String? empresaId;
+  bool isLoading = true;
 
   final ScrollController _scrollController = ScrollController();
 
@@ -68,31 +70,40 @@ class _LeadsPageState extends State<LeadsPage> {
 
     if (user != null) {
       try {
+        String? foundEmpresaId;
+
+        // Primeiro, tenta buscar o usuário na coleção 'users'
         final userDoc = await FirebaseFirestore.instance
             .collection('users')
             .doc(user.uid)
             .get();
 
         if (userDoc.exists) {
-          final createdBy = userDoc['createdBy'];
-          if (createdBy != null) {
-            setState(() {
-              _getAllLeadsStream(createdBy); // Busca leads da empresa
-            });
-          }
-        } else {
+          // Se encontrado em 'users', obtém o ID da empresa a partir do campo 'createdBy'
+          foundEmpresaId = userDoc['createdBy'];
+        }
+
+        // Se o usuário não estiver na coleção 'users', tenta buscá-lo na coleção 'empresas'
+        if (foundEmpresaId == null) {
           final empresaDoc = await FirebaseFirestore.instance
               .collection('empresas')
               .doc(user.uid)
               .get();
 
           if (empresaDoc.exists) {
-            setState(() {
-              _getAllLeadsStream(user.uid); // Busca leads do próprio usuário
-            });
-          } else {
-            showErrorDialog(context, 'Documento não encontrado.', 'Atenção');
+            // Usa o próprio UID do usuário como 'empresaId' se o documento for encontrado em 'empresas'
+            foundEmpresaId = user.uid;
           }
+        }
+
+        // Define o 'empresaId' no estado e interrompe o carregamento
+        if (foundEmpresaId != null) {
+          setState(() {
+            empresaId = foundEmpresaId;
+            isLoading = false;
+          });
+        } else {
+          showErrorDialog(context, 'Documento não encontrado.', 'Atenção');
         }
       } catch (e) {
         showErrorDialog(context, 'Erro ao carregar os dados: $e', 'Erro');
@@ -336,32 +347,20 @@ class _LeadsPageState extends State<LeadsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<appAuthProvider.AuthProvider>(context, listen: false);
-    final user = authProvider.user;
+    // Se ainda estiver carregando, mostra um indicador de carregamento
+    if (isLoading) {
+      return Center(child: CircularProgressIndicator());
+    }
+
+    if (empresaId == null) {
+      return Center(child: Text('Erro: Empresa não encontrada.'));
+    }
 
     return ConnectivityBanner(
       child: Scaffold(
         body: SafeArea(
           top: true,
-          child: FutureBuilder<DocumentSnapshot>(
-            future: FirebaseFirestore.instance.collection('users').doc(user?.uid).get(),
-            builder: (context, userSnapshot) {
-              if (userSnapshot.connectionState == ConnectionState.waiting) {
-                return Center(child: CircularProgressIndicator());
-              }
-              if (userSnapshot.hasError) {
-                return Center(child: Text('Erro ao buscar o usuário: ${userSnapshot.error}'));
-              }
-
-              if (userSnapshot.hasData && userSnapshot.data!.exists) {
-                final userDocument = userSnapshot.data!;
-                final empresaId = userDocument['createdBy'] ?? user!.uid;
-
-                return _buildCampanhasStream(empresaId);
-              }
-              return Center(child: Text('Erro: Usuário não encontrado'));
-            },
-          ),
+          child: _buildCampanhasStream(empresaId!),
         ),
       ),
     );
@@ -389,7 +388,8 @@ class _LeadsPageState extends State<LeadsPage> {
             SliverAppBar(
               pinned: false,
               floating: true,
-              expandedHeight: 70, // Reduzindo a altura expandida
+              automaticallyImplyLeading: false,
+              expandedHeight: 70,
               backgroundColor: Theme.of(context).colorScheme.background,
               elevation: 0,
               flexibleSpace: FlexibleSpaceBar(
@@ -403,7 +403,7 @@ class _LeadsPageState extends State<LeadsPage> {
                         children: [
                           PopupMenuButton<String>(
                             color: Theme.of(context).colorScheme.secondary,
-                            icon: Icon(Icons.campaign, size: 30), // Ícone menor
+                            icon: Icon(Icons.campaign, size: 30),
                             offset: Offset(0, 40),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(15),
@@ -447,7 +447,7 @@ class _LeadsPageState extends State<LeadsPage> {
                               ];
                             },
                           ),
-                          SizedBox(width: 4), // Menor espaçamento entre o botão e o texto
+                          SizedBox(width: 4),
                           Text(
                             (selectedCampaignName == null || selectedCampaignName == 'Todas') ? '' : selectedCampaignName!,
                             style: TextStyle(
@@ -474,10 +474,10 @@ class _LeadsPageState extends State<LeadsPage> {
                             maxLines: 1,
                             softWrap: false,
                           ),
-                          SizedBox(width: 4), // Menor espaçamento entre o texto e o botão
+                          SizedBox(width: 4),
                           PopupMenuButton<String>(
                             color: Theme.of(context).colorScheme.secondary,
-                            icon: Icon(Icons.filter_list, size: 30), // Ícone menor
+                            icon: Icon(Icons.filter_list, size: 30),
                             offset: Offset(0, 40),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(15),

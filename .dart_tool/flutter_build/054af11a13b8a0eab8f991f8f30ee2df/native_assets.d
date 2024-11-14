@@ -1,0 +1,1 @@
+ /Users/iomarketingdev/Documents/Developments/app_io/.dart_tool/flutter_build/054af11a13b8a0eab8f991f8f30ee2df/native_assets.yaml: 

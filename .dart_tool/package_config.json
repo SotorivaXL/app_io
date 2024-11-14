@@ -692,10 +692,10 @@
       "languageVersion": "3.4"
     }
   ],
-  "generated": "2024-11-13T12:50:27.093465Z",
+  "generated": "2024-11-14T17:28:15.638066Z",
   "generator": "pub",
   "generatorVersion": "3.5.4",
   "flutterRoot": "file:///Users/iomarketingdev/development/flutter",
-  "flutterVersion": "3.24.4",
+  "flutterVersion": "3.24.5",
   "pubCache": "file:///Users/iomarketingdev/.pub-cache"
 }
