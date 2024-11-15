@@ -183,10 +183,10 @@ class _SettingsPageState extends State<SettingsPage> {
       children: [
         Expanded(
           child: Text(
-            "Ativa/Desativar Notificações",
+            "Ativar/Desativar Notificações",
             style: TextStyle(
               fontFamily: 'Poppins',
-              fontSize: 14,
+              fontSize: 18,
               color: Theme.of(context).colorScheme.surfaceVariant,
               fontWeight: FontWeight.w600,
             ),
