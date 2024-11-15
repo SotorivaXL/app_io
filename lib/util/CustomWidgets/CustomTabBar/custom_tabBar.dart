@@ -324,7 +324,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                         style: TextStyle(
                           fontFamily: 'BrandingSF',
                           fontWeight: FontWeight.w700,
-                          fontSize: 30,
+                          fontSize: 35,
                           color: Theme.of(context).colorScheme.surfaceVariant,
                         ),
                       ),
