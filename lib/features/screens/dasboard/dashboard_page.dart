@@ -2,7 +2,6 @@ import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner
 import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';
 import 'package:app_io/util/utils.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:app_io/auth/providers/auth_provider.dart' as appAuthProvider;
@@ -362,24 +361,25 @@ class _DashboardPageState extends State<DashboardPage> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Container(
-        width: 150,
+        width: 200,
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
                   icon,
                   size: 32,
-                  color: Theme.of(context).colorScheme.primary,
+                  color: Theme.of(context).colorScheme.tertiary,
                 ),
-                Spacer(),
+                SizedBox(width: 10),
                 Text(
                   count,
                   style: TextStyle(
                     fontFamily: 'Poppins',
-                    color: Theme.of(context).colorScheme.onBackground,
+                    color: Theme.of(context).colorScheme.onSecondary,
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                   ),
@@ -392,7 +392,7 @@ class _DashboardPageState extends State<DashboardPage> {
               style: TextStyle(
                 fontFamily: 'Poppins',
                 fontSize: 16,
-                color: Theme.of(context).colorScheme.onBackground,
+                color: Theme.of(context).colorScheme.onSecondary,
                 fontWeight: FontWeight.w600,
               ),
             ),
