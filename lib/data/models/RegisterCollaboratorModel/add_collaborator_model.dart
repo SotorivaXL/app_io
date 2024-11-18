@@ -20,6 +20,10 @@ class AddCollaboratorsModel extends ChangeNotifier {
   TextEditingController tfRoleTextController = TextEditingController();
   String? Function(BuildContext, String?)? tfRoleTextControllerValidator;
 
+  FocusNode tfBirthFocusNode = FocusNode();
+  TextEditingController tfBirthTextController = TextEditingController();
+  String? Function(BuildContext, String?)? tfBirthTextControllerValidator;
+
   // State field(s) for tfPassword widget.
   FocusNode tfPasswordFocusNode = FocusNode();
   TextEditingController tfPasswordTextController = TextEditingController();
@@ -59,6 +63,9 @@ class AddCollaboratorsModel extends ChangeNotifier {
 
     tfRoleFocusNode.dispose();
     tfRoleTextController.dispose();
+
+    tfBirthFocusNode.dispose();
+    tfBirthTextController.dispose();
 
     tfPasswordFocusNode.dispose();
     tfPasswordTextController.dispose();

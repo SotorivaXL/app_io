@@ -1,11 +1,12 @@
 import 'package:app_io/features/screens/configurations/configurations.dart';
 import 'package:app_io/features/screens/dasboard/dashboard_page.dart';
-import 'package:app_io/features/screens/home/home_page.dart';
 import 'package:app_io/features/screens/leads/leads_page.dart';
+import 'package:app_io/features/screens/panel/painel_adm.dart';
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 class CustomTabBarPage extends StatefulWidget {
   @override
@@ -16,6 +17,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     with TickerProviderStateMixin {
   late TabController _tabController;
   late PageController _pageController;
+  ScrollController _scrollController = ScrollController();
+  double _scrollOffset = 0.0;
 
   List<Widget> _pages = [];
   List<Tab> _tabs = [];
@@ -23,6 +26,12 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
 
   bool hasLeadsAccess = false;
   bool hasDashboardAccess = false;
+  bool hasGerenciarParceirosAccess = false;
+  bool hasGerenciarColaboradoresAccess = false;
+  bool hasConfigurarDashAccess = false;
+  bool hasCriarFormAccess = false;
+  bool hasCriarCampanhaAccess = false;
+  bool hasAdmPanelAccess = true;
 
   @override
   void initState() {
@@ -30,7 +39,12 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     _pageController = PageController();
     _tabController = TabController(length: 0, vsync: this);
 
-    // Escuta as alterações no Firestore em tempo real
+    _scrollController.addListener(() {
+      setState(() {
+        _scrollOffset = _scrollController.offset;
+      });
+    });
+
     _listenToPermissionsChanges();
   }
 
@@ -67,25 +81,41 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     });
   }
 
+  void updateAdmPanelAccess() {
+    // Verifica se todas as permissões específicas do Painel Adm são falsas
+    hasAdmPanelAccess = hasGerenciarParceirosAccess ||
+        hasGerenciarColaboradoresAccess ||
+        hasConfigurarDashAccess ||
+        hasCriarFormAccess ||
+        hasCriarCampanhaAccess;
+  }
+
   void _updatePermissions(DocumentSnapshot doc) {
     var userData = doc.data() as Map<String, dynamic>;
     print('Dados do usuário: $userData');
+
     setState(() {
       hasLeadsAccess = userData['leads'] ?? false;
       hasDashboardAccess = userData['dashboard'] ?? false;
+      hasConfigurarDashAccess = userData['configurarDash'] ?? false;
+      hasCriarCampanhaAccess = userData['criarCampanha'] ?? false;
+      hasCriarFormAccess = userData['criarForm'] ?? false;
+      hasGerenciarColaboradoresAccess = userData['gerenciarColaboradores'] ?? false;
+      hasGerenciarParceirosAccess = userData['gerenciarParceiros'] ?? false;
+
+      // Atualiza o acesso ao Painel Adm com base nas permissões específicas
+      updateAdmPanelAccess();
+
+      // Atualiza as páginas e abas com base nas permissões atualizadas
       _updatePagesAndTabs();
     });
   }
 
   void _updatePagesAndTabs() {
-    List<Widget> pages = [HomePage()];
-    List<Tab> tabs = [
-      Tab(
-        icon: Icon(Icons.home),
-        text: 'Home',
-      ),
-    ];
+    List<Widget> pages = [];
+    List<Tab> tabs = [];
 
+    // Adiciona as páginas e abas dinamicamente na ordem correta
     if (hasDashboardAccess) {
       pages.add(DashboardPage());
       tabs.add(
@@ -106,26 +136,40 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
       );
     }
 
-    // Adiciona a página de configurações sempre como a última
+    if (hasAdmPanelAccess) {
+      pages.add(AdminPanelPage());
+      tabs.add(
+        Tab(
+          icon: Icon(Icons.admin_panel_settings),
+          text: 'Painel Adm',
+        ),
+      );
+    }
+
+    // Configurações sempre será a última aba
     pages.add(SettingsPage());
     tabs.add(
       Tab(
         icon: Icon(Icons.settings),
-        text: 'Config.',
+        text: 'Configurações',
       ),
     );
 
-    _pages = pages;
-    _tabs = tabs;
+    // Atualiza as listas e recria o controlador do TabController
+    setState(() {
+      _pages = pages;
+      _tabs = tabs;
+      _tabController.dispose();  // Descarta o controlador antigo para evitar inconsistências
+      _tabController = TabController(length: _tabs.length, vsync: this);
 
-    _tabController = TabController(length: _tabs.length, vsync: this);
-    _tabController.addListener(() {
-      if (_tabController.indexIsChanging) {
-        setState(() {
-          _currentIndex = _tabController.index;
-          _pageController.jumpToPage(_currentIndex);
-        });
-      }
+      _tabController.addListener(() {
+        if (_tabController.indexIsChanging) {
+          setState(() {
+            _currentIndex = _tabController.index;
+            _pageController.jumpToPage(_currentIndex);
+          });
+        }
+      });
     });
   }
 
@@ -133,63 +177,66 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   void dispose() {
     _tabController.dispose();
     _pageController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
   String _getTitle() {
-    switch (_currentIndex) {
-      case 0:
-        return 'Início';
-      case 1:
-        return hasDashboardAccess ? 'Dashboard' : hasLeadsAccess ? 'Leads' : 'Configurações';
-      case 2:
-        return hasDashboardAccess && hasLeadsAccess ? 'Leads' : 'Configurações';
-      case 3:
-        return 'Configurações';
-      default:
-        return 'IO Connect';
+    // Define o título com base na aba atual e nas permissões
+    if (_currentIndex < _tabs.length) {
+      if (_tabs[_currentIndex].text == 'Painel Adm') {
+        return 'Painel Administrativo';
+      } else {
+        return _tabs[_currentIndex].text!;
+      }
     }
+    return 'IO Connect';
   }
 
   String _getPrefix() {
-    switch (_currentIndex) {
-      case 1:
-        return hasDashboardAccess ? "Bem-vindo(a) ao" : "Bem-vindo(a) aos";
-      case 2:
-        return hasDashboardAccess && hasLeadsAccess ? "Bem-vindo(a) aos" : "Bem-vindo(a) às";
-      case 3:
-        return "Bem-vindo(a) às";
-      default:
-        return "Bem-vindo(a) ao";
+    // Define o prefixo com base na aba atual
+    if (_currentIndex < _tabs.length) {
+      switch (_tabs[_currentIndex].text) {
+        case 'Dashboard':
+          return "Bem-vindo(a) ao";
+        case 'Leads':
+          return "Bem-vindo(a) aos";
+        case 'Painel Adm':
+          return "Bem-vindo(a) ao";
+        case 'Configurações':
+          return "Bem-vindo(a) às";
+        default:
+          return "Bem-vindo(a) ao";
+      }
     }
+    return "Bem-vindo(a) ao";
   }
 
   void _showNotificationsSidebar(BuildContext context) {
     List<Map<String, String>> notifications = [
       {'title': 'Exemplo de notificação 1', 'description': 'Descrição da notificação 1'},
       {'title': 'Exemplo de notificação 2', 'description': 'Descrição da notificação 2'},
-      // Adicione mais notificações conforme necessário
     ];
 
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
       barrierLabel: '',
-      barrierColor: Colors.black54, // Cor do fundo ao abrir o modal
-      transitionDuration: Duration(milliseconds: 300), // Duração da animação
+      barrierColor: Colors.black54,
+      transitionDuration: Duration(milliseconds: 300),
       pageBuilder: (BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setState) {
             return Align(
-              alignment: Alignment.centerRight, // Alinha o modal à direita da tela
+              alignment: Alignment.centerRight,
               child: Dismissible(
-                key: Key('notificationSidebar'), // Chave única para o Dismissible
-                direction: DismissDirection.startToEnd, // Permite deslizar para fechar da direita para esquerda
+                key: Key('notificationSidebar'),
+                direction: DismissDirection.startToEnd,
                 onDismissed: (direction) {
-                  Navigator.of(context).pop(); // Fecha o modal ao arrastar para o lado
+                  Navigator.of(context).pop();
                 },
                 child: Material(
-                  color: Colors.transparent, // Deixa o fundo transparente
+                  color: Colors.transparent,
                   child: Container(
                     width: MediaQuery.of(context).size.width * 0.8,
                     height: MediaQuery.of(context).size.height,
@@ -202,7 +249,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                       boxShadow: [
                         BoxShadow(
                           color: Theme.of(context).colorScheme.shadow,
-                          offset: Offset(-4, 0), // Sombra para a esquerda
+                          offset: Offset(-4, 0),
                           blurRadius: 10.0,
                         ),
                       ],
@@ -238,7 +285,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                                 ),
                                 onDismissed: (direction) {
                                   setState(() {
-                                    notifications.removeAt(index); // Remove a notificação da lista
+                                    notifications.removeAt(index);
                                   });
                                 },
                                 child: ListTile(
@@ -263,9 +310,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                                       color: Theme.of(context).colorScheme.onSecondary.withOpacity(0.6),
                                     ),
                                   ),
-                                  onTap: () {
-                                    // Ação ao clicar na notificação
-                                  },
+                                  onTap: () {},
                                 ),
                               );
                             },
@@ -282,7 +327,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         final offsetAnimation = Tween<Offset>(
-          begin: Offset(1.0, 0.0), // Começa fora da tela à direita
+          begin: Offset(1.0, 0.0),
           end: Offset.zero,
         ).animate(animation);
 
@@ -296,113 +341,144 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
 
   @override
   Widget build(BuildContext context) {
+    double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
+    double tabBarHeight = (kBottomNavigationBarHeight - (_scrollOffset / 2)).clamp(0.0, kBottomNavigationBarHeight).ceilToDouble();
+    double opacity = (1.0 - (_scrollOffset / 100)).clamp(0.0, 1.0);
+
+    // Definindo a física com base na visibilidade da AppBar e TabBar
+    final pageViewPhysics = (appBarHeight > 0 && tabBarHeight > 0)
+        ? AlwaysScrollableScrollPhysics()
+        : NeverScrollableScrollPhysics();
+
     return ConnectivityBanner(
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.background,
-        appBar: AppBar(
-            toolbarHeight: 100, // Aumenta a altura da AppBar
-            title: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _getPrefix(),
-                      style: TextStyle(
-                        fontFamily: 'BrandingSF',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                        color: Theme.of(context).colorScheme.onBackground,
-                      ),
-                    ),
-                    AnimatedSwitcher(
-                      duration: Duration(milliseconds: 300),
-                      child: Text(
-                        _getTitle(),
-                        key: ValueKey<String>(_getTitle()),
+        appBar: PreferredSize(
+          preferredSize: Size.fromHeight(appBarHeight),
+          child: Opacity(
+            opacity: opacity,
+            child: AppBar(
+              toolbarHeight: appBarHeight,
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _getPrefix(),
                         style: TextStyle(
                           fontFamily: 'BrandingSF',
-                          fontWeight: FontWeight.w700,
-                          fontSize: 35,
-                          color: Theme.of(context).colorScheme.surfaceVariant,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: Theme.of(context).colorScheme.onBackground,
                         ),
                       ),
-                      transitionBuilder: (Widget child,
-                          Animation<double> animation) {
-                        final fadeInAnimation = Tween<double>(
-                            begin: 0.0, end: 1.0).animate(animation);
-                        final slideAnimation = Tween<Offset>(begin: Offset(-1, 0),
-                            end: Offset.zero).animate(animation);
-
-                        return SlideTransition(
-                          position: slideAnimation,
-                          child: FadeTransition(
-                            opacity: fadeInAnimation,
-                            child: child,
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                Stack(
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.notifications),
-                      color: Theme.of(context).colorScheme.onSecondary,
-                      iconSize: 30,
-                      onPressed: () async {
-                        _showNotificationsSidebar(context);
-                      },
-                    ),
-                    Positioned(
-                      right: 6,
-                      top: 6,
-                      child: CircleAvatar(
-                        radius: 8,
-                        backgroundColor: Theme.of(context).colorScheme.tertiary,
+                      AnimatedSwitcher(
+                        duration: Duration(milliseconds: 300),
                         child: Text(
-                          '3',
-                          style: TextStyle(color: Colors.white, fontSize: 10),
+                          _getTitle(),
+                          key: ValueKey<String>(_getTitle()),
+                          style: TextStyle(
+                            fontFamily: 'BrandingSF',
+                            fontWeight: FontWeight.w700,
+                            fontSize: 28,
+                            color: Theme.of(context).colorScheme.surfaceVariant,
+                          ),
+                        ),
+                        transitionBuilder: (Widget child, Animation<double> animation) {
+                          final fadeInAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(animation);
+                          final slideAnimation = Tween<Offset>(begin: Offset(-1, 0), end: Offset.zero).animate(animation);
+
+                          return SlideTransition(
+                            position: slideAnimation,
+                            child: FadeTransition(
+                              opacity: fadeInAnimation,
+                              child: child,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  Stack(
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.notifications),
+                        color: Theme.of(context).colorScheme.onSecondary,
+                        iconSize: 30,
+                        onPressed: () async {
+                          _showNotificationsSidebar(context);
+                        },
+                      ),
+                      Positioned(
+                        right: 6,
+                        top: 6,
+                        child: CircleAvatar(
+                          radius: 8,
+                          backgroundColor: Theme.of(context).colorScheme.tertiary,
+                          child: Text(
+                            '3',
+                            style: TextStyle(color: Colors.white, fontSize: 10),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
+              centerTitle: false,
+              automaticallyImplyLeading: false,
+              backgroundColor: Theme.of(context).colorScheme.secondary,
+              foregroundColor: Theme.of(context).colorScheme.outline,
             ),
-            centerTitle: false,
-            automaticallyImplyLeading: false,
-            backgroundColor: Theme.of(context).colorScheme.secondary,
-            foregroundColor: Theme.of(context).colorScheme.outline,
           ),
-        body: PageView(
-          controller: _pageController,
-          onPageChanged: (index) {
-            setState(() {
-              _currentIndex = index;
-              _tabController.index = index;
-            });
-          },
-          children: _pages,
         ),
-        bottomNavigationBar: _tabs.isNotEmpty
-            ? TabBar(
-          controller: _tabController,
-          labelColor: Theme.of(context).colorScheme.tertiary,
-          unselectedLabelColor: Theme.of(context).colorScheme.onSecondary,
-          indicator: BoxDecoration(),
-          onTap: (index) {
-            _pageController.animateToPage(
-              index,
-              duration: Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-            );
+        body: NotificationListener<ScrollNotification>(
+          onNotification: (ScrollNotification scrollInfo) {
+            if (scrollInfo.metrics.axis == Axis.vertical) {
+              setState(() {
+                _scrollOffset = scrollInfo.metrics.pixels;
+              });
+            }
+            return true;
           },
-          tabs: _tabs,
-        )
-            : null,
+          child: PageView(
+            controller: _pageController,
+            onPageChanged: (index) {
+              setState(() {
+                _currentIndex = index;
+                _tabController.index = index;
+              });
+            },
+            physics: pageViewPhysics, // Física atualizada com base na visibilidade
+            children: _pages,
+          ),
+        ),
+        bottomNavigationBar: SafeArea(
+          child: SizedBox(
+            height: tabBarHeight,
+            child: SingleChildScrollView(
+              child: Opacity(
+                opacity: opacity,
+                child: TabBar(
+                  controller: _tabController,
+                  labelColor: Theme.of(context).colorScheme.tertiary,
+                  unselectedLabelColor: Theme.of(context).colorScheme.onSecondary,
+                  indicator: BoxDecoration(),
+                  onTap: (index) {
+                    _pageController.animateToPage(
+                      index,
+                      duration: Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                    );
+                  },
+                  tabs: _tabs,
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

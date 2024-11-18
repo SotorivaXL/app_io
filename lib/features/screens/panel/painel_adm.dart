@@ -244,28 +244,6 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
     } else {
       return ConnectivityBanner(
         child: Scaffold(
-          appBar: AppBar(
-            title: Text('Painel ADM'),
-            centerTitle: true,
-            titleTextStyle: TextStyle(
-                fontFamily: 'BrandingSF',
-                fontWeight: FontWeight.w900,
-                fontSize: 26,
-                color: Theme.of(context).colorScheme.outline
-            ),
-            leading: IconButton(
-              icon: Icon(
-                Icons.arrow_back_ios_new,
-                color: Theme.of(context).colorScheme.outline,
-                size: 24,
-              ),
-              onPressed: () {
-                Navigator.pop(context);
-              },
-            ),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            foregroundColor: Theme.of(context).colorScheme.outline,
-          ),
           body: SafeArea(
             top: true,
             child: SingleChildScrollView(

@@ -26,6 +26,12 @@
       "languageVersion": "2.18"
     },
     {
+      "name": "auto_size_text",
+      "rootUri": "file:///Users/iomarketingdev/.pub-cache/hosted/pub.dev/auto_size_text-3.0.0",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
       "name": "boolean_selector",
       "rootUri": "file:///C:/Users/Eduar/AppData/Local/Pub/Cache/hosted/pub.dev/boolean_selector-2.1.1",
       "packageUri": "lib/",
@@ -276,6 +282,12 @@
       "rootUri": "file:///C:/Users/Eduar/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_colorpicker-1.1.0",
       "packageUri": "lib/",
       "languageVersion": "2.14"
+    },
+    {
+      "name": "flutter_holo_date_picker",
+      "rootUri": "file:///Users/iomarketingdev/.pub-cache/hosted/pub.dev/flutter_holo_date_picker-2.0.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.3"
     },
     {
       "name": "flutter_launcher_icons",
@@ -716,10 +728,9 @@
       "languageVersion": "3.4"
     }
   ],
-  "generated": "2024-11-13T22:40:56.340916Z",
+  "generated": "2024-11-14T20:48:55.786780Z",
   "generator": "pub",
   "generatorVersion": "3.5.4",
-  "flutterRoot": "file:///C:/flutter",
-  "flutterVersion": "3.24.4",
-  "pubCache": "file:///C:/Users/Eduar/AppData/Local/Pub/Cache"
-}
+  "flutterRoot": "file:///Users/iomarketingdev/development/flutter",
+  "flutterVersion": "3.24.5",
+  "pubCache": "file:///Users/iomarketingdev/.pub-cache"

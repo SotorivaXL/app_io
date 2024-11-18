@@ -19,6 +19,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
   final _formKey = GlobalKey<FormState>();
   String _nomeCampanha = '';
   String _descricao = '';
+  String _mensagem = '';
   DateTime _dataInicio = DateTime.now();
   DateTime _dataFim = DateTime.now();
   bool _isLoading = false;
@@ -99,6 +100,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
         print('empresaId: $_selectedEmpresaId');
         print('nome_campanha: $_nomeCampanha');
         print('descricao: $_descricao');
+        print('descricao: $_mensagem');
         print('dataInicio: ${_dataInicio.toIso8601String()}');
         print('dataFim: ${_dataFim.toIso8601String()}');
 
@@ -110,6 +112,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
         await campanhas.add({
           'nome_campanha': _nomeCampanha,
           'descricao': _descricao,
+          'mensagem_padrao': _mensagem,
           'dataInicio': _dataInicio.toIso8601String(),
           'dataFim': _dataFim.toIso8601String(),
         });
@@ -318,6 +321,81 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                               },
                               onSaved: (value) {
                                 _descricao = value!;
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.max,
+                      children: [
+                        Expanded(
+                          child: Padding(
+                            padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                            child: TextFormField(
+                              decoration: InputDecoration(
+                                labelText: 'Mensagem padrão',
+                                labelStyle: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0,
+                                  color: Theme.of(context).colorScheme.onSecondary,
+                                ),
+                                hintText: 'Digite a mensagem padrão',
+                                hintStyle: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 12,
+                                  letterSpacing: 0,
+                                  color: Theme.of(context).colorScheme.onSecondary,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: Theme.of(context).primaryColor,
+                                    width: 2,
+                                  ),
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: Theme.of(context).colorScheme.tertiary,
+                                    width: 2,
+                                  ),
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                                errorBorder: OutlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: Theme.of(context).colorScheme.error,
+                                    width: 2,
+                                  ),
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                                focusedErrorBorder: OutlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: Theme.of(context).colorScheme.error,
+                                    width: 2,
+                                  ),
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                                prefixIcon: Icon(
+                                  Icons.text_fields,
+                                  color: Theme.of(context).colorScheme.tertiary,
+                                  size: 25,
+                                ),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Por favor, insira a mensagem padrão';
+                                }
+                                return null;
+                              },
+                              onSaved: (value) {
+                                _mensagem = value!;
                               },
                             ),
                           ),

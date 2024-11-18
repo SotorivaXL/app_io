@@ -4,7 +4,6 @@ import 'package:app_io/auth/login/login_page.dart';
 import 'package:app_io/auth/providers/auth_provider.dart';
 import 'package:app_io/data/models/LoginModel/login_page_model.dart';
 import 'package:app_io/features/screens/dasboard/dashboard_page.dart';
-import 'package:app_io/features/screens/home/home_page.dart';
 import 'package:app_io/features/screens/leads/leads_page.dart';
 import 'package:app_io/features/screens/panel/painel_adm.dart';
 import 'package:app_io/features/screens/splash/splash_screen.dart';
@@ -12,10 +11,8 @@ import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';
 import 'package:app_io/util/services/connectivity_service.dart';
 import 'package:app_io/util/themes/app_theme.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -152,7 +149,6 @@ class _MyAppState extends State<MyApp> {
       home: SplashScreen(),
       routes: {
         '/tabBar': (context) => AuthGuard(child: CustomTabBarPage()),
-        '/home': (context) => AuthGuard(child: HomePage()),
         '/dashboard': (context) => AuthGuard(child: DashboardPage()),
         '/leads': (context) => AuthGuard(child: LeadsPage()),
         '/login': (context) => LoginPage(),
