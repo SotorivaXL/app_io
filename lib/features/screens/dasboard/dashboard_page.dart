@@ -136,7 +136,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return ConnectivityBanner(
       child: Scaffold(
         body: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 20),
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
