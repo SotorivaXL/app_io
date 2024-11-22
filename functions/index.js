@@ -299,7 +299,7 @@ exports.createUserAndCompany = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('failed-precondition', 'A função deve ser chamada enquanto autenticado.');
     }
 
-    const { email, password, nomeEmpresa, name, role, cnpj, accessRights, contract, countArtsValue, countVideosValue } = data;
+    const { email, password, nomeEmpresa, name, role, birth, founded, cnpj, accessRights, contract, countArtsValue, countVideosValue } = data;
 
     try {
         // Cria o novo usuário
@@ -317,10 +317,15 @@ exports.createUserAndCompany = functions.https.onCall(async (data, context) => {
                 NomeEmpresa: nomeEmpresa,
                 email: email,
                 cnpj: cnpj,
+                founded: founded,
                 dashboard: accessRights.dashboard || false,
                 leads: accessRights.leads || false,
                 gerenciarColaboradores: accessRights.gerenciarColaboradores || false,
                 gerenciarParceiros: accessRights.gerenciarParceiros || false,
+                configurarDash: accessRights.configurarDash || false,
+                copiarTelefones: accessRights.copiarTelefones || false,
+                criarCampanha: accessRights.criarCampanha || false,
+                criarForm: accessRights.criarForm || false,
                 contract: contract || '',
                 countArtsValue: countArtsValue || 0,
                 countVideosValue: countVideosValue || 0,
@@ -334,8 +339,13 @@ exports.createUserAndCompany = functions.https.onCall(async (data, context) => {
                 name: name,
                 email: email,
                 role: role,
+                birth: birth,
                 dashboard: accessRights.dashboard || false,
                 leads: accessRights.leads || false,
+                configurarDash: accessRights.configurarDash || false,
+                copiarTelefones: accessRights.copiarTelefones || false,
+                criarCampanha: accessRights.criarCampanha || false,
+                criarForm: accessRights.criarForm || false,
                 createdBy: context.auth.uid,
             });
 
@@ -505,5 +515,51 @@ exports.deleteUserByEmail = functions.https.onCall(async (data, context) => {
         return { message: 'Usuário excluído com sucesso' };
     } catch (error) {
         return { error: 'Erro ao excluir o usuário: ' + error.message };
+    }
+});
+
+exports.changeUserPassword = functions.https.onCall(async (data, context) => {
+    // Verifica se o usuário está autenticado
+    if (!context.auth) {
+        throw new functions.https.HttpsError(
+            'failed-precondition',
+            'A função deve ser chamada por um usuário autenticado.'
+        );
+    }
+
+    const uidRequester = context.auth.uid;
+    const uid = data.uid;
+    const newPassword = data.newPassword;
+
+    // Verifica se o usuário solicitante tem permissão para alterar a senha
+    try {
+        const empresaDoc = await admin.firestore().collection('empresas').doc(uidRequester).get();
+
+        if (!empresaDoc.exists) {
+            throw new functions.https.HttpsError(
+                'permission-denied',
+                'Usuário não encontrado na coleção empresas.'
+            );
+        }
+
+        const alterarSenha = empresaDoc.data().alterarSenha;
+
+        if (!alterarSenha) {
+            throw new functions.https.HttpsError(
+                'permission-denied',
+                'Você não tem permissão para alterar a senha.'
+            );
+        }
+
+        // Atualiza a senha do usuário
+        await admin.auth().updateUser(uid, { password: newPassword });
+        return { message: 'Senha atualizada com sucesso' };
+
+    } catch (error) {
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        } else {
+            throw new functions.https.HttpsError('unknown', error.message);
+        }
     }
 });
