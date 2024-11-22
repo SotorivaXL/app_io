@@ -18,6 +18,7 @@ class FieldData {
   double borderRadius;
   Color fieldStartColor;
   Color fieldEndColor;
+
   FieldData({
     required this.nameController,
     required this.hintController,
@@ -36,6 +37,8 @@ class _CreateFormState extends State<CreateForm> {
   List<Map<String, dynamic>> _empresas = [];
   List<Map<String, dynamic>> _campanhas = [];
   bool _isLoading = false;
+
+  double _scrollOffset = 0.0;
 
   List<FieldData> _fields = [];
   TextEditingController _redirectUrlController = TextEditingController();
@@ -58,7 +61,8 @@ class _CreateFormState extends State<CreateForm> {
 
   Future<void> _loadEmpresas() async {
     try {
-      List<Map<String, dynamic>> empresas = await _firestoreService.getEmpresas();
+      List<Map<String, dynamic>> empresas =
+          await _firestoreService.getEmpresas();
       setState(() {
         _empresas = empresas;
       });
@@ -69,10 +73,12 @@ class _CreateFormState extends State<CreateForm> {
 
   Future<void> _loadCampanhas(String empresaId) async {
     try {
-      List<Map<String, dynamic>> campanhas = await _firestoreService.getCampanhas(empresaId);
+      List<Map<String, dynamic>> campanhas =
+          await _firestoreService.getCampanhas(empresaId);
       setState(() {
         _campanhas = campanhas;
-        _selectedCampanhaId = null; // Resetar a campanha selecionada quando a empresa é alterada
+        _selectedCampanhaId =
+            null; // Resetar a campanha selecionada quando a empresa é alterada
       });
     } catch (e) {
       showErrorDialog(context, 'Erro ao carregar campanha', 'Erro');
@@ -90,37 +96,83 @@ class _CreateFormState extends State<CreateForm> {
 
   @override
   Widget build(BuildContext context) {
+    double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
+
     return ConnectivityBanner(
       child: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         child: Scaffold(
           backgroundColor: Theme.of(context).colorScheme.background,
           appBar: AppBar(
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            iconTheme: IconThemeData(color: Theme.of(context).colorScheme.outline),
-            title: Text(
-              'Criar Formulário',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: 'BrandingSF',
-                fontSize: 26,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0,
-                color: Theme.of(context).colorScheme.outline,
+            toolbarHeight: appBarHeight,
+            automaticallyImplyLeading: false,
+            flexibleSpace: SafeArea(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Botão de voltar e título
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.pop(context);
+                          },
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.arrow_back_ios_new,
+                                color:
+                                    Theme.of(context).colorScheme.onBackground,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Voltar',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 16,
+                                  color:
+                                      Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Criar Formulário',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 26,
+                            fontWeight: FontWeight.w700,
+                            color: Theme.of(context).colorScheme.onSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Stack na direita
+                    Stack(
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.add,
+                              color: Theme.of(context).colorScheme.onBackground,
+                              size: 30),
+                          onPressed: _addField,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-            leading: IconButton(
-              icon: Icon(
-                Icons.arrow_back_ios_new,
-                color: Theme.of(context).colorScheme.outline,
-                size: 24,
-              ),
-              onPressed: () {
-                Navigator.pop(context);
-              },
-            ),
-            centerTitle: true,
-            elevation: 2,
+            surfaceTintColor: Colors.transparent,
+            backgroundColor: Theme.of(context).colorScheme.secondary,
           ),
           body: SafeArea(
             top: true,
@@ -171,83 +223,56 @@ class _CreateFormState extends State<CreateForm> {
                   ),
                   Padding(
                     padding: const EdgeInsets.all(20.0),
-                    child: ElevatedButton.icon(
-                      onPressed: _addField,
-                      icon: Icon(
-                        Icons.add,
-                        color: Theme.of(context).colorScheme.outline,
-                        size: 25,
-                      ),
-                      label: Text(
-                        'Adicionar Campo',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0,
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        padding: EdgeInsetsDirectional.fromSTEB(30, 15, 30, 15),
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        elevation: 3,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                        side: BorderSide(
-                          color: Colors.transparent,
-                          width: 1,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(20.0),
                     child: _isLoading
                         ? ElevatedButton(
-                      onPressed: null, // Desabilita o botão enquanto carrega
-                      style: ElevatedButton.styleFrom(
-                        padding: EdgeInsets.symmetric(horizontal: 25, vertical: 15),
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                      ),
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          strokeWidth: 2.0,
-                        ),
-                      ),
-                    )
+                            onPressed:
+                                null, // Desabilita o botão enquanto carrega
+                            style: ElevatedButton.styleFrom(
+                              padding: EdgeInsets.symmetric(
+                                  horizontal: 25, vertical: 15),
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.primary,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(25),
+                              ),
+                            ),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.white),
+                                strokeWidth: 2.0,
+                              ),
+                            ),
+                          )
                         : ElevatedButton(
-                      onPressed: _generateHtmlForm,
-                      child: Text(
-                        'Gerar Formulário HTML',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0,
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        padding: EdgeInsetsDirectional.fromSTEB(30, 15, 30, 15),
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        elevation: 3,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                        side: BorderSide(
-                          color: Colors.transparent,
-                          width: 1,
-                        ),
-                      ),
-                    ),
+                            onPressed: _generateHtmlForm,
+                            child: Text(
+                              'Gerar Formulário HTML',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0,
+                                color: Theme.of(context).colorScheme.outline,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              padding: EdgeInsetsDirectional.fromSTEB(
+                                  30, 15, 30, 15),
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.primary,
+                              elevation: 3,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(25),
+                              ),
+                              side: BorderSide(
+                                color: Colors.transparent,
+                                width: 1,
+                              ),
+                            ),
+                          ),
                   ),
                   Padding(
                     padding: const EdgeInsets.all(20.0),
@@ -307,14 +332,17 @@ class _CreateFormState extends State<CreateForm> {
                     onChanged: (val) {
                       setState(() {
                         _selectedEmpresaId = val;
-                        _loadCampanhas(val!); // Carregar campanhas quando a empresa muda
+                        _loadCampanhas(
+                            val!); // Carregar campanhas quando a empresa muda
                       });
                     },
                     items: _empresas.map((empresa) {
                       return DropdownMenuItem<String>(
                         value: empresa['id'] as String?,
                         child: Text(
-                          empresa['NomeEmpresa'] != null ? empresa['NomeEmpresa'] as String : 'Nome não disponível',
+                          empresa['NomeEmpresa'] != null
+                              ? empresa['NomeEmpresa'] as String
+                              : 'Nome não disponível',
                           style: TextStyle(
                             fontFamily: 'Poppins',
                             fontWeight: FontWeight.w500,
@@ -325,7 +353,8 @@ class _CreateFormState extends State<CreateForm> {
                       );
                     }).toList(),
                     decoration: InputDecoration(
-                      contentPadding: EdgeInsetsDirectional.fromSTEB(16, 20, 16, 20),
+                      contentPadding:
+                          EdgeInsetsDirectional.fromSTEB(16, 20, 16, 20),
                       enabledBorder: OutlineInputBorder(
                         borderSide: BorderSide(
                           color: Theme.of(context).primaryColor,
@@ -391,7 +420,9 @@ class _CreateFormState extends State<CreateForm> {
                       return DropdownMenuItem<String>(
                         value: campanha['id'] as String?,
                         child: Text(
-                          nomeCampanha != null ? nomeCampanha as String : 'Nome não disponível',
+                          nomeCampanha != null
+                              ? nomeCampanha as String
+                              : 'Nome não disponível',
                           style: TextStyle(
                             fontFamily: 'Poppins',
                             fontWeight: FontWeight.w500,
@@ -402,7 +433,8 @@ class _CreateFormState extends State<CreateForm> {
                       );
                     }).toList(),
                     decoration: InputDecoration(
-                      contentPadding: EdgeInsetsDirectional.fromSTEB(16, 20, 16, 20),
+                      contentPadding:
+                          EdgeInsetsDirectional.fromSTEB(16, 20, 16, 20),
                       enabledBorder: OutlineInputBorder(
                         borderSide: BorderSide(
                           color: Theme.of(context).primaryColor,
@@ -678,7 +710,8 @@ class _CreateFormState extends State<CreateForm> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    keyboardType: TextInputType.numberWithOptions(decimal: true),
+                    keyboardType:
+                        TextInputType.numberWithOptions(decimal: true),
                     onChanged: (value) {
                       setState(() {
                         fieldData.borderRadius = double.tryParse(value) ?? 8.0;
@@ -725,7 +758,8 @@ class _CreateFormState extends State<CreateForm> {
                   ),
                   const SizedBox(height: 10),
                   IconButton(
-                    icon: Icon(Icons.delete, color: Theme.of(context).colorScheme.error),
+                    icon: Icon(Icons.delete,
+                        color: Theme.of(context).colorScheme.error),
                     onPressed: () => _removeField(index),
                   ),
                 ],
@@ -1299,8 +1333,10 @@ class _CreateFormState extends State<CreateForm> {
     if (_selectedEmpresaId == null ||
         _selectedCampanhaId == null ||
         _redirectUrlController.text.isEmpty) {
-      showErrorDialog(context,
-          'Por favor selecione uma empresa, uma campanha e insira uma URL de redirecionamento!', 'Atenção');
+      showErrorDialog(
+          context,
+          'Por favor selecione uma empresa, uma campanha e insira uma URL de redirecionamento!',
+          'Atenção');
       return;
     }
 
@@ -1309,14 +1345,17 @@ class _CreateFormState extends State<CreateForm> {
     });
 
     try {
-      String webhookUrl = "https://us-central1-app-io-1c16f.cloudfunctions.net/addLead";
+      String webhookUrl =
+          "https://us-central1-app-io-1c16f.cloudfunctions.net/addLead";
 
       String maskScripts = '';
       String fieldsHtml = '';
 
       for (int i = 0; i < _fields.length; i++) {
         FieldData fieldData = _fields[i];
-        String fieldName = fieldData.nameController.text.isNotEmpty ? fieldData.nameController.text : 'campo_${i + 1}';
+        String fieldName = fieldData.nameController.text.isNotEmpty
+            ? fieldData.nameController.text
+            : 'campo_${i + 1}';
 
         if (fieldData.mask.isNotEmpty) {
           String maskFunctionName = 'applyMask${i}';
@@ -1450,9 +1489,13 @@ class _CreateFormState extends State<CreateForm> {
       ''';
 
       Clipboard.setData(ClipboardData(text: htmlForm));
-      showErrorDialog(context, 'Formulário HTML gerado e copiado com sucesso para a área de transferência', 'Sucesso');
+      showErrorDialog(
+          context,
+          'Formulário HTML gerado e copiado com sucesso para a área de transferência',
+          'Sucesso');
     } catch (e) {
-      showErrorDialog(context, 'Falha ao gerar formulário, tente novamente mais tarde!', 'Atenção');
+      showErrorDialog(context,
+          'Falha ao gerar formulário, tente novamente mais tarde!', 'Atenção');
     } finally {
       setState(() {
         _isLoading = false;

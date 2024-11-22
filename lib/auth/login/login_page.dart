@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:app_io/auth/providers/auth_provider.dart' as app_io_auth;
 import 'package:app_io/data/models/LoginModel/login_page_model.dart';
 import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:provider/provider.dart';
 
 class LoginPage extends StatefulWidget {
@@ -19,12 +20,15 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _passwordController = TextEditingController();
   final FocusNode _emailFocusNode = FocusNode();
   final FocusNode _passwordFocusNode = FocusNode();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   bool _passwordVisibility = false;
+  bool _rememberMe = false;
   Future<void>? _loginFuture;
 
   @override
   void initState() {
     super.initState();
+    _loadSavedCredentials();
     final authProvider = Provider.of<app_io_auth.AuthProvider>(context, listen: false);
     authProvider.listenToAuthChanges();
   }
@@ -38,6 +42,28 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  void _loadSavedCredentials() async {
+    final email = await _secureStorage.read(key: 'email');
+    final password = await _secureStorage.read(key: 'password');
+    final rememberMe = await _secureStorage.read(key: 'rememberMe') == 'true';
+
+    setState(() {
+      _emailController.text = email ?? '';
+      _passwordController.text = password ?? '';
+      _rememberMe = rememberMe;
+    });
+  }
+
+  void _saveCredentials(String email, String password) async {
+    if (_rememberMe) {
+      await _secureStorage.write(key: 'email', value: email);
+      await _secureStorage.write(key: 'password', value: password);
+      await _secureStorage.write(key: 'rememberMe', value: 'true');
+    } else {
+      await _secureStorage.deleteAll(); // Remove todos os dados
+    }
+  }
+
   Future<void> _login() async {
     FocusScope.of(context).unfocus();
     final authProvider = Provider.of<app_io_auth.AuthProvider>(context, listen: false);
@@ -49,19 +75,16 @@ class _LoginPageState extends State<LoginPage> {
       final usersCollection = FirebaseFirestore.instance.collection('users');
       final companiesCollection = FirebaseFirestore.instance.collection('empresas');
 
-      // Primeiro, tenta encontrar o documento na coleção 'users'
       QuerySnapshot userQuerySnapshot = await usersCollection.where('email', isEqualTo: email).get();
 
-      // Se não encontrar na coleção 'users', procura na coleção 'empresas'
       if (userQuerySnapshot.docs.isEmpty) {
         userQuerySnapshot = await companiesCollection.where('email', isEqualTo: email).get();
       }
 
-      // Verifica se encontrou o documento em qualquer uma das coleções
       if (userQuerySnapshot.docs.isNotEmpty) {
         final userDoc = userQuerySnapshot.docs.first.data() as Map<String, dynamic>?;
         final currentSessionId = userDoc?['sessionId'];
-        final newSessionId = authProvider.sessionId; // Supondo que sessionId esteja no AuthProvider
+        final newSessionId = authProvider.sessionId;
 
         if (currentSessionId != null && currentSessionId != newSessionId) {
           _showErrorDialog(context, 'Esta conta já está ativa em outro dispositivo. Por favor, desconecte-se de lá antes de continuar.');
@@ -76,51 +99,36 @@ class _LoginPageState extends State<LoginPage> {
         final user = FirebaseAuth.instance.currentUser;
 
         if (user != null) {
-          final sessionId = authProvider.sessionId;
+          final token = await user.getIdToken();
 
-          if (sessionId == null) {
-            _showErrorDialog(context, 'Ocorreu um erro ao obter o sessionId.');
+          if (token == null) {
+            _showErrorDialog(context, 'Ocorreu um erro ao obter o token.');
             return;
           }
 
-          // Atualiza o sessionId no Firestore
           final userDocRef = usersCollection.doc(user.uid);
           final companyDocRef = companiesCollection.doc(user.uid);
 
-          // Se o documento não existir na coleção 'users', verifica a coleção 'empresas'
           final userDocExists = (await userDocRef.get()).exists;
           final companyDocExists = (await companyDocRef.get()).exists;
 
           if (!userDocExists && companyDocExists) {
-            // Se encontrar o documento na coleção 'empresas', atualiza o sessionId lá
-            await companyDocRef.update({
-              'sessionId': sessionId,
-            });
+            await companyDocRef.update({'sessionId': authProvider.sessionId});
           } else if (!userDocExists && !companyDocExists) {
-            // Se não encontrar o documento em ambas as coleções, cria um novo documento na coleção 'users'
-            await userDocRef.set({
-              'sessionId': sessionId,
-              'email': email,
-            });
+            await userDocRef.set({'sessionId': authProvider.sessionId, 'email': email});
           } else if (userDocExists) {
-            // Se encontrar o documento na coleção 'users', atualiza o sessionId
-            await userDocRef.update({
-              'sessionId': sessionId,
-            });
+            await userDocRef.update({'sessionId': authProvider.sessionId});
           }
 
-          // Atualiza o FCM Token
           await _updateFcmToken();
 
-          // Navegação para a página principal
+          _saveCredentials(email, password);
+
           Navigator.of(context).pushReplacement(
             PageRouteBuilder(
               transitionDuration: Duration(milliseconds: 500),
               transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return FadeTransition(
-                  opacity: animation,
-                  child: child,
-                );
+                return FadeTransition(opacity: animation, child: child);
               },
               pageBuilder: (context, animation, secondaryAnimation) => CustomTabBarPage(),
             ),
@@ -131,7 +139,7 @@ class _LoginPageState extends State<LoginPage> {
       if (e is FirebaseException) {
         _showErrorDialogFirebase(context, e);
       } else {
-        _showErrorDialogFirebase(context, FirebaseException(message: 'Ocorreu um erro inesperado.', plugin: ''));
+        _showErrorDialog(context, 'Ocorreu um erro inesperado.');
       }
     }
   }
@@ -597,6 +605,28 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         );
                       },
+                    ),
+                    SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: _rememberMe,
+                          onChanged: (value) {
+                            setState(() {
+                              _rememberMe = value ?? false;
+                            });
+                          },
+                        ),
+                        Text(
+                          'Lembrar de mim',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Theme.of(context).colorScheme.onSecondary
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

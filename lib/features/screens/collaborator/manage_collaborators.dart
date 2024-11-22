@@ -25,6 +25,9 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
   bool _hasShownPermissionRevokedDialog = false;
   final FirestoreService _firestoreService = FirestoreService();
 
+  ScrollController _scrollController = ScrollController();
+  double _scrollOffset = 0.0;
+
   Stream<List<Map<String, dynamic>>> _getUserCollaborators(String userId) {
     return FirebaseFirestore.instance
         .collection('users')
@@ -40,6 +43,11 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(() {
+      setState(() {
+        _scrollOffset = _scrollController.offset;
+      });
+    });
     _determineUserDocumentAndListen();
   }
 
@@ -334,6 +342,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
   @override
   void dispose() {
     _userDocSubscription?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -341,49 +350,96 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
   Widget build(BuildContext context) {
     final String userId = FirebaseAuth.instance.currentUser?.uid ?? ''; // Obtém o UID do usuário logado
 
+    double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
+    double tabBarHeight = (kBottomNavigationBarHeight - (_scrollOffset / 2))
+        .clamp(0.0, kBottomNavigationBarHeight)
+        .ceilToDouble();
+    double opacity = (1.0 - (_scrollOffset / 100)).clamp(0.0, 1.0);
+
+    // Definindo a física com base na visibilidade da AppBar e TabBar
+    final pageViewPhysics = (appBarHeight > 0 && tabBarHeight > 0)
+        ? AlwaysScrollableScrollPhysics()
+        : NeverScrollableScrollPhysics();
+
     return ConnectivityBanner(
       child: GestureDetector(
         child: Scaffold(
-          floatingActionButton: FloatingActionButton(
-            onPressed: () async {
-              _navigateWithBottomToTopTransition(context, AddCollaborators());
-            },
-            child: Icon(
-              Icons.add,
-              color: Theme.of(context).colorScheme.outline,
-              size: 24,
-            ),
-            backgroundColor: Theme.of(context).primaryColor,
-            elevation: 8,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(50), // Define o botão como totalmente arredondado
-            ),
-          ),
-          appBar: AppBar(
-            centerTitle: true,
-            backgroundColor: Theme.of(context).primaryColor,
-            automaticallyImplyLeading: false,
-            leading: IconButton(
-              icon: Icon(
-                Icons.arrow_back_ios_new,
-                color: Theme.of(context).colorScheme.outline,
-                size: 24,
+          appBar: PreferredSize(
+            preferredSize: Size.fromHeight(appBarHeight),
+            child: Opacity(
+              opacity: opacity,
+              child: AppBar(
+                toolbarHeight: appBarHeight,
+                automaticallyImplyLeading: false,
+                flexibleSpace: SafeArea(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Botão de voltar e título
+                        Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.pop(context);
+                              },
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.arrow_back_ios_new,
+                                    color: Theme.of(context).colorScheme.onBackground,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Voltar',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 16,
+                                      color: Theme.of(context).colorScheme.onSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Colaboradores',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 26,
+                                fontWeight: FontWeight.w700,
+                                color: Theme.of(context).colorScheme.onSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        // Stack na direita
+                        Stack(
+                          children: [
+                            IconButton(
+                              icon: Icon(Icons.person_add_alt_1_sharp,
+                                  color: Theme.of(context).colorScheme.onBackground,
+                                  size: 30),
+                              onPressed: () async {
+                                _navigateWithBottomToTopTransition(context, AddCollaborators());
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                surfaceTintColor: Colors.transparent,
+                backgroundColor: Theme.of(context).colorScheme.secondary,
               ),
-              onPressed: () {
-                Navigator.pop(context);
-              },
             ),
-            title: Text(
-              'Colaboradores',
-              style: TextStyle(
-                fontFamily: 'BrandingSF',
-                fontSize: 26,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0,
-                color: Theme.of(context).colorScheme.outline,
-              ),
-            ),
-            elevation: 0,
           ),
           body: SafeArea(
             top: true,
@@ -409,7 +465,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                     return Card(
                       color: Theme.of(context).cardColor,
                       shadowColor: Theme.of(context).shadowColor,
-                      margin: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                      margin: EdgeInsets.only(top: 20, right: 10, left: 10),
                       child: ListTile(
                         title: Text(
                           collaborator['name'] ?? 'Nome não disponível',
@@ -442,11 +498,13 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                                     name: collaborator['name'] ?? 'Nome não disponível',
                                     email: collaborator['email'] ?? 'Email não disponível',
                                     role: collaborator['role'] ?? 'Cargo não disponível',
+                                    birth: collaborator['birth'] ?? 'Nascimento não disponível',
                                     dashboard: collaborator['dashboard'] ?? false,
                                     leads: collaborator['leads'] ?? false,
                                     configurarDash: collaborator['configurarDash'] ?? false,
                                     criarCampanha: collaborator['criarCampanha'] ?? false,
                                     criarForm: collaborator['criarForm'] ?? false,
+                                    copiarTelefones: collaborator['copiarTelefones'] ?? false,
                                   ),
                                 );
                               },

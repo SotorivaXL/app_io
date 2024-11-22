@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:app_io/data/models/RegisterCollaboratorModel/add_collaborator_model.dart';
 import 'package:app_io/util/services/firestore_service.dart';
+import 'package:flutter_holo_date_picker/flutter_holo_date_picker.dart';
 
 class AddCollaborators extends StatefulWidget {
   @override
@@ -25,6 +26,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
     'configurarDash': false,
     'criarForm': false,
     'criarCampanha': false,
+    'copiarTelefones': false,
   };
 
   @override
@@ -40,6 +42,9 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
 
     _model.tfRoleTextController ??= TextEditingController();
     _model.tfRoleFocusNode ??= FocusNode();
+
+    _model.tfBirthTextController ??= TextEditingController();
+    _model.tfBirthFocusNode ??= FocusNode();
 
     _model.tfPasswordTextController ??= TextEditingController();
     _model.tfPasswordFocusNode ??= FocusNode();
@@ -75,6 +80,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
         'password': _model.tfPasswordTextController?.text ?? '',
         'name': _model.tfNameTextController?.text ?? '',
         'role': _model.tfRoleTextController?.text ?? '',
+        'birth': _model.tfBirthTextController?.text ?? '',
         'accessRights': accessRights,
       });
 
@@ -103,7 +109,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
         child: Scaffold(
           backgroundColor: Theme.of(context).colorScheme.background,
           appBar: AppBar(
-            backgroundColor: Theme.of(context).primaryColor,
+            backgroundColor: Theme.of(context).colorScheme.secondary,
             automaticallyImplyLeading: false,
             leading: IconButton(
               icon: Icon(
@@ -124,6 +130,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                 color: Theme.of(context).colorScheme.outline,
               ),
             ),
+            surfaceTintColor: Colors.transparent,
             centerTitle: true,
             elevation: 2,
           ),
@@ -248,6 +255,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                     color:
                                     Theme.of(context).colorScheme.onSecondary,
                                   ),
+                                  textInputAction: TextInputAction.next,
                                   textAlign: TextAlign.start,
                                 ),
                               ),
@@ -334,6 +342,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                     color:
                                     Theme.of(context).colorScheme.onSecondary,
                                   ),
+                                  textInputAction: TextInputAction.next,
                                   textAlign: TextAlign.start,
                                   keyboardType: TextInputType.emailAddress,
                                 ),
@@ -421,7 +430,172 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                     color:
                                     Theme.of(context).colorScheme.onSecondary,
                                   ),
+                                  textInputAction: TextInputAction.done,
                                   textAlign: TextAlign.start,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.max,
+                        children: [
+                          Expanded(
+                            child: Align(
+                              alignment: AlignmentDirectional(0, 0),
+                              child: Padding(
+                                padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                                child: GestureDetector(
+                                  onTap: () async {
+                                    await showModalBottomSheet(
+                                      context: context,
+                                      isScrollControlled: true,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.vertical(
+                                          top: Radius.circular(25),
+                                        ),
+                                      ),
+                                      builder: (BuildContext context) {
+                                        DateTime selectedDate = DateTime.now();
+
+                                        return Padding(
+                                          padding: EdgeInsets.only(
+                                            bottom: MediaQuery.of(context).viewInsets.bottom,
+                                          ),
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color: Theme.of(context).colorScheme.background,
+                                              borderRadius: BorderRadius.vertical(
+                                                top: Radius.circular(25),
+                                              ),
+                                            ),
+                                            height: 300,
+                                            child: Column(
+                                              children: [
+                                                Padding(
+                                                  padding: const EdgeInsets.all(16.0),
+                                                  child: Text(
+                                                    "Selecione a Data de Nascimento",
+                                                    style: TextStyle(
+                                                      fontFamily: 'Poppins',
+                                                      fontSize: 18,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                                Expanded(
+                                                  child: DatePickerWidget(
+                                                    initialDate: DateTime.now(),
+                                                    firstDate: DateTime(1900),
+                                                    lastDate: DateTime.now(),
+                                                    dateFormat: "dd-MMMM-yyyy",
+                                                    locale: DateTimePickerLocale.pt_br,
+                                                    looping: false, // Desativa o loop para evitar que datas iniciais fiquem abaixo da data atual
+                                                    pickerTheme: DateTimePickerTheme(
+                                                      backgroundColor: Theme.of(context).colorScheme.background, // Fundo
+                                                      itemTextStyle: TextStyle(
+                                                        color: Theme.of(context).colorScheme.onSecondary, // Cor do texto
+                                                        fontSize: 18,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                      dividerColor: Theme.of(context).colorScheme.onSecondary, // Cor do divisor
+                                                    ),
+                                                    onChange: (date, _) {
+                                                      setState(() {
+                                                        selectedDate = date;
+                                                      });
+                                                    },
+                                                  ),
+                                                ),
+                                                Padding(
+                                                  padding: EdgeInsetsDirectional.fromSTEB(0, 0, 0, 30),
+                                                  child: ElevatedButton(
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor:
+                                                      Theme.of(context).colorScheme.primary,
+                                                      foregroundColor:
+                                                      Theme.of(context).colorScheme.outline,
+                                                    ),
+                                                    onPressed: () {
+                                                      setState(() {
+                                                        // Formata a data selecionada no formato dd/mm/yyyy
+                                                        _model.tfBirthTextController.text =
+                                                        "${selectedDate.day.toString().padLeft(2, '0')}/${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.year}";
+                                                      });
+                                                      Navigator.pop(context);
+                                                    },
+                                                    child: Text(
+                                                        "Confirmar",
+                                                      style: TextStyle(
+                                                        fontFamily: 'Poppins',
+                                                        fontSize: 14,
+                                                        fontWeight: FontWeight.w600,
+                                                        color: Theme.of(context).colorScheme.outline
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  },
+                                  child: AbsorbPointer(
+                                    child: TextFormField(
+                                      controller: _model.tfBirthTextController,
+                                      decoration: InputDecoration(
+                                        labelText: 'Nascimento',
+                                        labelStyle: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.w600,
+                                          letterSpacing: 0,
+                                          color: Theme.of(context).colorScheme.onSecondary,
+                                        ),
+                                        hintText: 'Selecione a data de nascimento',
+                                        hintStyle: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontWeight: FontWeight.w500,
+                                          fontSize: 12,
+                                          letterSpacing: 0,
+                                          color: Theme.of(context).colorScheme.onSecondary,
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderSide: BorderSide(
+                                            color: Theme.of(context).primaryColor,
+                                            width: 2,
+                                          ),
+                                          borderRadius: BorderRadius.circular(15),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderSide: BorderSide(
+                                            color: Theme.of(context).colorScheme.tertiary,
+                                            width: 2,
+                                          ),
+                                          borderRadius: BorderRadius.circular(15),
+                                        ),
+                                        prefixIcon: Icon(
+                                          Icons.calendar_month,
+                                          color: Theme.of(context).colorScheme.tertiary,
+                                          size: 25,
+                                        ),
+                                      ),
+                                      style: TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        letterSpacing: 0,
+                                        color: Theme.of(context).colorScheme.onSecondary,
+                                      ),
+                                      readOnly: true,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -522,6 +696,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                     color:
                                     Theme.of(context).colorScheme.onSecondary,
                                   ),
+                                  textInputAction: TextInputAction.next,
                                   textAlign: TextAlign.start,
                                 ),
                               ),
@@ -624,6 +799,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                     color:
                                     Theme.of(context).colorScheme.onSecondary,
                                   ),
+                                  textInputAction: TextInputAction.next,
                                   textAlign: TextAlign.start,
                                 ),
                               ),
@@ -770,6 +946,30 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                             onChanged: (bool? value) {
                               setState(() {
                                 accessRights['criarCampanha'] = value ?? false;
+                              });
+                            },
+                            controlAffinity: ListTileControlAffinity.leading,
+                            activeColor: Theme.of(context).primaryColor,
+                            checkColor: Theme.of(context).colorScheme.outline,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(5.0),
+                            ),
+                            dense: true,
+                          ),
+                          CheckboxListTile(
+                            title: Text(
+                              "Copiar telefones dos Leads",
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w500,
+                                fontSize: 14,
+                                color: Theme.of(context).colorScheme.onSecondary,
+                              ),
+                            ),
+                            value: accessRights['copiarTelefones'],
+                            onChanged: (bool? value) {
+                              setState(() {
+                                accessRights['copiarTelefones'] = value ?? false;
                               });
                             },
                             controlAffinity: ListTileControlAffinity.leading,

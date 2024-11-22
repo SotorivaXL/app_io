@@ -3,11 +3,13 @@ import 'package:app_io/features/screens/dasboard/dashboard_page.dart';
 import 'package:app_io/features/screens/leads/leads_page.dart';
 import 'package:app_io/features/screens/panel/painel_adm.dart';
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
+import 'package:app_io/util/CustomWidgets/TutorialPopup/tutorial_popup.dart';
+import 'package:bottom_navy_bar/bottom_navy_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class CustomTabBarPage extends StatefulWidget {
   @override
@@ -34,7 +36,6 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   bool hasCriarCampanhaAccess = false;
   bool hasAdmPanelAccess = true;
 
-  @override
   void initState() {
     super.initState();
     _pageController = PageController();
@@ -47,6 +48,31 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     });
 
     _listenToPermissionsChanges();
+    _showTutorialIfFirstTime(); // Chama o tutorial na primeira vez
+  }
+
+  Future<void> _showTutorialIfFirstTime() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    bool tutorialShown = prefs.getBool('tutorial_shown') ?? false;
+
+    if (!tutorialShown) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          // Usuário não pode fechar o popup clicando fora
+          builder: (BuildContext context) {
+            return TutorialPopup(
+              onComplete: () async {
+                // Marcar o tutorial como concluído
+                await prefs.setBool('tutorial_shown', true);
+                Navigator.of(context).pop(); // Fecha o popup
+              },
+            );
+          },
+        );
+      });
+    }
   }
 
   void _listenToPermissionsChanges() {
@@ -372,7 +398,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                           fontFamily: 'BrandingSF',
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
-                          color: Theme.of(context).colorScheme.onBackground,
+                          color: Theme.of(context).colorScheme.onSecondary,
                         ),
                       ),
                       AnimatedSwitcher(
@@ -456,27 +482,54 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
             children: _pages,
           ),
         ),
-        bottomNavigationBar: SafeArea(
-          child: SizedBox(
-            height: tabBarHeight,
-            child: SingleChildScrollView(
-              child: Opacity(
-                opacity: opacity,
-                child: TabBar(
-                  controller: _tabController,
-                  labelColor: Theme.of(context).colorScheme.tertiary,
-                  unselectedLabelColor: Theme.of(context).colorScheme.onSecondary,
-                  indicator: BoxDecoration(),
-                  onTap: (index) {
-                    _pageController.animateToPage(
-                      index,
-                      duration: Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                    );
-                  },
-                  tabs: _tabs,
+        bottomNavigationBar: SizedBox(
+          height: tabBarHeight,
+          child: Opacity(
+            opacity: opacity,
+            child: BottomNavyBar(
+              backgroundColor: Theme.of(context).colorScheme.secondary,
+              showInactiveTitle: false,
+              selectedIndex: _currentIndex,
+              showElevation: true,
+              itemCornerRadius: 24,
+              iconSize: 25,
+              curve: Curves.easeIn,
+              onItemSelected: (index) {
+                setState(() {
+                  _currentIndex = index;
+                });
+                _pageController.jumpToPage(index); // Navega para a página correspondente
+              },
+              items: <BottomNavyBarItem>[
+                BottomNavyBarItem(
+                  icon: Icon(Icons.dashboard),
+                  title: Text('Dashboard'),
+                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
+                  activeColor: Theme.of(context).colorScheme.tertiary,
+                  textAlign: TextAlign.center,
                 ),
-              ),
+                BottomNavyBarItem(
+                  icon: Icon(Icons.people),
+                  title: Text('Leads'),
+                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
+                  activeColor: Theme.of(context).colorScheme.tertiary,
+                  textAlign: TextAlign.center,
+                ),
+                BottomNavyBarItem(
+                  icon: Icon(Icons.admin_panel_settings),
+                  title: Text('Painel Adm'),
+                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
+                  activeColor: Theme.of(context).colorScheme.tertiary,
+                  textAlign: TextAlign.center,
+                ),
+                BottomNavyBarItem(
+                  icon: Icon(Icons.settings),
+                  title: Text('Configurações'),
+                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
+                  activeColor: Theme.of(context).colorScheme.tertiary,
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
           ),
         ),

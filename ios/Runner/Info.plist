@@ -61,5 +61,13 @@
     <string>Este aplicativo usa Face ID para autenticação.</string>
     <key>NSLocalNetworkUsageDescription</key>
     <string>Este aplicativo requer acesso à rede local para depuração.</string>
+    <key>com.apple.developer.associated-domains</key>
+    <array>
+        <string>applinks:yourdomain.com</string>
+    </array>
+    <key>keychain-access-groups</key>
+    <array>
+        <string>$(AppIdentifierPrefix)com.your.bundle</string>
+    </array>
 </dict>
 </plist>

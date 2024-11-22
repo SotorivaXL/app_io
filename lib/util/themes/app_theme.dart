@@ -45,7 +45,7 @@ class AppTheme {
       labelSmall: TextStyle(color: Color(0xFF000000)),
     ),
     cardColor: const Color(0xFFf5f8fe),
-    shadowColor: constantBlack, // Exemplo de uso
+    shadowColor: constantBlack,
   );
 
   static final darkTheme = ThemeData(
@@ -87,6 +87,6 @@ class AppTheme {
       labelSmall: TextStyle(color: Color(0xFFFFFFFF)),
     ),
     cardColor: const Color(0xFF252423),
-    shadowColor: constantBlack, // Exemplo de uso
+    shadowColor: constantBlack,
   );
 }
