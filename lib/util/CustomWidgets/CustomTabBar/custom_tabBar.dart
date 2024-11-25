@@ -2,6 +2,7 @@ import 'package:app_io/features/screens/configurations/configurations.dart';
 import 'package:app_io/features/screens/dasboard/dashboard_page.dart';
 import 'package:app_io/features/screens/leads/leads_page.dart';
 import 'package:app_io/features/screens/panel/painel_adm.dart';
+import 'package:app_io/util/CustomWidgets/BirthdayAnimationPopup/birthday_animation_popup.dart';
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:app_io/util/CustomWidgets/TutorialPopup/tutorial_popup.dart';
 import 'package:bottom_navy_bar/bottom_navy_bar.dart';
@@ -9,6 +10,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class CustomTabBarPage extends StatefulWidget {
@@ -40,6 +42,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     super.initState();
     _pageController = PageController();
     _tabController = TabController(length: 0, vsync: this);
+    _checkBirthday();
 
     _scrollController.addListener(() {
       setState(() {
@@ -366,11 +369,76 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     );
   }
 
+  Future<void> _checkBirthday() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final uid = user.uid;
+    String? birthday;
+
+    // Busca na coleção `users`
+    final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    if (userDoc.exists) {
+      birthday = userDoc.data()?['birth'];
+    } else {
+      // Busca na coleção `empresas` caso não esteja em `users`
+      final empresaDoc = await FirebaseFirestore.instance.collection('empresas').doc(uid).get();
+      if (empresaDoc.exists) {
+        birthday = empresaDoc.data()?['founded'];
+      }
+    }
+
+    if (birthday != null) {
+      // Verifica se hoje é o aniversário
+      final today = DateTime.now();
+      final birthdayParts = birthday.split('-');
+      if (birthdayParts.length == 3) {
+        final birthDay = int.parse(birthdayParts[0]);
+        final birthMonth = int.parse(birthdayParts[1]);
+
+        if (birthDay == today.day && birthMonth == today.month) {
+          final prefs = await SharedPreferences.getInstance();
+          final key = 'birthday_shown_$uid${today.toIso8601String()}'; // Chave única baseada no UID e data
+
+          // Verifica se a chave foi salva hoje
+          final shownToday = prefs.getBool(key) ?? false;
+
+          if (!shownToday) {
+            _showBirthdayPopup(); // Mostra o popup
+            await prefs.setBool(key, true); // Marca como exibido
+          }
+        }
+      }
+    }
+  }
+
+  void _showBirthdayPopup() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return BirthdayAnimationPopup(
+          onDismiss: () => Navigator.of(context).pop(),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
     double tabBarHeight = (kBottomNavigationBarHeight - (_scrollOffset / 2)).clamp(0.0, kBottomNavigationBarHeight).ceilToDouble();
-    double opacity = (1.0 - (_scrollOffset / 100)).clamp(0.0, 1.0);
+    double opacity = (1.0 - (_scrollOffset / 40)).clamp(0.0, 1.0);
+
+    // Ajustando a troca de cor para saída e retorno
+    Color scaffoldBackgroundColor = opacity >= 0.5
+        ? Theme.of(context).colorScheme.secondary
+        : Theme.of(context).colorScheme.background;
+
+    // Duração dinâmica para animação
+    Duration animationDuration = opacity >= 0.5
+        ? Duration(milliseconds: 400) // Retorno mais lento
+        : Duration(milliseconds: 300); // Saída padrão
 
     // Definindo a física com base na visibilidade da AppBar e TabBar
     final pageViewPhysics = (appBarHeight > 0 && tabBarHeight > 0)
@@ -378,158 +446,165 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
         : NeverScrollableScrollPhysics();
 
     return ConnectivityBanner(
-      child: Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.background,
-        appBar: PreferredSize(
-          preferredSize: Size.fromHeight(appBarHeight),
-          child: Opacity(
-            opacity: opacity,
-            child: AppBar(
-              toolbarHeight: appBarHeight,
-              title: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _getPrefix(),
-                        style: TextStyle(
-                          fontFamily: 'BrandingSF',
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: Theme.of(context).colorScheme.onSecondary,
-                        ),
-                      ),
-                      AnimatedSwitcher(
-                        duration: Duration(milliseconds: 300),
-                        child: Text(
-                          _getTitle(),
-                          key: ValueKey<String>(_getTitle()),
+      child: AnimatedContainer(
+        duration: animationDuration, // Duração dinâmica
+        curve: Curves.easeInOut, // Suavidade da transição
+        color: scaffoldBackgroundColor, // Cor animada
+        child: Scaffold(
+          backgroundColor: Colors.transparent, // Deixe transparente para o AnimatedContainer controlar a cor
+          appBar: PreferredSize(
+            preferredSize: Size.fromHeight(appBarHeight),
+            child: Opacity(
+              opacity: opacity,
+              child: AppBar(
+                toolbarHeight: appBarHeight,
+                title: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _getPrefix(),
                           style: TextStyle(
                             fontFamily: 'BrandingSF',
-                            fontWeight: FontWeight.w700,
-                            fontSize: 28,
-                            color: Theme.of(context).colorScheme.surfaceVariant,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: Theme.of(context).colorScheme.onSecondary,
                           ),
                         ),
-                        transitionBuilder: (Widget child, Animation<double> animation) {
-                          final fadeInAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(animation);
-                          final slideAnimation = Tween<Offset>(begin: Offset(-1, 0), end: Offset.zero).animate(animation);
-
-                          return SlideTransition(
-                            position: slideAnimation,
-                            child: FadeTransition(
-                              opacity: fadeInAnimation,
-                              child: child,
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                  Stack(
-                    children: [
-                      IconButton(
-                        icon: Icon(Icons.notifications),
-                        color: Theme.of(context).colorScheme.onSecondary,
-                        iconSize: 30,
-                        onPressed: () async {
-                          _showNotificationsSidebar(context);
-                        },
-                      ),
-                      Positioned(
-                        right: 6,
-                        top: 6,
-                        child: CircleAvatar(
-                          radius: 8,
-                          backgroundColor: Theme.of(context).colorScheme.tertiary,
+                        AnimatedSwitcher(
+                          duration: Duration(milliseconds: 300),
                           child: Text(
-                            '3',
-                            style: TextStyle(color: Colors.white, fontSize: 10),
+                            _getTitle(),
+                            key: ValueKey<String>(_getTitle()),
+                            style: TextStyle(
+                              fontFamily: 'BrandingSF',
+                              fontWeight: FontWeight.w700,
+                              fontSize: 28,
+                              color: Theme.of(context).colorScheme.surfaceVariant,
+                            ),
+                          ),
+                          transitionBuilder: (Widget child, Animation<double> animation) {
+                            final fadeInAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(animation);
+                            final slideAnimation = Tween<Offset>(begin: Offset(-1, 0), end: Offset.zero).animate(animation);
+
+                            return SlideTransition(
+                              position: slideAnimation,
+                              child: FadeTransition(
+                                opacity: fadeInAnimation,
+                                child: child,
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                    Stack(
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.notifications),
+                          color: Theme.of(context).colorScheme.onSecondary,
+                          iconSize: 30,
+                          onPressed: () async {
+                            _showNotificationsSidebar(context);
+                          },
+                        ),
+                        Positioned(
+                          right: 6,
+                          top: 6,
+                          child: CircleAvatar(
+                            radius: 8,
+                            backgroundColor: Theme.of(context).colorScheme.tertiary,
+                            child: Text(
+                              '3',
+                              style: TextStyle(color: Colors.white, fontSize: 10),
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
+                centerTitle: false,
+                automaticallyImplyLeading: false,
+                backgroundColor: Theme.of(context).colorScheme.secondary,
+                foregroundColor: Theme.of(context).colorScheme.outline,
               ),
-              centerTitle: false,
-              automaticallyImplyLeading: false,
-              backgroundColor: Theme.of(context).colorScheme.secondary,
-              foregroundColor: Theme.of(context).colorScheme.outline,
             ),
           ),
-        ),
-        body: NotificationListener<ScrollNotification>(
-          onNotification: (ScrollNotification scrollInfo) {
-            if (scrollInfo.metrics.axis == Axis.vertical) {
-              setState(() {
-                _scrollOffset = scrollInfo.metrics.pixels;
-              });
-            }
-            return true;
-          },
-          child: PageView(
-            controller: _pageController,
-            onPageChanged: (index) {
-              setState(() {
-                _currentIndex = index;
-                _tabController.index = index;
-              });
+          body: NotificationListener<ScrollNotification>(
+            onNotification: (ScrollNotification scrollInfo) {
+              if (scrollInfo.metrics.axis == Axis.vertical) {
+                setState(() {
+                  _scrollOffset = scrollInfo.metrics.pixels;
+                });
+              }
+              return true;
             },
-            physics: pageViewPhysics, // Física atualizada com base na visibilidade
-            children: _pages,
-          ),
-        ),
-        bottomNavigationBar: SizedBox(
-          height: tabBarHeight,
-          child: Opacity(
-            opacity: opacity,
-            child: BottomNavyBar(
-              backgroundColor: Theme.of(context).colorScheme.secondary,
-              showInactiveTitle: false,
-              selectedIndex: _currentIndex,
-              showElevation: true,
-              itemCornerRadius: 24,
-              iconSize: 25,
-              curve: Curves.easeIn,
-              onItemSelected: (index) {
+            child: PageView(
+              controller: _pageController,
+              onPageChanged: (index) {
                 setState(() {
                   _currentIndex = index;
+                  _tabController.index = index;
                 });
-                _pageController.jumpToPage(index); // Navega para a página correspondente
               },
-              items: <BottomNavyBarItem>[
-                BottomNavyBarItem(
-                  icon: Icon(Icons.dashboard),
-                  title: Text('Dashboard'),
-                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
-                  activeColor: Theme.of(context).colorScheme.tertiary,
-                  textAlign: TextAlign.center,
+              physics: pageViewPhysics, // Física atualizada com base na visibilidade
+              children: _pages,
+            ),
+          ),
+          bottomNavigationBar: SafeArea(
+            child: SizedBox(
+              height: tabBarHeight,
+              child: Opacity(
+                opacity: opacity,
+                child: BottomNavyBar(
+                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                  showInactiveTitle: false,
+                  selectedIndex: _currentIndex,
+                  showElevation: true,
+                  itemCornerRadius: 24,
+                  iconSize: 25,
+                  curve: Curves.easeIn,
+                  onItemSelected: (index) {
+                    setState(() {
+                      _currentIndex = index;
+                    });
+                    _pageController.jumpToPage(index); // Navega para a página correspondente
+                  },
+                  items: <BottomNavyBarItem>[
+                    BottomNavyBarItem(
+                      icon: Icon(Icons.dashboard),
+                      title: Text('Dashboard'),
+                      inactiveColor: Theme.of(context).colorScheme.onSecondary,
+                      activeColor: Theme.of(context).colorScheme.tertiary,
+                      textAlign: TextAlign.center,
+                    ),
+                    BottomNavyBarItem(
+                      icon: Icon(Icons.people),
+                      title: Text('Leads'),
+                      inactiveColor: Theme.of(context).colorScheme.onSecondary,
+                      activeColor: Theme.of(context).colorScheme.tertiary,
+                      textAlign: TextAlign.center,
+                    ),
+                    BottomNavyBarItem(
+                      icon: Icon(Icons.admin_panel_settings),
+                      title: Text('Painel Adm'),
+                      inactiveColor: Theme.of(context).colorScheme.onSecondary,
+                      activeColor: Theme.of(context).colorScheme.tertiary,
+                      textAlign: TextAlign.center,
+                    ),
+                    BottomNavyBarItem(
+                      icon: Icon(Icons.settings),
+                      title: Text('Configurações'),
+                      inactiveColor: Theme.of(context).colorScheme.onSecondary,
+                      activeColor: Theme.of(context).colorScheme.tertiary,
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
-                BottomNavyBarItem(
-                  icon: Icon(Icons.people),
-                  title: Text('Leads'),
-                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
-                  activeColor: Theme.of(context).colorScheme.tertiary,
-                  textAlign: TextAlign.center,
-                ),
-                BottomNavyBarItem(
-                  icon: Icon(Icons.admin_panel_settings),
-                  title: Text('Painel Adm'),
-                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
-                  activeColor: Theme.of(context).colorScheme.tertiary,
-                  textAlign: TextAlign.center,
-                ),
-                BottomNavyBarItem(
-                  icon: Icon(Icons.settings),
-                  title: Text('Configurações'),
-                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
-                  activeColor: Theme.of(context).colorScheme.tertiary,
-                  textAlign: TextAlign.center,
-                ),
-              ],
+              ),
             ),
           ),
         ),
