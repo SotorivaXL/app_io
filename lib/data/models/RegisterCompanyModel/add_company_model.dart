@@ -20,6 +20,10 @@ class AddCompanyModel {
   final tfCnpjMask = MaskTextInputFormatter(mask: '##.###.###/####-##');
   String? Function(String?)? tfCnpjTextControllerValidator;
 
+  FocusNode tfBirthFocusNode = FocusNode();
+  TextEditingController tfBirthTextController = TextEditingController();
+  String? Function(BuildContext, String?)? tfBirthTextControllerValidator;
+
   final tfPasswordFocusNode = FocusNode();
   final tfPasswordTextController = TextEditingController();
   bool tfPasswordVisibility = false;
@@ -38,14 +42,22 @@ class AddCompanyModel {
   void dispose() {
     tfCompanyFocusNode.dispose();
     tfCompanyTextController.dispose();
+
     tfEmailFocusNode.dispose();
     tfEmailTextController.dispose();
+
     tfContractFocusNode.dispose();
     tfContractTextController.dispose();
+
     tfCnpjFocusNode.dispose();
     tfCnpjTextController.dispose();
+
+    tfBirthFocusNode.dispose();
+    tfBirthTextController.dispose();
+
     tfPasswordFocusNode.dispose();
     tfPasswordTextController.dispose();
+
     tfPasswordConfirmFocusNode.dispose();
     tfPasswordConfirmTextController.dispose();
   }
