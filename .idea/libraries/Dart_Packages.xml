@@ -215,7 +215,7 @@
         <entry key="file_selector_linux">
           <value>
             <list>
-              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/file_selector_linux-0.9.3+1/lib" />
+              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/file_selector_linux-0.9.3+2/lib" />
             </list>
           </value>
         </entry>
@@ -327,7 +327,7 @@
         <entry key="fl_chart">
           <value>
             <list>
-              <option value="$USER_HOME$/AppData/Local/Pub/Cache/hosted/pub.dev/fl_chart-0.69.2/lib" />
+              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/fl_chart-0.69.2/lib" />
             </list>
           </value>
         </entry>
@@ -796,14 +796,14 @@
         <entry key="syncfusion_flutter_core">
           <value>
             <list>
-              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/syncfusion_flutter_charts-27.2.3/lib" />
+              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/syncfusion_flutter_core-27.2.4/lib" />
             </list>
           </value>
         </entry>
         <entry key="syncfusion_flutter_datepicker">
           <value>
             <list>
-              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/syncfusion_flutter_core-27.2.3/lib" />
+              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/syncfusion_flutter_datepicker-27.2.4/lib" />
             </list>
           </value>
         </entry>
@@ -966,7 +966,7 @@
       <root url="file://$USER_HOME$/.pub-cache/hosted/pub.dev/ffi-2.1.3/lib" />
       <root url="file://$USER_HOME$/.pub-cache/hosted/pub.dev/file-7.0.1/lib" />
       <root url="file://$USER_HOME$/.pub-cache/hosted/pub.dev/file_picker-8.1.4/lib" />
-      <root url="file://$USER_HOME$/.pub-cache/hosted/pub.dev/file_selector_linux-0.9.3+1/lib" />
+      <root url="file://$USER_HOME$/.pub-cache/hosted/pub.dev/file_selector_linux-0.9.3+2/lib" />
       <root url="file://$USER_HOME$/.pub-cache/hosted/pub.dev/file_selector_macos-0.9.4+2/lib" />
       <root url="file://$USER_HOME$/.pub-cache/hosted/pub.dev/file_selector_platform_interface-2.6.2/lib" />
       <root url="file://$USER_HOME$/.pub-cache/hosted/pub.dev/file_selector_windows-0.9.3+3/lib" />
@@ -1044,8 +1044,8 @@
       <root url="file://$USER_HOME$/.pub-cache/hosted/pub.dev/stack_trace-1.11.1/lib" />
       <root url="file://$USER_HOME$/.pub-cache/hosted/pub.dev/stream_channel-2.1.2/lib" />
       <root url="file://$USER_HOME$/.pub-cache/hosted/pub.dev/string_scanner-1.2.0/lib" />
-      <root url="file://$USER_HOME$/.pub-cache/hosted/pub.dev/syncfusion_flutter_charts-27.2.3/lib" />
-      <root url="file://$USER_HOME$/.pub-cache/hosted/pub.dev/syncfusion_flutter_core-27.2.3/lib" />
+      <root url="file://$USER_HOME$/.pub-cache/hosted/pub.dev/syncfusion_flutter_core-27.2.4/lib" />
+      <root url="file://$USER_HOME$/.pub-cache/hosted/pub.dev/syncfusion_flutter_datepicker-27.2.4/lib" />
       <root url="file://$USER_HOME$/.pub-cache/hosted/pub.dev/term_glyph-1.2.1/lib" />
       <root url="file://$USER_HOME$/.pub-cache/hosted/pub.dev/test_api-0.7.2/lib" />
       <root url="file://$USER_HOME$/.pub-cache/hosted/pub.dev/typed_data-1.4.0/lib" />
