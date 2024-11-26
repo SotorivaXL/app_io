@@ -2,20 +2,30 @@ import 'dart:async';
 import 'package:app_io/auth/providers/auth_provider.dart' as appProvider;
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:syncfusion_flutter_datepicker/datepicker.dart';
+import 'dart:math' as math;
+import 'package:intl/intl.dart';
+import 'package:syncfusion_flutter_core/theme.dart';
+
 
 class DashboardPage extends StatefulWidget {
   @override
   _DashboardPageState createState() => _DashboardPageState();
+  String? selectedGrupoAnuncio; // Inicialmente nula
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  String? selectedCampaign;
+  String? selectedCampaignId;
+  String? selectedGrupoAnuncio;
+  String? selectedAnuncio;
+  bool _isExpanded = false;
+  final DateRangePickerController _datePickerController = DateRangePickerController();
+
   List<Map<String, dynamic>> selectedCampaigns = [];
   List<Map<String, dynamic>> campaignsList = [];
 
@@ -25,13 +35,140 @@ class _DashboardPageState extends State<DashboardPage> {
   List<Map<String, dynamic>> selectedAnuncios = [];
   List<Map<String, dynamic>> anunciosList = [];
 
-  // Variável para armazenar os dados iniciais dos insights
   Map<String, dynamic> initialInsightsData = {};
 
+  DateTime? startDate;
+  DateTime? endDate;
   @override
   void initState() {
     super.initState();
-    _fetchInitialInsights(); // Busca os dados iniciais ao criar o widget
+    _fetchInitialInsights();
+  }
+
+  void _openDateRangePicker() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        // Envolva o AlertDialog em um Theme para personalizar os estilos dos botões
+        return Theme(
+          data: Theme.of(context).copyWith(
+            textButtonTheme: TextButtonThemeData(
+            ),
+          ),
+          child: AlertDialog(
+            backgroundColor: Theme.of(context).colorScheme.secondary,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            title: Text(
+              'Selecione o intervalo de datas',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onSecondary,
+              ),
+            ),
+            content: SizedBox(
+              width: 400,
+              height: 350,
+              child: SfDateRangePicker(
+                controller: _datePickerController,
+                backgroundColor: Theme.of(context).colorScheme.secondary,
+                view: DateRangePickerView.month,
+                selectionMode: DateRangePickerSelectionMode.range,
+                showActionButtons: false, // Desabilita os botões internos
+                initialSelectedRange: startDate != null && endDate != null
+                    ? PickerDateRange(startDate, endDate)
+                    : null,
+                headerStyle: DateRangePickerHeaderStyle(
+                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                  textAlign: TextAlign.center,
+                  textStyle: TextStyle(
+                    color: Theme.of(context).colorScheme.onSecondary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                monthCellStyle: DateRangePickerMonthCellStyle(
+                  textStyle: TextStyle(
+                    color: Theme.of(context).colorScheme.onBackground,
+                  ),
+                  todayTextStyle: TextStyle(
+                    color: Theme.of(context).colorScheme.tertiary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  blackoutDatesDecoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.error,
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                ),
+                startRangeSelectionColor: Theme.of(context).colorScheme.primary,
+                endRangeSelectionColor: Theme.of(context).colorScheme.primary,
+                rangeSelectionColor:
+                Theme.of(context).colorScheme.tertiary.withOpacity(0.3),
+                todayHighlightColor: Theme.of(context).colorScheme.tertiary,
+                monthViewSettings: DateRangePickerMonthViewSettings(
+                  viewHeaderStyle: DateRangePickerViewHeaderStyle(
+                    backgroundColor: Theme.of(context).colorScheme.secondary,
+                    textStyle: TextStyle(
+                      color: Theme.of(context).colorScheme.onSecondary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                // Personalização dos meses usando yearCellStyle
+                yearCellStyle: DateRangePickerYearCellStyle(
+                  textStyle: TextStyle(
+                    fontSize: 15,
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w500,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                  // Destaque para o mês atual (opcional)
+                  todayTextStyle: TextStyle(
+                    fontSize: 15,
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.tertiary,
+                  ),
+                ),
+              ),
+            ),
+            // Botões personalizados
+            actions: [
+              TextButton(
+                child: Text(
+                  'CANCELAR',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+              ),
+              TextButton(
+                child: Text(
+                  'OK',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                ),
+                onPressed: () {
+                  PickerDateRange? selectedRange = _datePickerController.selectedRange;
+                  if (selectedRange != null) {
+                    setState(() {
+                      startDate = selectedRange.startDate;
+                      endDate = selectedRange.endDate;
+                    });
+                  }
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -39,22 +176,28 @@ class _DashboardPageState extends State<DashboardPage> {
     return ConnectivityBanner(
       child: Scaffold(
         body: Padding(
-          padding: EdgeInsetsDirectional.fromSTEB(10, 20, 10, 20),
+          padding: EdgeInsetsDirectional.fromSTEB(10, 20, 10, 0),
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Filtros
                 _buildFilters(),
                 const SizedBox(height: 20),
-                // Cards com métricas principais
                 _buildMetricCards(),
                 const SizedBox(height: 20),
-                // Gráfico de Alcance e Impressões
-                _buildReachAndImpressionsChart(),
+                _buildClicksReachImpressionsChart(),
                 const SizedBox(height: 20),
-                // Gráfico de Custo por Resultado
-                _buildCostPerResultChart(),
+                _buildSpendPercentageChart(),
+                const SizedBox(height: 20),
+                _buildCPCvsCPMChart(),
+                const SizedBox(height: 20),
+                _buildEngagementChart(),
+                const SizedBox(height: 20),
+                _buildInlineLinkClicksChart(),
+                const SizedBox(height: 20),
+                _buildClicksCPCCPMChart(),
+                const SizedBox(height: 20),
+                _buildRadialBarChart(),
               ],
             ),
           ),
@@ -64,453 +207,528 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildFilters() {
-    const double dropdownWidth = 200.0;
-
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(
-          'Filtros',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
+        // Envolve o ExpansionTile em um Container para adicionar o arredondamento
+        Container(
+          decoration: BoxDecoration(
+            color: _isExpanded
+                ? Theme.of(context).colorScheme.background // Cor quando expandido
+                : Theme.of(context).colorScheme.secondary, // Cor quando recolhido
+            borderRadius: BorderRadius.circular(10),
           ),
-        ),
-        const SizedBox(height: 10),
-        FutureBuilder<List<Map<String, dynamic>>>(
-          future: _fetchCampaigns(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const CircularProgressIndicator();
-            } else if (snapshot.hasError) {
-              return Text('Erro: ${snapshot.error}');
-            } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return Text('Nenhuma campanha encontrada.');
-            } else {
-              campaignsList = snapshot.data!;
-
-              return Column(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Theme(
+              data: Theme.of(context).copyWith(
+                dividerColor: Colors.transparent, // Remove as linhas de divisão
+              ),
+              child: ExpansionTile(
+                tilePadding: EdgeInsetsDirectional.fromSTEB(28, 0, 0, 0),
+                initiallyExpanded: _isExpanded,
+                onExpansionChanged: (bool expanded) {
+                  setState(() {
+                    _isExpanded = expanded;
+                  });
+                },
+                // Remove o ícone padrão na lateral direita
+                trailing: SizedBox.shrink(),
+                backgroundColor: Colors.transparent,
+                collapsedBackgroundColor: Colors.transparent,
+                title: Center(
+                  child: SizedBox(
+                    height: 20, // Altura padrão para centralizar verticalmente
+                    child: Icon(
+                      Icons.filter_list,
+                      color: Theme.of(context).colorScheme.tertiary,
+                    ),
+                  ),
+                ),
                 children: [
-                  // Dropdown de Campanhas
-                  DropdownButtonFormField2<String>(
-                    items: campaignsList.map((campaign) {
-                      return DropdownMenuItem<String>(
-                        value: campaign['id'] as String,
-                        child: Text(
-                          campaign['name'],
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 12,
-                            color: Theme.of(context).colorScheme.onSecondary,
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() {
-                          if (!selectedCampaigns
-                              .any((campaign) => campaign['id'] == value)) {
-                            selectedCampaigns.add(
-                              campaignsList
-                                  .firstWhere((campaign) => campaign['id'] == value),
-                            );
-                          }
-                          // Limpa as seleções abaixo quando uma nova campanha é selecionada
-                          selectedGruposAnuncios.clear();
-                          gruposAnunciosList.clear();
-                          selectedAnuncios.clear();
-                          anunciosList.clear();
-                        });
-                      }
-                    },
-                    decoration: InputDecoration(
-                      isDense: true, // Reduz o espaçamento interno vertical
-                      contentPadding: EdgeInsets.fromLTRB(16.0, 0, 16.0, 10.0),
-                      hintText: 'Selecione as campanhas',
-                      hintStyle: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 13,
-                        color: Theme.of(context).colorScheme.onSecondary,
-                      ),
-                      enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(
-                            color: Theme.of(context).colorScheme.primary, width: 2),
-                        borderRadius: BorderRadius.circular(7.0),
-                      ),
-                      focusedBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(
-                            color: Theme.of(context).colorScheme.tertiary, width: 2),
-                        borderRadius: BorderRadius.circular(7.0),
-                      ),
-                      errorBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(
-                            color: Theme.of(context).colorScheme.error, width: 2),
-                        borderRadius: BorderRadius.circular(7.0),
-                      ),
-                      focusedErrorBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(
-                            color: Theme.of(context).colorScheme.error, width: 2),
-                        borderRadius: BorderRadius.circular(7.0),
-                      ),
-                    ),
-                    dropdownStyleData: DropdownStyleData(
-                      maxHeight: 200.0,
-                      width: dropdownWidth,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.background,
-                      ),
-                    ),
-                    menuItemStyleData: const MenuItemStyleData(
-                      padding: EdgeInsets.symmetric(horizontal: 16.0),
-                    ),
-                    iconStyleData: IconStyleData(
+                  // Botão para abrir o DatePicker
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _openDateRangePicker,
                       icon: Icon(
-                        Icons.keyboard_double_arrow_down_sharp,
-                        color: Theme.of(context).colorScheme.onSecondary,
-                        size: 20,
+                        Icons.date_range,
+                        color: Theme.of(context).colorScheme.tertiary,
                       ),
-                    ),
-                    buttonStyleData: ButtonStyleData(
-                      height: 50, // Ajuste a altura conforme necessário
-                      padding:
-                      EdgeInsets.zero, // Remove o padding horizontal padrão
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  // Chips de Campanhas Selecionadas
-                  Wrap(
-                    spacing: 8.0,
-                    runSpacing: 4.0,
-                    children: selectedCampaigns
-                        .map<Widget>(
-                          (campaign) => Chip(
-                        backgroundColor:
-                        Theme.of(context).colorScheme.tertiary,
+                      label: startDate != null && endDate != null
+                          ? Text(
+                        "${DateFormat('dd/MM/yyyy').format(startDate!)} - ${DateFormat('dd/MM/yyyy').format(endDate!)}",
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSecondary,
+                        ),
+                      )
+                          : Text(
+                        "Selecione um intervalo de datas",
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSecondary,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.secondary,
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 12.0, horizontal: 16.0),
                         side: BorderSide.none,
-                        label: Text(campaign['name']),
-                        onDeleted: () {
-                          setState(() {
-                            selectedCampaigns.remove(campaign);
-                            // Limpa as seleções abaixo quando uma campanha é removida
-                            selectedGruposAnuncios.clear();
-                            gruposAnunciosList.clear();
-                            selectedAnuncios.clear();
-                            anunciosList.clear();
-                          });
-                        },
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
-                    )
-                        .toList(),
+                    ),
                   ),
-                  // Se campanhas foram selecionadas, exibe o dropdown de grupos de anúncios
-                  if (selectedCampaigns.isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    FutureBuilder<List<Map<String, dynamic>>>(
-                      future: _fetchGruposAnuncios(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const CircularProgressIndicator();
-                        } else if (snapshot.hasError) {
-                          return Text('Erro: ${snapshot.error}');
-                        } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                          return Text('Nenhum grupo de anúncios encontrado.');
-                        } else {
-                          gruposAnunciosList = snapshot.data!;
+                  // Espaçamento
+                  FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _fetchCampaigns(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const CircularProgressIndicator();
+                      } else if (snapshot.hasError) {
+                        return Text('Erro: ${snapshot.error}');
+                      } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                        return Text('Nenhuma campanha encontrada.');
+                      } else {
+                        campaignsList = snapshot.data!;
 
-                          return Column(
-                            children: [
-                              // Dropdown de Grupos de Anúncios
-                              DropdownButtonFormField2<String>(
-                                items: gruposAnunciosList.map((grupo) {
-                                  return DropdownMenuItem<String>(
-                                    value: grupo['id'] as String,
-                                    child: Text(
-                                      grupo['name'],
-                                      style: TextStyle(
-                                        fontFamily: 'Poppins',
-                                        fontSize: 12,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSecondary,
+                        // Lista de opções combinada para itens e selectedItemBuilder
+                        List<Map<String, dynamic>> campaignOptions = [
+                          {'id': '', 'name': 'Limpar Filtro', 'isError': true},
+                          ...campaignsList.map((campaign) {
+                            return {
+                              'id': campaign['id'],
+                              'name': campaign['name'],
+                              'isError': false
+                            };
+                          }).toList(),
+                        ];
+
+                        return Column(
+                          children: [
+                            // Dropdown de Campanhas
+                            Padding(
+                              padding: EdgeInsets.only(top: 20.0),
+                              child: SizedBox(
+                                height: 50, // Aumenta a altura do dropdown
+                                child: DropdownButtonFormField<String>(
+                                  isExpanded: true,
+                                  alignment: Alignment.center,
+                                  value: selectedCampaignId,
+                                  items: campaignOptions.map((option) {
+                                    return DropdownMenuItem<String>(
+                                      value: option['id'] as String,
+                                      child: Center(
+                                        child: Text(
+                                          option['name'],
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontFamily: 'Poppins',
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w500,
+                                            color: option['isError']
+                                                ? Theme.of(context).colorScheme.error
+                                                : Theme.of(context)
+                                                .colorScheme
+                                                .onSecondary,
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  );
-                                }).toList(),
-                                onChanged: (value) {
-                                  if (value != null) {
+                                    );
+                                  }).toList(),
+                                  onChanged: (value) {
                                     setState(() {
-                                      if (!selectedGruposAnuncios.any(
-                                              (grupo) => grupo['id'] == value)) {
-                                        selectedGruposAnuncios.add(
-                                          gruposAnunciosList.firstWhere(
-                                                  (grupo) => grupo['id'] == value),
-                                        );
-                                      }
-                                      // Limpa as seleções abaixo quando um novo grupo é selecionado
-                                      selectedAnuncios.clear();
-                                      anunciosList.clear();
-                                    });
-                                  }
-                                },
-                                decoration: InputDecoration(
-                                  isDense: true,
-                                  contentPadding:
-                                  EdgeInsets.fromLTRB(16.0, 0, 16.0, 10.0),
-                                  hintText: 'Selecione os grupos de anúncios',
-                                  hintStyle: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 13,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary,
-                                  ),
-                                  enabledBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
-                                        width: 2),
-                                    borderRadius: BorderRadius.circular(7.0),
-                                  ),
-                                  focusedBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .tertiary,
-                                        width: 2),
-                                    borderRadius: BorderRadius.circular(7.0),
-                                  ),
-                                  errorBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(
-                                        color:
-                                        Theme.of(context).colorScheme.error,
-                                        width: 2),
-                                    borderRadius: BorderRadius.circular(7.0),
-                                  ),
-                                  focusedErrorBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(
-                                        color:
-                                        Theme.of(context).colorScheme.error,
-                                        width: 2),
-                                    borderRadius: BorderRadius.circular(7.0),
-                                  ),
-                                ),
-                                dropdownStyleData: DropdownStyleData(
-                                  maxHeight: 200.0,
-                                  width: dropdownWidth,
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .background,
-                                  ),
-                                ),
-                                menuItemStyleData: const MenuItemStyleData(
-                                  padding:
-                                  EdgeInsets.symmetric(horizontal: 16.0),
-                                ),
-                                iconStyleData: IconStyleData(
-                                  icon: Icon(
-                                    Icons.keyboard_double_arrow_down_sharp,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary,
-                                    size: 20,
-                                  ),
-                                ),
-                                buttonStyleData: ButtonStyleData(
-                                  height: 50, // Ajuste a altura conforme necessário
-                                  padding: EdgeInsets
-                                      .zero, // Remove o padding horizontal padrão
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              // Chips de Grupos de Anúncios Selecionados
-                              Wrap(
-                                spacing: 8.0,
-                                runSpacing: 4.0,
-                                children: selectedGruposAnuncios
-                                    .map<Widget>(
-                                      (grupo) => Chip(
-                                    backgroundColor: Theme.of(context)
-                                        .colorScheme
-                                        .tertiary,
-                                    side: BorderSide.none,
-                                    label: Text(grupo['name']),
-                                    onDeleted: () {
-                                      setState(() {
-                                        selectedGruposAnuncios
-                                            .remove(grupo);
-                                        // Limpa as seleções abaixo quando um grupo é removido
+                                      if (value == '') {
+                                        // Limpa o filtro
+                                        selectedCampaignId = null;
+                                        selectedCampaigns.clear();
+                                        selectedGrupoAnuncio = null;
+                                        selectedGruposAnuncios.clear();
+                                        gruposAnunciosList.clear();
+                                        selectedAnuncio = null;
                                         selectedAnuncios.clear();
                                         anunciosList.clear();
-                                      });
-                                    },
-                                  ),
-                                )
-                                    .toList(),
-                              ),
-                            ],
-                          );
-                        }
-                      },
-                    ),
-                  ],
-                  // Se grupos de anúncios foram selecionados, exibe o dropdown de anúncios
-                  if (selectedGruposAnuncios.isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    FutureBuilder<List<Map<String, dynamic>>>(
-                      future: _fetchAnuncios(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const CircularProgressIndicator();
-                        } else if (snapshot.hasError) {
-                          return Text('Erro: ${snapshot.error}');
-                        } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                          return Text('Nenhum anúncio encontrado.');
-                        } else {
-                          anunciosList = snapshot.data!;
-
-                          return Column(
-                            children: [
-                              // Dropdown de Anúncios
-                              DropdownButtonFormField2<String>(
-                                items: anunciosList.map((anuncio) {
-                                  return DropdownMenuItem<String>(
-                                    value: anuncio['id'] as String,
-                                    child: Text(
-                                      anuncio['name'],
-                                      style: TextStyle(
-                                        fontFamily: 'Poppins',
-                                        fontSize: 12,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSecondary,
-                                      ),
-                                    ),
-                                  );
-                                }).toList(),
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    setState(() {
-                                      if (!selectedAnuncios.any(
-                                              (anuncio) => anuncio['id'] == value)) {
-                                        selectedAnuncios.add(
-                                          anunciosList.firstWhere(
-                                                  (anuncio) => anuncio['id'] == value),
-                                        );
+                                      } else {
+                                        selectedCampaignId = value;
+                                        // Atualiza a campanha selecionada
+                                        selectedCampaigns = [
+                                          campaignsList.firstWhere(
+                                                  (campaign) => campaign['id'] == value),
+                                        ];
+                                        // Limpa as seleções abaixo
+                                        selectedGrupoAnuncio = null;
+                                        selectedGruposAnuncios.clear();
+                                        gruposAnunciosList.clear();
+                                        selectedAnuncio = null;
+                                        selectedAnuncios.clear();
+                                        anunciosList.clear();
                                       }
                                     });
+                                  },
+                                  selectedItemBuilder: (BuildContext context) {
+                                    return campaignOptions.map((option) {
+                                      return Align(
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          option['name'],
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontFamily: 'Poppins',
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w500,
+                                            color: option['isError']
+                                                ? Theme.of(context).colorScheme.error
+                                                : Theme.of(context)
+                                                .colorScheme
+                                                .onSecondary,
+                                          ),
+                                        ),
+                                      );
+                                    }).toList();
+                                  },
+                                  decoration: InputDecoration(
+                                    filled: true,
+                                    fillColor:
+                                    Theme.of(context).colorScheme.secondary,
+                                    contentPadding: EdgeInsets.symmetric(
+                                        vertical: 10.0, horizontal: 0),
+                                    border: UnderlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    isDense: true,
+                                  ),
+                                  icon: SizedBox.shrink(),
+                                  dropdownColor:
+                                  Theme.of(context).colorScheme.secondary,
+                                  hint: Align(
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      'Selecione a campanha',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w500,
+                                        color:
+                                        Theme.of(context).colorScheme.onSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // Se campanhas foram selecionadas, exibe o dropdown de grupos
+                            if (selectedCampaigns.isNotEmpty) ...[
+                              const SizedBox(height: 20),
+                              FutureBuilder<List<Map<String, dynamic>>>(
+                                future: _fetchGruposAnuncios(),
+                                builder: (context, snapshot) {
+                                  if (snapshot.connectionState ==
+                                      ConnectionState.waiting) {
+                                    return const CircularProgressIndicator();
+                                  } else if (snapshot.hasError) {
+                                    return Text('Erro: ${snapshot.error}');
+                                  } else if (!snapshot.hasData ||
+                                      snapshot.data!.isEmpty) {
+                                    return Text(
+                                        'Nenhum grupo de anúncios encontrado.');
+                                  } else {
+                                    gruposAnunciosList = snapshot.data!;
+
+                                    // Lista de opções combinada para itens e selectedItemBuilder
+                                    List<Map<String, dynamic>> grupoOptions = [
+                                      {'id': '', 'name': 'Limpar Filtro', 'isError': true},
+                                      ...gruposAnunciosList.map((grupo) {
+                                        return {
+                                          'id': grupo['id'],
+                                          'name': grupo['name'],
+                                          'isError': false
+                                        };
+                                      }).toList(),
+                                    ];
+
+                                    return Column(
+                                      children: [
+                                        // Dropdown de Grupos de Anúncios
+                                        SizedBox(
+                                          height: 50, // Aumenta a altura do dropdown
+                                          child: DropdownButtonFormField<String>(
+                                            isExpanded: true,
+                                            alignment: Alignment.center,
+                                            value: selectedGrupoAnuncio,
+                                            items: grupoOptions.map((option) {
+                                              return DropdownMenuItem<String>(
+                                                value: option['id'] as String,
+                                                child: Center(
+                                                  child: Text(
+                                                    option['name'],
+                                                    textAlign: TextAlign.center,
+                                                    style: TextStyle(
+                                                      fontFamily: 'Poppins',
+                                                      fontSize: 15,
+                                                      fontWeight: FontWeight.w500,
+                                                      color: option['isError']
+                                                          ? Theme.of(context)
+                                                          .colorScheme
+                                                          .error
+                                                          : Theme.of(context)
+                                                          .colorScheme
+                                                          .onSecondary,
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            }).toList(),
+                                            onChanged: (value) {
+                                              setState(() {
+                                                if (value == '') {
+                                                  // Limpa o filtro
+                                                  selectedGrupoAnuncio = null;
+                                                  selectedGruposAnuncios.clear();
+                                                  selectedAnuncio = null;
+                                                  selectedAnuncios.clear();
+                                                  anunciosList.clear();
+                                                } else {
+                                                  selectedGrupoAnuncio = value;
+                                                  selectedGruposAnuncios = [
+                                                    gruposAnunciosList.firstWhere(
+                                                            (grupo) =>
+                                                        grupo['id'] == value),
+                                                  ];
+                                                  // Limpa as seleções abaixo
+                                                  selectedAnuncio = null;
+                                                  selectedAnuncios.clear();
+                                                  anunciosList.clear();
+                                                }
+                                              });
+                                            },
+                                            selectedItemBuilder:
+                                                (BuildContext context) {
+                                              return grupoOptions.map((option) {
+                                                return Align(
+                                                  alignment: Alignment.center,
+                                                  child: Text(
+                                                    option['name'],
+                                                    textAlign: TextAlign.center,
+                                                    style: TextStyle(
+                                                      fontFamily: 'Poppins',
+                                                      fontSize: 15,
+                                                      fontWeight: FontWeight.w500,
+                                                      color: option['isError']
+                                                          ? Theme.of(context)
+                                                          .colorScheme
+                                                          .error
+                                                          : Theme.of(context)
+                                                          .colorScheme
+                                                          .onSecondary,
+                                                    ),
+                                                  ),
+                                                );
+                                              }).toList();
+                                            },
+                                            decoration: InputDecoration(
+                                              filled: true,
+                                              fillColor: Theme.of(context)
+                                                  .colorScheme
+                                                  .secondary,
+                                              contentPadding: EdgeInsets.symmetric(
+                                                  vertical: 10.0, horizontal: 0),
+                                              border: UnderlineInputBorder(
+                                                borderRadius:
+                                                BorderRadius.circular(10),
+                                                borderSide: BorderSide.none,
+                                              ),
+                                              isDense: true,
+                                            ),
+                                            icon: SizedBox.shrink(),
+                                            dropdownColor: Theme.of(context)
+                                                .colorScheme
+                                                .secondary,
+                                            hint: Align(
+                                              alignment: Alignment.center,
+                                              child: Text(
+                                                'Selecione o grupo de anúncios',
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSecondary,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    );
                                   }
                                 },
-                                decoration: InputDecoration(
-                                  isDense: true,
-                                  contentPadding:
-                                  EdgeInsets.fromLTRB(16.0, 0, 16.0, 10.0),
-                                  hintText: 'Selecione os anúncios',
-                                  hintStyle: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 13,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary,
-                                  ),
-                                  enabledBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
-                                        width: 2),
-                                    borderRadius: BorderRadius.circular(7.0),
-                                  ),
-                                  focusedBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .tertiary,
-                                        width: 2),
-                                    borderRadius: BorderRadius.circular(7.0),
-                                  ),
-                                  errorBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(
-                                        color:
-                                        Theme.of(context).colorScheme.error,
-                                        width: 2),
-                                    borderRadius: BorderRadius.circular(7.0),
-                                  ),
-                                  focusedErrorBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(
-                                        color:
-                                        Theme.of(context).colorScheme.error,
-                                        width: 2),
-                                    borderRadius: BorderRadius.circular(7.0),
-                                  ),
-                                ),
-                                dropdownStyleData: DropdownStyleData(
-                                  maxHeight: 200.0,
-                                  width: dropdownWidth,
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .background,
-                                  ),
-                                ),
-                                menuItemStyleData: const MenuItemStyleData(
-                                  padding:
-                                  EdgeInsets.symmetric(horizontal: 16.0),
-                                ),
-                                iconStyleData: IconStyleData(
-                                  icon: Icon(
-                                    Icons.keyboard_double_arrow_down_sharp,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary,
-                                    size: 20,
-                                  ),
-                                ),
-                                buttonStyleData: ButtonStyleData(
-                                  height: 50, // Ajuste a altura conforme necessário
-                                  padding: EdgeInsets
-                                      .zero, // Remove o padding horizontal padrão
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              // Chips de Anúncios Selecionados
-                              Wrap(
-                                spacing: 8.0,
-                                runSpacing: 4.0,
-                                children: selectedAnuncios
-                                    .map<Widget>(
-                                      (anuncio) => Chip(
-                                    backgroundColor: Theme.of(context)
-                                        .colorScheme
-                                        .tertiary,
-                                    side: BorderSide.none,
-                                    label: Text(anuncio['name']),
-                                    onDeleted: () {
-                                      setState(() {
-                                        selectedAnuncios.remove(anuncio);
-                                      });
-                                    },
-                                  ),
-                                )
-                                    .toList(),
                               ),
                             ],
-                          );
-                        }
-                      },
-                    ),
-                  ],
+                            // Se grupos foram selecionados, exibe o dropdown de anúncios
+                            if (selectedGruposAnuncios.isNotEmpty) ...[
+                              const SizedBox(height: 20),
+                              FutureBuilder<List<Map<String, dynamic>>>(
+                                future: _fetchAnuncios(),
+                                builder: (context, snapshot) {
+                                  if (snapshot.connectionState ==
+                                      ConnectionState.waiting) {
+                                    return const CircularProgressIndicator();
+                                  } else if (snapshot.hasError) {
+                                    return Text('Erro: ${snapshot.error}');
+                                  } else if (!snapshot.hasData ||
+                                      snapshot.data!.isEmpty) {
+                                    return Text('Nenhum anúncio encontrado.');
+                                  } else {
+                                    anunciosList = snapshot.data!;
+
+                                    // Lista de opções combinada para itens e selectedItemBuilder
+                                    List<Map<String, dynamic>> anuncioOptions = [
+                                      {'id': '', 'name': 'Limpar Filtro', 'isError': true},
+                                      ...anunciosList.map((anuncio) {
+                                        return {
+                                          'id': anuncio['id'],
+                                          'name': anuncio['name'],
+                                          'isError': false
+                                        };
+                                      }).toList(),
+                                    ];
+
+                                    return Column(
+                                      children: [
+                                        // Dropdown de Anúncios
+                                        SizedBox(
+                                          height: 50, // Aumenta a altura do dropdown
+                                          child: DropdownButtonFormField<String>(
+                                            isExpanded: true,
+                                            alignment: Alignment.center,
+                                            value: selectedAnuncio,
+                                            items: anuncioOptions.map((option) {
+                                              return DropdownMenuItem<String>(
+                                                value: option['id'] as String,
+                                                child: Center(
+                                                  child: Text(
+                                                    option['name'],
+                                                    textAlign: TextAlign.center,
+                                                    style: TextStyle(
+                                                      fontFamily: 'Poppins',
+                                                      fontSize: 15,
+                                                      fontWeight: FontWeight.w500,
+                                                      color: option['isError']
+                                                          ? Theme.of(context)
+                                                          .colorScheme
+                                                          .error
+                                                          : Theme.of(context)
+                                                          .colorScheme
+                                                          .onSecondary,
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            }).toList(),
+                                            onChanged: (value) {
+                                              setState(() {
+                                                if (value == '') {
+                                                  // Limpa o filtro
+                                                  selectedAnuncio = null;
+                                                  selectedAnuncios.clear();
+                                                } else {
+                                                  selectedAnuncio = value;
+                                                  selectedAnuncios = [
+                                                    anunciosList.firstWhere(
+                                                            (anuncio) =>
+                                                        anuncio['id'] == value),
+                                                  ];
+                                                }
+                                              });
+                                            },
+                                            selectedItemBuilder:
+                                                (BuildContext context) {
+                                              return anuncioOptions.map((option) {
+                                                return Align(
+                                                  alignment: Alignment.center,
+                                                  child: Text(
+                                                    option['name'],
+                                                    textAlign: TextAlign.center,
+                                                    style: TextStyle(
+                                                      fontFamily: 'Poppins',
+                                                      fontSize: 15,
+                                                      fontWeight: FontWeight.w500,
+                                                      color: option['isError']
+                                                          ? Theme.of(context)
+                                                          .colorScheme
+                                                          .error
+                                                          : Theme.of(context)
+                                                          .colorScheme
+                                                          .onSecondary,
+                                                    ),
+                                                  ),
+                                                );
+                                              }).toList();
+                                            },
+                                            decoration: InputDecoration(
+                                              filled: true,
+                                              fillColor: Theme.of(context)
+                                                  .colorScheme
+                                                  .secondary,
+                                              contentPadding: EdgeInsets.symmetric(
+                                                  vertical: 10.0, horizontal: 0),
+                                              border: UnderlineInputBorder(
+                                                borderRadius:
+                                                BorderRadius.circular(10),
+                                                borderSide: BorderSide.none,
+                                              ),
+                                              isDense: true,
+                                            ),
+                                            icon: SizedBox.shrink(),
+                                            dropdownColor: Theme.of(context)
+                                                .colorScheme
+                                                .secondary,
+                                            hint: Align(
+                                              alignment: Alignment.center,
+                                              child: Text(
+                                                'Selecione o anúncio',
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  fontFamily: 'Poppins',
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSecondary,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  }
+                                },
+                              ),
+                            ],
+                          ],
+                        );
+                      }
+                    },
+                  ),
                 ],
-              );
-            }
-          },
+              ),
+            ),
+          ),
         ),
       ],
     );
   }
+
 
   Widget _buildMetricCards() {
     // Lista de métricas com títulos, chaves e ícones correspondentes
@@ -607,7 +825,7 @@ class _DashboardPageState extends State<DashboardPage> {
             Icon(
               iconData,
               size: 32,
-              color: Theme.of(context).colorScheme.primary,
+              color: Theme.of(context).colorScheme.tertiary,
             ),
             const SizedBox(height: 8),
             Text(
@@ -633,7 +851,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildReachAndImpressionsChart() {
+  Widget _buildClicksReachImpressionsChart() {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(
@@ -646,7 +864,7 @@ class _DashboardPageState extends State<DashboardPage> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Text(
-              'Alcance e Impressões',
+              'Cliques, Alcance e Impressões',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.bold,
@@ -659,15 +877,20 @@ class _DashboardPageState extends State<DashboardPage> {
               child: Center(
                 child: BarChart(
                   BarChartData(
-                    alignment: BarChartAlignment.spaceAround,
+                    alignment: BarChartAlignment.spaceEvenly,
+                    maxY: _getMaxYValue([
+                      initialInsightsData['clicks'],
+                      initialInsightsData['reach'],
+                      initialInsightsData['impressions'],
+                    ]),
                     barGroups: [
                       BarChartGroupData(
                         x: 0,
                         barRods: [
                           BarChartRodData(
-                            toY: 8,
-                            color: Theme.of(context).colorScheme.primary,
-                            width: 15,
+                            toY: initialInsightsData['clicks']?.toDouble() ?? 0,
+                            color: Colors.blueAccent,
+                            width: 20,
                             borderRadius: BorderRadius.circular(4),
                           ),
                         ],
@@ -676,9 +899,9 @@ class _DashboardPageState extends State<DashboardPage> {
                         x: 1,
                         barRods: [
                           BarChartRodData(
-                            toY: 10,
-                            color: Theme.of(context).colorScheme.primary,
-                            width: 15,
+                            toY: initialInsightsData['reach']?.toDouble() ?? 0,
+                            color: Colors.greenAccent,
+                            width: 20,
                             borderRadius: BorderRadius.circular(4),
                           ),
                         ],
@@ -687,23 +910,45 @@ class _DashboardPageState extends State<DashboardPage> {
                         x: 2,
                         barRods: [
                           BarChartRodData(
-                            toY: 14,
-                            color: Theme.of(context).colorScheme.primary,
-                            width: 15,
+                            toY: initialInsightsData['impressions']?.toDouble() ?? 0,
+                            color: Colors.purpleAccent,
+                            width: 20,
                             borderRadius: BorderRadius.circular(4),
                           ),
                         ],
                       ),
                     ],
                     titlesData: FlTitlesData(
-                      leftTitles: AxisTitles(
-                        sideTitles: SideTitles(showTitles: true),
-                      ),
+                      show: true,
                       bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(showTitles: true),
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 32,
+                          getTitlesWidget: (value, meta) {
+                            switch (value.toInt()) {
+                              case 0:
+                                return Text('Cliques');
+                              case 1:
+                                return Text('Alcance');
+                              case 2:
+                                return Text('Impressões');
+                              default:
+                                return Text('');
+                            }
+                          },
+                        ),
+                      ),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      rightTitles: AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      topTitles: AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
                       ),
                     ),
-                    gridData: FlGridData(show: true),
+                    gridData: FlGridData(show: false),
                     borderData: FlBorderData(show: false),
                   ),
                 ),
@@ -715,7 +960,35 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildCostPerResultChart() {
+// Função para calcular o valor máximo do eixo Y
+  double _getMaxYValue(List<dynamic> values) {
+    double max = 0;
+    for (var value in values) {
+      double val = value?.toDouble() ?? 0;
+      if (val > max) {
+        max = val;
+      }
+    }
+    // Adiciona um buffer de 10% ao valor máximo
+    return max * 1.1;
+  }
+
+
+
+  Widget _buildSpendPercentageChart() {
+    // Realiza os cálculos
+    double totalSpend = initialInsightsData['spend']?.toDouble() ?? 0;
+
+    double cpcSpend = (initialInsightsData['cpc']?.toDouble() ?? 0) * (initialInsightsData['clicks']?.toDouble() ?? 0);
+    double cpmSpend = (initialInsightsData['cpm']?.toDouble() ?? 0) * (initialInsightsData['impressions']?.toDouble() ?? 0) / 1000;
+    double costPerLinkClickSpend = (initialInsightsData['cost_per_inline_link_click']?.toDouble() ?? 0) * (initialInsightsData['inline_link_clicks']?.toDouble() ?? 0);
+
+    double totalCalculatedSpend = cpcSpend + cpmSpend + costPerLinkClickSpend;
+
+    double cpcPercentage = (cpcSpend / totalSpend) * 100;
+    double cpmPercentage = (cpmSpend / totalSpend) * 100;
+    double costPerLinkClickPercentage = (costPerLinkClickSpend / totalSpend) * 100;
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(
@@ -728,7 +1001,7 @@ class _DashboardPageState extends State<DashboardPage> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Text(
-              'Custo por Resultado',
+              'Percentual de Gastos',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.bold,
@@ -738,40 +1011,595 @@ class _DashboardPageState extends State<DashboardPage> {
             const SizedBox(height: 10),
             AspectRatio(
               aspectRatio: 1.5,
-              child: Center(
-                child: LineChart(
-                  LineChartData(
-                    gridData: FlGridData(show: true),
-                    titlesData: FlTitlesData(
-                      bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(showTitles: true),
-                      ),
-                      leftTitles: AxisTitles(
-                        sideTitles: SideTitles(showTitles: true),
+              child: PieChart(
+                PieChartData(
+                  sections: [
+                    PieChartSectionData(
+                      color: Colors.blueAccent,
+                      value: cpcPercentage,
+                      title: 'CPC (${cpcPercentage.toStringAsFixed(1)}%)',
+                      radius: 50,
+                      titleStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
                     ),
-                    borderData: FlBorderData(show: false),
-                    lineBarsData: [
-                      LineChartBarData(
-                        isCurved: true,
-                        color: Theme.of(context).colorScheme.primary,
-                        barWidth: 5,
-                        belowBarData: BarAreaData(
-                          show: true,
-                          color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-                        ),
-                        spots: [
-                          FlSpot(0, 1),
-                          FlSpot(1, 3),
-                          FlSpot(2, 1.5),
-                          FlSpot(3, 2.2),
-                          FlSpot(4, 3.1),
-                        ],
+                    PieChartSectionData(
+                      color: Colors.greenAccent,
+                      value: cpmPercentage,
+                      title: 'CPM (${cpmPercentage.toStringAsFixed(1)}%)',
+                      radius: 50,
+                      titleStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
-                    ],
-                  ),
+                    ),
+                    PieChartSectionData(
+                      color: Colors.redAccent,
+                      value: costPerLinkClickPercentage,
+                      title: 'Custo por Clique (${costPerLinkClickPercentage.toStringAsFixed(1)}%)',
+                      radius: 50,
+                      titleStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                  sectionsSpace: 2,
+                  centerSpaceRadius: 40,
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCPCvsCPMChart() {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      color: Theme.of(context).colorScheme.secondary,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              'CPC vs. CPM',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onBackground,
+              ),
+            ),
+            const SizedBox(height: 10),
+            AspectRatio(
+              aspectRatio: 1.5,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceEvenly,
+                  maxY: _getMaxYValue([
+                    initialInsightsData['cpc'],
+                    initialInsightsData['cpm'],
+                  ]),
+                  barGroups: [
+                    BarChartGroupData(
+                      x: 0,
+                      barRods: [
+                        BarChartRodData(
+                          toY: initialInsightsData['cpc']?.toDouble() ?? 0,
+                          color: Colors.tealAccent,
+                          width: 20,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ],
+                    ),
+                    BarChartGroupData(
+                      x: 1,
+                      barRods: [
+                        BarChartRodData(
+                          toY: initialInsightsData['cpm']?.toDouble() ?? 0,
+                          color: Colors.indigoAccent,
+                          width: 20,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ],
+                    ),
+                  ],
+                  titlesData: FlTitlesData(
+                    show: true,
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 32,
+                        getTitlesWidget: (value, meta) {
+                          switch (value.toInt()) {
+                            case 0:
+                              return Text('CPC');
+                            case 1:
+                              return Text('CPM');
+                            default:
+                              return Text('');
+                          }
+                        },
+                      ),
+                    ),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    topTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                  ),
+                  gridData: FlGridData(show: false),
+                  borderData: FlBorderData(show: false),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEngagementChart() {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      color: Theme.of(context).colorScheme.secondary,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              'Engajamento Total',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onBackground,
+              ),
+            ),
+            const SizedBox(height: 10),
+            AspectRatio(
+              aspectRatio: 1.5,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.center,
+                  maxY: _getMaxYValue([
+                    (initialInsightsData['inline_link_clicks']?.toDouble() ?? 0) +
+                        (initialInsightsData['inline_post_engagement']?.toDouble() ?? 0),
+                  ]),
+                  barGroups: [
+                    BarChartGroupData(
+                      x: 0,
+                      barRods: [
+                        BarChartRodData(
+                          toY: (initialInsightsData['inline_link_clicks']?.toDouble() ?? 0) +
+                              (initialInsightsData['inline_post_engagement']?.toDouble() ?? 0),
+                          rodStackItems: [
+                            BarChartRodStackItem(
+                              0,
+                              initialInsightsData['inline_link_clicks']?.toDouble() ?? 0,
+                              Colors.orangeAccent,
+                            ),
+                            BarChartRodStackItem(
+                              initialInsightsData['inline_link_clicks']?.toDouble() ?? 0,
+                              (initialInsightsData['inline_link_clicks']?.toDouble() ?? 0) +
+                                  (initialInsightsData['inline_post_engagement']?.toDouble() ?? 0),
+                              Colors.pinkAccent,
+                            ),
+                          ],
+                          width: 40,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ],
+                    ),
+                  ],
+                  titlesData: FlTitlesData(
+                    show: true,
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 32,
+                        getTitlesWidget: (value, meta) {
+                          return Text('Engajamento');
+                        },
+                      ),
+                    ),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    topTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                  ),
+                  gridData: FlGridData(show: false),
+                  borderData: FlBorderData(show: false),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInlineLinkClicksChart() {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      color: Theme.of(context).colorScheme.secondary,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              'Clicks em Links vs. Custo por Clique',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onBackground,
+              ),
+            ),
+            const SizedBox(height: 10),
+            AspectRatio(
+              aspectRatio: 1.5,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: _getMaxYValue([
+                    initialInsightsData['inline_link_clicks'],
+                    initialInsightsData['cost_per_inline_link_click'],
+                  ]),
+                  barGroups: [
+                    BarChartGroupData(
+                      x: 0,
+                      barRods: [
+                        BarChartRodData(
+                          toY: initialInsightsData['inline_link_clicks']?.toDouble() ?? 0,
+                          color: Colors.blueAccent,
+                          width: 20,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ],
+                      showingTooltipIndicators: [0],
+                    ),
+                    BarChartGroupData(
+                      x: 1,
+                      barRods: [
+                        BarChartRodData(
+                          toY: initialInsightsData['cost_per_inline_link_click']?.toDouble() ?? 0,
+                          color: Colors.redAccent,
+                          width: 20,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ],
+                      showingTooltipIndicators: [0],
+                    ),
+                  ],
+                  titlesData: FlTitlesData(
+                    show: true,
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 32,
+                        getTitlesWidget: (value, meta) {
+                          switch (value.toInt()) {
+                            case 0:
+                              return Text('Clicks em Links');
+                            case 1:
+                              return Text('Custo por Clique');
+                            default:
+                              return Text('');
+                          }
+                        },
+                      ),
+                    ),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    topTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                  ),
+                  gridData: FlGridData(show: false),
+                  borderData: FlBorderData(show: false),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildClicksCPCCPMChart() {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      color: Theme.of(context).colorScheme.secondary,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              'Clicks, CPC e CPM',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onBackground,
+              ),
+            ),
+            const SizedBox(height: 10),
+            AspectRatio(
+              aspectRatio: 1.5,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceEvenly,
+                  maxY: _getMaxYValue([
+                    initialInsightsData['clicks'],
+                    initialInsightsData['cpc'],
+                    initialInsightsData['cpm'],
+                  ]),
+                  barGroups: [
+                    BarChartGroupData(
+                      x: 0,
+                      barRods: [
+                        BarChartRodData(
+                          toY: initialInsightsData['clicks']?.toDouble() ?? 0,
+                          color: Colors.blueAccent,
+                          width: 20,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ],
+                    ),
+                    BarChartGroupData(
+                      x: 1,
+                      barRods: [
+                        BarChartRodData(
+                          toY: initialInsightsData['cpc']?.toDouble() ?? 0,
+                          color: Colors.greenAccent,
+                          width: 20,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ],
+                    ),
+                    BarChartGroupData(
+                      x: 2,
+                      barRods: [
+                        BarChartRodData(
+                          toY: initialInsightsData['cpm']?.toDouble() ?? 0,
+                          color: Colors.purpleAccent,
+                          width: 20,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ],
+                    ),
+                  ],
+                  titlesData: FlTitlesData(
+                    show: true,
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 32,
+                        getTitlesWidget: (value, meta) {
+                          switch (value.toInt()) {
+                            case 0:
+                              return Text('Clicks');
+                            case 1:
+                              return Text('CPC');
+                            case 2:
+                              return Text('CPM');
+                            default:
+                              return Text('');
+                          }
+                        },
+                      ),
+                    ),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    topTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                  ),
+                  gridData: FlGridData(show: false),
+                  borderData: FlBorderData(show: false),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRadialBarChart() {
+    double impressionsValue = initialInsightsData['impressions']?.toDouble() ?? 0;
+    double reachValue = initialInsightsData['reach']?.toDouble() ?? 0;
+    double spendValue = initialInsightsData['spend']?.toDouble() ?? 0;
+
+    // Normalizar os valores para percentuais
+    double maxValue = [impressionsValue, reachValue, spendValue].reduce((a, b) => a > b ? a : b);
+
+    double impressionsPercent = (impressionsValue / maxValue) * 100;
+    double reachPercent = (reachValue / maxValue) * 100;
+    double spendPercent = (spendValue / maxValue) * 100;
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      color: Theme.of(context).colorScheme.secondary,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              'Comparação Radial',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onBackground,
+              ),
+            ),
+            const SizedBox(height: 10),
+            AspectRatio(
+              aspectRatio: 1,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  PieChart(
+                    PieChartData(
+                      sections: [
+                        PieChartSectionData(
+                          color: Colors.blueAccent,
+                          value: 100,
+                          radius: 80,
+                          title: '',
+                        ),
+                      ],
+                      startDegreeOffset: 270,
+                      sectionsSpace: 0,
+                      centerSpaceRadius: 0,
+                    ),
+                  ),
+                  PieChart(
+                    PieChartData(
+                      sections: [
+                        PieChartSectionData(
+                          color: Theme.of(context).colorScheme.secondary,
+                          value: 100 - impressionsPercent,
+                          radius: 80,
+                          title: '',
+                        ),
+                      ],
+                      startDegreeOffset: 270 + (impressionsPercent / 100) * 360,
+                      sectionsSpace: 0,
+                      centerSpaceRadius: 0,
+                    ),
+                  ),
+                  PieChart(
+                    PieChartData(
+                      sections: [
+                        PieChartSectionData(
+                          color: Colors.greenAccent,
+                          value: 100,
+                          radius: 60,
+                          title: '',
+                        ),
+                      ],
+                      startDegreeOffset: 270,
+                      sectionsSpace: 0,
+                      centerSpaceRadius: 0,
+                    ),
+                  ),
+                  PieChart(
+                    PieChartData(
+                      sections: [
+                        PieChartSectionData(
+                          color: Theme.of(context).colorScheme.secondary,
+                          value: 100 - reachPercent,
+                          radius: 60,
+                          title: '',
+                        ),
+                      ],
+                      startDegreeOffset: 270 + (reachPercent / 100) * 360,
+                      sectionsSpace: 0,
+                      centerSpaceRadius: 0,
+                    ),
+                  ),
+                  PieChart(
+                    PieChartData(
+                      sections: [
+                        PieChartSectionData(
+                          color: Colors.redAccent,
+                          value: 100,
+                          radius: 40,
+                          title: '',
+                        ),
+                      ],
+                      startDegreeOffset: 270,
+                      sectionsSpace: 0,
+                      centerSpaceRadius: 0,
+                    ),
+                  ),
+                  PieChart(
+                    PieChartData(
+                      sections: [
+                        PieChartSectionData(
+                          color: Theme.of(context).colorScheme.secondary,
+                          value: 100 - spendPercent,
+                          radius: 40,
+                          title: '',
+                        ),
+                      ],
+                      startDegreeOffset: 270 + (spendPercent / 100) * 360,
+                      sectionsSpace: 0,
+                      centerSpaceRadius: 0,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 10),
+            Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(width: 10, height: 10, color: Colors.blueAccent),
+                    SizedBox(width: 5),
+                    Text('Impressões'),
+                  ],
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(width: 10, height: 10, color: Colors.greenAccent),
+                    SizedBox(width: 5),
+                    Text('Alcance'),
+                  ],
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(width: 10, height: 10, color: Colors.redAccent),
+                    SizedBox(width: 5),
+                    Text('Gasto'),
+                  ],
+                ),
+              ],
             ),
           ],
         ),

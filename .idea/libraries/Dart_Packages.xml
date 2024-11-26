@@ -327,7 +327,7 @@
         <entry key="fl_chart">
           <value>
             <list>
-              <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/fl_chart-0.69.2/lib" />
+              <option value="$USER_HOME$/AppData/Local/Pub/Cache/hosted/pub.dev/fl_chart-0.69.2/lib" />
             </list>
           </value>
         </entry>
@@ -793,14 +793,14 @@
             </list>
           </value>
         </entry>
-        <entry key="syncfusion_flutter_charts">
+        <entry key="syncfusion_flutter_core">
           <value>
             <list>
               <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/syncfusion_flutter_charts-27.2.3/lib" />
             </list>
           </value>
         </entry>
-        <entry key="syncfusion_flutter_core">
+        <entry key="syncfusion_flutter_datepicker">
           <value>
             <list>
               <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/syncfusion_flutter_core-27.2.3/lib" />
