@@ -330,6 +330,7 @@ exports.createUserAndCompany = functions.https.onCall(async (data, context) => {
                 countArtsValue: countArtsValue || 0,
                 countVideosValue: countVideosValue || 0,
                 isDevAccount: false,
+                emailVerified: false,
             });
 
             return { success: true, message: 'Usuário e empresa criados com sucesso.' };
@@ -347,6 +348,7 @@ exports.createUserAndCompany = functions.https.onCall(async (data, context) => {
                 criarCampanha: accessRights.criarCampanha || false,
                 criarForm: accessRights.criarForm || false,
                 createdBy: context.auth.uid,
+                emailVerified: false,
             });
 
             return { success: true, message: 'Usuário colaborador criado com sucesso.' };
