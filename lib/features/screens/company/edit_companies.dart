@@ -1,10 +1,13 @@
+import 'package:app_io/util/CustomWidgets/ChangePasswordSheet/change_password_sheet.dart';
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:app_io/util/utils.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:app_io/data/models/RegisterCompanyModel/add_company_model.dart';
 import 'package:app_io/util/CustomWidgets/CustomCountController/custom_count_controller.dart';
 import 'package:app_io/util/services/firestore_service.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class EditCompanies extends StatefulWidget {
   final String companyId;
@@ -12,6 +15,7 @@ class EditCompanies extends StatefulWidget {
   final String email;
   final String contract;
   final String cnpj;
+  final String founded;
   final int countArtsValue;
   final int countVideosValue;
   final bool dashboard;
@@ -20,6 +24,8 @@ class EditCompanies extends StatefulWidget {
   final bool configurarDash;
   final bool criarCampanha;
   final bool criarForm;
+  final bool copiarTelefones;
+  final bool alterarSenha;
 
   EditCompanies({
     required this.companyId,
@@ -27,6 +33,7 @@ class EditCompanies extends StatefulWidget {
     required this.email,
     required this.contract,
     required this.cnpj,
+    required this.founded,
     required this.countArtsValue,
     required this.countVideosValue,
     required this.dashboard,
@@ -35,6 +42,8 @@ class EditCompanies extends StatefulWidget {
     required this.configurarDash,
     required this.criarCampanha,
     required this.criarForm,
+    required this.copiarTelefones,
+    required this.alterarSenha,
   });
 
   @override
@@ -44,7 +53,9 @@ class EditCompanies extends StatefulWidget {
 class _EditCompaniesState extends State<EditCompanies> {
   final FirestoreService _firestoreService = FirestoreService();
   late AddCompanyModel _model;
-  bool _isLoading = false; // Variável de estado para controlar o carregamento
+  bool _isLoading = false;
+
+  double _scrollOffset = 0.0;
 
   Map<String, bool> accessRights = {
     'dashboard': false,
@@ -53,7 +64,11 @@ class _EditCompaniesState extends State<EditCompanies> {
     'configurarDash': false,
     'criarCampanha': false,
     'criarForm': false,
+    'copiarTelefones': false,
+    'alterarSenha': false,
   };
+
+  bool _isChangingPassword = false;
 
   @override
   void initState() {
@@ -68,12 +83,17 @@ class _EditCompaniesState extends State<EditCompanies> {
     _model.countArtsValue = widget.countArtsValue;
     _model.countVideosValue = widget.countVideosValue;
 
+    final formattedDate = widget.founded.replaceAll('-', '/');
+    _model.tfBirthTextController.text = formattedDate;
+
     accessRights['dashboard'] = widget.dashboard;
     accessRights['leads'] = widget.leads;
     accessRights['gerenciarColaboradores'] = widget.gerenciarColaboradores;
     accessRights['configurarDash'] = widget.configurarDash;
     accessRights['criarCampanha'] = widget.criarCampanha;
     accessRights['criarForm'] = widget.criarForm;
+    accessRights['copiarTelefones'] = widget.copiarTelefones;
+    accessRights['alterarSenha'] = widget.alterarSenha;
   }
 
   @override
@@ -105,7 +125,6 @@ class _EditCompaniesState extends State<EditCompanies> {
     });
 
     try {
-
       // Atualize os dados do colaborador no Firestore
       await FirebaseFirestore.instance
           .collection('empresas')
@@ -117,10 +136,13 @@ class _EditCompaniesState extends State<EditCompanies> {
         'countVideosValue': _model.countVideosValue,
         'dashboard': accessRights['dashboard'] ?? false,
         'leads': accessRights['leads'] ?? false,
-        'gerenciarColaboradores': accessRights['gerenciarColaboradores'] ?? false,
+        'gerenciarColaboradores':
+        accessRights['gerenciarColaboradores'] ?? false,
         'configurarDash': accessRights['configurarDash'] ?? false,
         'criarCampanha': accessRights['criarCampanha'],
         'criarForm': accessRights['criarForm'],
+        'copiarTelefones': accessRights['copiarTelefones'],
+        'alterarSenha': accessRights['alterarSenha'],
       });
 
       // Volta para a tela anterior
@@ -128,11 +150,9 @@ class _EditCompaniesState extends State<EditCompanies> {
 
       // Exibe uma mensagem de sucesso
       showErrorDialog(context, "Parceiro atualizado com sucesso!", "Sucesso");
-
     } catch (e) {
       // Exibe uma mensagem de erro
       showErrorDialog(context, "Erro ao atualizar parceiro", "Erro");
-
     } finally {
       setState(() {
         _isLoading = false; // Finaliza o carregamento
@@ -140,38 +160,113 @@ class _EditCompaniesState extends State<EditCompanies> {
     }
   }
 
+  void _showChangePasswordSheet() {
+    showModalBottomSheet(
+      backgroundColor: Theme.of(context).colorScheme.background,
+      context: context,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(25.0)),
+      ),
+      builder: (context) {
+        return ChangePasswordSheet(
+          targetUid: widget.companyId,
+          onClose: () {
+            setState(() {
+              _isChangingPassword = false;
+            });
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
+
+    String uid = FirebaseAuth.instance.currentUser?.uid ?? ''; // Obtenha o UID do usuário logado.
+
     return ConnectivityBanner(
       child: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         child: Scaffold(
           backgroundColor: Theme.of(context).colorScheme.background,
           appBar: AppBar(
-            backgroundColor: Theme.of(context).primaryColor,
+            toolbarHeight: appBarHeight,
             automaticallyImplyLeading: false,
-            leading: IconButton(
-              icon: Icon(
-                Icons.arrow_back_ios_new,
-                color: Theme.of(context).colorScheme.outline,
-                size: 24,
+            flexibleSpace: SafeArea(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Botão de voltar e título
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.pop(context);
+                          },
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.arrow_back_ios_new,
+                                color:
+                                Theme.of(context).colorScheme.onBackground,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Voltar',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 16,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Editar Parceiro',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 26,
+                            fontWeight: FontWeight.w700,
+                            color: Theme.of(context).colorScheme.onSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Stack na direita
+                    Stack(
+                      children: [
+                        _isLoading
+                            ? CircularProgressIndicator()
+                            : IconButton(
+                          icon: Icon(Icons.save_alt_rounded,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onBackground,
+                              size: 30),
+                          onPressed: _isLoading ? null : _saveCompany,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              onPressed: () {
-                Navigator.pop(context);
-              },
             ),
-            title: Text(
-              'Editar Parceiro',
-              style: TextStyle(
-                fontFamily: 'BrandingSF',
-                fontSize: 26,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0,
-                color: Theme.of(context).colorScheme.outline,
-              ),
-            ),
-            centerTitle: true,
-            elevation: 2,
+            surfaceTintColor: Colors.transparent,
+            backgroundColor: Theme.of(context).colorScheme.secondary,
           ),
           body: SafeArea(
             top: true,
@@ -231,7 +326,8 @@ class _EditCompaniesState extends State<EditCompanies> {
                           child: Align(
                             alignment: AlignmentDirectional(0, 0),
                             child: Padding(
-                              padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                              padding:
+                              EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
                               child: TextFormField(
                                 controller: _model.tfCompanyTextController,
                                 focusNode: _model.tfCompanyFocusNode,
@@ -244,7 +340,9 @@ class _EditCompaniesState extends State<EditCompanies> {
                                     fontSize: 20,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
                                   ),
                                   hintText: 'Digite o nome da empresa',
                                   hintStyle: TextStyle(
@@ -252,7 +350,9 @@ class _EditCompaniesState extends State<EditCompanies> {
                                     fontWeight: FontWeight.w500,
                                     fontSize: 12,
                                     letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
                                   ),
                                   enabledBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
@@ -263,28 +363,33 @@ class _EditCompaniesState extends State<EditCompanies> {
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: Theme.of(context).colorScheme.tertiary,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .tertiary,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   errorBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: Theme.of(context).colorScheme.error,
+                                      color:
+                                      Theme.of(context).colorScheme.error,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   focusedErrorBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: Theme.of(context).colorScheme.error,
+                                      color:
+                                      Theme.of(context).colorScheme.error,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   prefixIcon: Icon(
                                     Icons.corporate_fare,
-                                    color: Theme.of(context).colorScheme.tertiary,
+                                    color:
+                                    Theme.of(context).colorScheme.tertiary,
                                     size: 25,
                                   ),
                                 ),
@@ -293,7 +398,9 @@ class _EditCompaniesState extends State<EditCompanies> {
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                   letterSpacing: 0,
-                                  color: Theme.of(context).colorScheme.onSecondary,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSecondary,
                                 ),
                                 textAlign: TextAlign.start,
                               ),
@@ -313,7 +420,8 @@ class _EditCompaniesState extends State<EditCompanies> {
                           child: Align(
                             alignment: AlignmentDirectional(0, 0),
                             child: Padding(
-                              padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                              padding:
+                              EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
                               child: TextFormField(
                                 controller: _model.tfEmailTextController,
                                 focusNode: _model.tfEmailFocusNode,
@@ -327,7 +435,9 @@ class _EditCompaniesState extends State<EditCompanies> {
                                     fontSize: 20,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
                                   ),
                                   hintText: 'Digite o email da empresa',
                                   hintStyle: TextStyle(
@@ -335,7 +445,9 @@ class _EditCompaniesState extends State<EditCompanies> {
                                     fontWeight: FontWeight.w500,
                                     fontSize: 12,
                                     letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
                                   ),
                                   enabledBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
@@ -346,28 +458,33 @@ class _EditCompaniesState extends State<EditCompanies> {
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: Theme.of(context).colorScheme.tertiary,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .tertiary,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   errorBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: Theme.of(context).colorScheme.error,
+                                      color:
+                                      Theme.of(context).colorScheme.error,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   focusedErrorBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: Theme.of(context).colorScheme.error,
+                                      color:
+                                      Theme.of(context).colorScheme.error,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   prefixIcon: Icon(
                                     Icons.mail,
-                                    color: Theme.of(context).colorScheme.tertiary,
+                                    color:
+                                    Theme.of(context).colorScheme.tertiary,
                                     size: 25,
                                   ),
                                 ),
@@ -376,7 +493,9 @@ class _EditCompaniesState extends State<EditCompanies> {
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                   letterSpacing: 0,
-                                  color: Theme.of(context).colorScheme.onSecondary,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSecondary,
                                 ),
                                 textAlign: TextAlign.start,
                                 keyboardType: TextInputType.emailAddress,
@@ -397,7 +516,8 @@ class _EditCompaniesState extends State<EditCompanies> {
                           child: Align(
                             alignment: AlignmentDirectional(0, 0),
                             child: Padding(
-                              padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                              padding:
+                              EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
                               child: TextFormField(
                                 controller: _model.tfContractTextController,
                                 focusNode: _model.tfContractFocusNode,
@@ -410,7 +530,9 @@ class _EditCompaniesState extends State<EditCompanies> {
                                     fontSize: 20,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
                                   ),
                                   hintText: 'Digite a data final do contrato',
                                   hintStyle: TextStyle(
@@ -418,7 +540,9 @@ class _EditCompaniesState extends State<EditCompanies> {
                                     fontWeight: FontWeight.w500,
                                     fontSize: 12,
                                     letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
                                   ),
                                   enabledBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
@@ -429,28 +553,33 @@ class _EditCompaniesState extends State<EditCompanies> {
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: Theme.of(context).colorScheme.tertiary,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .tertiary,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   errorBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: Theme.of(context).colorScheme.error,
+                                      color:
+                                      Theme.of(context).colorScheme.error,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   focusedErrorBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: Theme.of(context).colorScheme.error,
+                                      color:
+                                      Theme.of(context).colorScheme.error,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   prefixIcon: Icon(
                                     Icons.import_contacts,
-                                    color: Theme.of(context).colorScheme.tertiary,
+                                    color:
+                                    Theme.of(context).colorScheme.tertiary,
                                     size: 25,
                                   ),
                                 ),
@@ -459,7 +588,9 @@ class _EditCompaniesState extends State<EditCompanies> {
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                   letterSpacing: 0,
-                                  color: Theme.of(context).colorScheme.onSecondary,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSecondary,
                                 ),
                                 textAlign: TextAlign.start,
                                 inputFormatters: [_model.tfContractMask],
@@ -481,7 +612,8 @@ class _EditCompaniesState extends State<EditCompanies> {
                           child: Align(
                             alignment: AlignmentDirectional(0, 0),
                             child: Padding(
-                              padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                              padding:
+                              EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
                               child: TextFormField(
                                 controller: _model.tfCnpjTextController,
                                 focusNode: _model.tfCnpjFocusNode,
@@ -495,7 +627,9 @@ class _EditCompaniesState extends State<EditCompanies> {
                                     fontSize: 20,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
                                   ),
                                   hintText: 'Digite o CNPJ da empresa',
                                   hintStyle: TextStyle(
@@ -503,7 +637,9 @@ class _EditCompaniesState extends State<EditCompanies> {
                                     fontWeight: FontWeight.w500,
                                     fontSize: 12,
                                     letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
                                   ),
                                   enabledBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
@@ -514,28 +650,33 @@ class _EditCompaniesState extends State<EditCompanies> {
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: Theme.of(context).colorScheme.tertiary,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .tertiary,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   errorBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: Theme.of(context).colorScheme.error,
+                                      color:
+                                      Theme.of(context).colorScheme.error,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   focusedErrorBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: Theme.of(context).colorScheme.error,
+                                      color:
+                                      Theme.of(context).colorScheme.error,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   prefixIcon: Icon(
                                     Icons.contact_emergency_sharp,
-                                    color: Theme.of(context).colorScheme.tertiary,
+                                    color:
+                                    Theme.of(context).colorScheme.tertiary,
                                     size: 25,
                                   ),
                                 ),
@@ -544,10 +685,100 @@ class _EditCompaniesState extends State<EditCompanies> {
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                   letterSpacing: 0,
-                                  color: Theme.of(context).colorScheme.onSecondary,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSecondary,
                                 ),
                                 textAlign: TextAlign.start,
                                 inputFormatters: [_model.tfCnpjMask],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Campo de texto para a data de fundação
+                  Padding(
+                    padding:
+                    EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.max,
+                      children: [
+                        Expanded(
+                          child: Align(
+                            alignment: AlignmentDirectional(0, 0),
+                            child: Padding(
+                              padding: EdgeInsetsDirectional.fromSTEB(
+                                  20, 0, 20, 0),
+                              child: TextFormField(
+                                controller: _model.tfBirthTextController,
+                                autofocus: true,
+                                obscureText: false,
+                                enabled: false,
+                                decoration: InputDecoration(
+                                  labelText: 'Fundada em',
+                                  labelStyle: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Theme.of(context).primaryColor,
+                                      width: 2,
+                                    ),
+                                    borderRadius: BorderRadius.circular(15),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .tertiary,
+                                      width: 2,
+                                    ),
+                                    borderRadius: BorderRadius.circular(15),
+                                  ),
+                                  errorBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .error,
+                                      width: 2,
+                                    ),
+                                    borderRadius: BorderRadius.circular(15),
+                                  ),
+                                  focusedErrorBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .error,
+                                      width: 2,
+                                    ),
+                                    borderRadius: BorderRadius.circular(15),
+                                  ),
+                                  prefixIcon: Icon(
+                                    Icons.calendar_month,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .tertiary,
+                                    size: 25,
+                                  ),
+                                ),
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: 0,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSecondary,
+                                ),
+                                textAlign: TextAlign.start,
                               ),
                             ),
                           ),
@@ -562,7 +793,8 @@ class _EditCompaniesState extends State<EditCompanies> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Padding(
-                          padding: EdgeInsetsDirectional.fromSTEB(20, 10, 20, 10),
+                          padding:
+                          EdgeInsetsDirectional.fromSTEB(20, 10, 20, 10),
                           child: Text(
                             'Quantidade de conteúdo semanal:',
                             textAlign: TextAlign.start,
@@ -571,7 +803,9 @@ class _EditCompaniesState extends State<EditCompanies> {
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0,
-                              color: Theme.of(context).colorScheme.onSecondary,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSecondary,
                             ),
                             overflow: TextOverflow.visible,
                             maxLines: null,
@@ -585,12 +819,14 @@ class _EditCompaniesState extends State<EditCompanies> {
                     padding: EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
                     child: Row(
                       mainAxisSize: MainAxisSize.max,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      mainAxisAlignment:
+                      MainAxisAlignment.spaceBetween,
                       children: [
                         Align(
                           alignment: AlignmentDirectional(-1, 0),
                           child: Padding(
-                            padding: EdgeInsetsDirectional.fromSTEB(20, 0, 0, 0),
+                            padding:
+                            EdgeInsetsDirectional.fromSTEB(20, 0, 0, 0),
                             child: Text(
                               'Artes',
                               style: TextStyle(
@@ -598,13 +834,16 @@ class _EditCompaniesState extends State<EditCompanies> {
                                 fontWeight: FontWeight.w500,
                                 fontSize: 14,
                                 letterSpacing: 0,
-                                color: Theme.of(context).colorScheme.onSecondary,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSecondary,
                               ),
                             ),
                           ),
                         ),
                         Padding(
-                          padding: EdgeInsetsDirectional.fromSTEB(0, 0, 20, 0),
+                          padding: EdgeInsetsDirectional.fromSTEB(
+                              0, 0, 20, 0),
                           child: CustomCountController(
                             count: _model.countArtsValue,
                             updateCount: updateCountArts,
@@ -618,12 +857,14 @@ class _EditCompaniesState extends State<EditCompanies> {
                     padding: EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
                     child: Row(
                       mainAxisSize: MainAxisSize.max,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      mainAxisAlignment:
+                      MainAxisAlignment.spaceBetween,
                       children: [
                         Align(
                           alignment: AlignmentDirectional(-1, 0),
                           child: Padding(
-                            padding: EdgeInsetsDirectional.fromSTEB(20, 0, 0, 0),
+                            padding:
+                            EdgeInsetsDirectional.fromSTEB(20, 0, 0, 0),
                             child: Text(
                               'Vídeos',
                               style: TextStyle(
@@ -631,13 +872,16 @@ class _EditCompaniesState extends State<EditCompanies> {
                                 fontWeight: FontWeight.w500,
                                 fontSize: 14,
                                 letterSpacing: 0,
-                                color: Theme.of(context).colorScheme.onSecondary,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSecondary,
                               ),
                             ),
                           ),
                         ),
                         Padding(
-                          padding: EdgeInsetsDirectional.fromSTEB(0, 0, 20, 0),
+                          padding: EdgeInsetsDirectional.fromSTEB(
+                              0, 0, 20, 0),
                           child: CustomCountController(
                             count: _model.countVideosValue,
                             updateCount: updateCountVideos,
@@ -653,7 +897,8 @@ class _EditCompaniesState extends State<EditCompanies> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Padding(
-                          padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                          padding:
+                          EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
                           child: Text(
                             'Marque os acessos da empresa:',
                             textAlign: TextAlign.start,
@@ -662,7 +907,9 @@ class _EditCompaniesState extends State<EditCompanies> {
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0,
-                              color: Theme.of(context).colorScheme.onSecondary,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSecondary,
                             ),
                             overflow: TextOverflow.visible,
                             maxLines: null,
@@ -683,7 +930,9 @@ class _EditCompaniesState extends State<EditCompanies> {
                               fontFamily: 'Poppins',
                               fontWeight: FontWeight.w500,
                               fontSize: 14,
-                              color: Theme.of(context).colorScheme.onSecondary,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSecondary,
                             ),
                           ),
                           value: accessRights['dashboard'],
@@ -692,9 +941,11 @@ class _EditCompaniesState extends State<EditCompanies> {
                               accessRights['dashboard'] = value ?? false;
                             });
                           },
-                          controlAffinity: ListTileControlAffinity.leading,
+                          controlAffinity:
+                          ListTileControlAffinity.leading,
                           activeColor: Theme.of(context).primaryColor,
-                          checkColor: Theme.of(context).colorScheme.outline,
+                          checkColor:
+                          Theme.of(context).colorScheme.outline,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(5.0),
                           ),
@@ -707,7 +958,9 @@ class _EditCompaniesState extends State<EditCompanies> {
                               fontFamily: 'Poppins',
                               fontWeight: FontWeight.w500,
                               fontSize: 14,
-                              color: Theme.of(context).colorScheme.onSecondary,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSecondary,
                             ),
                           ),
                           value: accessRights['leads'],
@@ -716,9 +969,11 @@ class _EditCompaniesState extends State<EditCompanies> {
                               accessRights['leads'] = value ?? false;
                             });
                           },
-                          controlAffinity: ListTileControlAffinity.leading,
+                          controlAffinity:
+                          ListTileControlAffinity.leading,
                           activeColor: Theme.of(context).primaryColor,
-                          checkColor: Theme.of(context).colorScheme.outline,
+                          checkColor:
+                          Theme.of(context).colorScheme.outline,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(5.0),
                           ),
@@ -731,18 +986,23 @@ class _EditCompaniesState extends State<EditCompanies> {
                               fontFamily: 'Poppins',
                               fontWeight: FontWeight.w500,
                               fontSize: 14,
-                              color: Theme.of(context).colorScheme.onSecondary,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSecondary,
                             ),
                           ),
                           value: accessRights['gerenciarColaboradores'],
                           onChanged: (bool? value) {
                             setState(() {
-                              accessRights['gerenciarColaboradores'] = value ?? false;
+                              accessRights['gerenciarColaboradores'] =
+                                  value ?? false;
                             });
                           },
-                          controlAffinity: ListTileControlAffinity.leading,
+                          controlAffinity:
+                          ListTileControlAffinity.leading,
                           activeColor: Theme.of(context).primaryColor,
-                          checkColor: Theme.of(context).colorScheme.outline,
+                          checkColor:
+                          Theme.of(context).colorScheme.outline,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(5.0),
                           ),
@@ -755,18 +1015,23 @@ class _EditCompaniesState extends State<EditCompanies> {
                               fontFamily: 'Poppins',
                               fontWeight: FontWeight.w500,
                               fontSize: 14,
-                              color: Theme.of(context).colorScheme.onSecondary,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSecondary,
                             ),
                           ),
                           value: accessRights['configurarDash'],
                           onChanged: (bool? value) {
                             setState(() {
-                              accessRights['configurarDash'] = value ?? false;
+                              accessRights['configurarDash'] =
+                                  value ?? false;
                             });
                           },
-                          controlAffinity: ListTileControlAffinity.leading,
+                          controlAffinity:
+                          ListTileControlAffinity.leading,
                           activeColor: Theme.of(context).primaryColor,
-                          checkColor: Theme.of(context).colorScheme.outline,
+                          checkColor:
+                          Theme.of(context).colorScheme.outline,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(5.0),
                           ),
@@ -779,7 +1044,9 @@ class _EditCompaniesState extends State<EditCompanies> {
                               fontFamily: 'Poppins',
                               fontWeight: FontWeight.w500,
                               fontSize: 14,
-                              color: Theme.of(context).colorScheme.onSecondary,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSecondary,
                             ),
                           ),
                           value: accessRights['criarForm'],
@@ -788,9 +1055,11 @@ class _EditCompaniesState extends State<EditCompanies> {
                               accessRights['criarForm'] = value ?? false;
                             });
                           },
-                          controlAffinity: ListTileControlAffinity.leading,
+                          controlAffinity:
+                          ListTileControlAffinity.leading,
                           activeColor: Theme.of(context).primaryColor,
-                          checkColor: Theme.of(context).colorScheme.outline,
+                          checkColor:
+                          Theme.of(context).colorScheme.outline,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(5.0),
                           ),
@@ -803,18 +1072,81 @@ class _EditCompaniesState extends State<EditCompanies> {
                               fontFamily: 'Poppins',
                               fontWeight: FontWeight.w500,
                               fontSize: 14,
-                              color: Theme.of(context).colorScheme.onSecondary,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSecondary,
                             ),
                           ),
                           value: accessRights['criarCampanha'],
                           onChanged: (bool? value) {
                             setState(() {
-                              accessRights['criarCampanha'] = value ?? false;
+                              accessRights['criarCampanha'] =
+                                  value ?? false;
                             });
                           },
-                          controlAffinity: ListTileControlAffinity.leading,
+                          controlAffinity:
+                          ListTileControlAffinity.leading,
                           activeColor: Theme.of(context).primaryColor,
-                          checkColor: Theme.of(context).colorScheme.outline,
+                          checkColor:
+                          Theme.of(context).colorScheme.outline,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(5.0),
+                          ),
+                          dense: true,
+                        ),
+                        CheckboxListTile(
+                          title: Text(
+                            "Copiar telefones dos Leads",
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontWeight: FontWeight.w500,
+                              fontSize: 14,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSecondary,
+                            ),
+                          ),
+                          value: accessRights['copiarTelefones'],
+                          onChanged: (bool? value) {
+                            setState(() {
+                              accessRights['copiarTelefones'] =
+                                  value ?? false;
+                            });
+                          },
+                          controlAffinity:
+                          ListTileControlAffinity.leading,
+                          activeColor: Theme.of(context).primaryColor,
+                          checkColor:
+                          Theme.of(context).colorScheme.outline,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(5.0),
+                          ),
+                          dense: true,
+                        ),
+                        CheckboxListTile(
+                          title: Text(
+                            "Alterar senha",
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontWeight: FontWeight.w500,
+                              fontSize: 14,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSecondary,
+                            ),
+                          ),
+                          value: accessRights['alterarSenha'],
+                          onChanged: (bool? value) {
+                            setState(() {
+                              accessRights['alterarSenha'] =
+                                  value ?? false;
+                            });
+                          },
+                          controlAffinity:
+                          ListTileControlAffinity.leading,
+                          activeColor: Theme.of(context).primaryColor,
+                          checkColor:
+                          Theme.of(context).colorScheme.outline,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(5.0),
                           ),
@@ -823,71 +1155,72 @@ class _EditCompaniesState extends State<EditCompanies> {
                       ],
                     ),
                   ),
-                  // Botão de salvar
-                  Align(
-                    alignment: AlignmentDirectional(0, 0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.max,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Align(
-                          alignment: AlignmentDirectional(0, 0),
-                          child: Padding(
-                            padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
-                            child: _isLoading // Exibe a barra de progresso se estiver carregando
-                                ? ElevatedButton(
-                              onPressed: null, // Botão desabilitado durante o carregamento
-                              style: ElevatedButton.styleFrom(
-                                padding: EdgeInsets.symmetric(horizontal: 25, vertical: 15),
-                                backgroundColor: Theme.of(context).colorScheme.primary,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(25),
-                                ),
-                              ),
-                              child: SizedBox(
-                                width: 20,
-                                height: 20, // Define o tamanho da ProgressBar
-                                child: CircularProgressIndicator(
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  strokeWidth: 2.0,
-                                ),
-                              ),
-                            )
-                                : ElevatedButton.icon(
-                              onPressed: _saveCompany, // Função de salvar
-                              icon: Icon(
-                                Icons.save_alt,
-                                color: Theme.of(context).colorScheme.outline, // Define a cor do ícone
-                                size: 25,
-                              ),
-                              label: Text(
-                                'Salvar',
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0,
+                  StreamBuilder<DocumentSnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('empresas')
+                        .doc(uid)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return CircularProgressIndicator();
+                      }
+
+                      if (snapshot.hasError) {
+                        return Text('Erro ao carregar dados');
+                      }
+
+                      if (snapshot.hasData && snapshot.data != null) {
+                        bool canChangePassword =
+                            snapshot.data!.get('alterarSenha') ?? false;
+
+                        if (canChangePassword) {
+                          return Align(
+                            alignment: AlignmentDirectional(0, 0),
+                            child: Padding(
+                              padding:
+                              EdgeInsetsDirectional.fromSTEB(0, 20, 20, 0),
+                              child: ElevatedButton.icon(
+                                onPressed: _isChangingPassword
+                                    ? null
+                                    : _showChangePasswordSheet,
+                                icon: Icon(
+                                  Icons.settings_backup_restore_rounded,
                                   color: Theme.of(context).colorScheme.outline,
+                                  size: 25,
                                 ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                padding: EdgeInsetsDirectional.fromSTEB(30, 15, 30, 15),
-                                backgroundColor: Theme.of(context).colorScheme.primary,
-                                elevation: 3,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(25),
+                                label: Text(
+                                  'Alterar senha',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0,
+                                    color: Theme.of(context).colorScheme.outline,
+                                  ),
                                 ),
-                                side: BorderSide(
-                                  color: Colors.transparent,
-                                  width: 1,
+                                style: ElevatedButton.styleFrom(
+                                  padding: EdgeInsetsDirectional.fromSTEB(
+                                      30, 15, 30, 15),
+                                  backgroundColor:
+                                  Theme.of(context).colorScheme.primary,
+                                  elevation: 3,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(25),
+                                  ),
+                                  side: BorderSide(
+                                    color: Colors.transparent,
+                                    width: 1,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                          );
+                        }
+                      }
+
+                      return SizedBox.shrink(); // Não exibe nada se não tiver permissão.
+                    },
+                  )
                 ],
               ),
             ),

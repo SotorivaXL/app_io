@@ -16,14 +16,23 @@ class ManageCompanies extends StatefulWidget {
 }
 
 class _ManageCompaniesState extends State<ManageCompanies> {
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userDocSubscription;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+      _userDocSubscription;
   bool hasGerenciarParceirosAccess = false;
   bool isLoading = true;
   bool _hasShownPermissionRevokedDialog = false;
 
+  ScrollController _scrollController = ScrollController();
+  double _scrollOffset = 0.0;
+
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(() {
+      setState(() {
+        _scrollOffset = _scrollController.offset;
+      });
+    });
     _determineUserDocumentAndListen();
   }
 
@@ -38,7 +47,8 @@ class _ManageCompaniesState extends State<ManageCompanies> {
     if (user != null) {
       try {
         // Verifica se o documento existe na coleção 'empresas'
-        DocumentSnapshot<Map<String, dynamic>> userDoc = await FirebaseFirestore.instance
+        DocumentSnapshot<Map<String, dynamic>> userDoc = await FirebaseFirestore
+            .instance
             .collection('empresas')
             .doc(user.uid)
             .get();
@@ -55,7 +65,8 @@ class _ManageCompaniesState extends State<ManageCompanies> {
           if (userDoc.exists) {
             _listenToUserDocument('users', user.uid);
           } else {
-            print("Documento do usuário não encontrado nas coleções 'empresas' ou 'users'.");
+            print(
+                "Documento do usuário não encontrado nas coleções 'empresas' ou 'users'.");
             setState(() {
               isLoading = false;
             });
@@ -84,7 +95,8 @@ class _ManageCompaniesState extends State<ManageCompanies> {
       if (userDoc.exists) {
         _updatePermissions(userDoc);
       } else {
-        print("Documento do usuário não encontrado na coleção '$collectionName'.");
+        print(
+            "Documento do usuário não encontrado na coleção '$collectionName'.");
       }
     });
   }
@@ -117,7 +129,8 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                 padding: EdgeInsets.all(16.0),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.background,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
+                  borderRadius:
+                      BorderRadius.vertical(top: Radius.circular(20.0)),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -148,7 +161,8 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).colorScheme.primary,
-                        padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20.0),
                         ),
@@ -178,13 +192,15 @@ class _ManageCompaniesState extends State<ManageCompanies> {
         });
       }
     } else {
-      _hasShownPermissionRevokedDialog = false; // Reseta a flag se a permissão voltar
+      _hasShownPermissionRevokedDialog =
+          false; // Reseta a flag se a permissão voltar
     }
   }
 
   @override
   void dispose() {
     _userDocSubscription?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -198,7 +214,8 @@ class _ManageCompaniesState extends State<ManageCompanies> {
           const end = Offset.zero;
           const curve = Curves.easeInOut; // Animação suave
 
-          final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          final tween =
+              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
           final offsetAnimation = animation.drive(tween);
 
           return SlideTransition(
@@ -213,22 +230,27 @@ class _ManageCompaniesState extends State<ManageCompanies> {
 
   Future<void> deleteCompany(String companyId) async {
     try {
-      HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('deleteCompany');
+      HttpsCallable callable =
+          FirebaseFunctions.instance.httpsCallable('deleteCompany');
       final result = await callable.call(<String, dynamic>{
         'companyId': companyId,
       });
 
       if (result.data['success'] == true) {
-        showErrorDialog(context, "Empresa e usuários vinculados excluídos com sucesso!", "Sucesso");
+        showErrorDialog(context,
+            "Empresa e usuários vinculados excluídos com sucesso!", "Sucesso");
       } else {
-        showErrorDialog(context, "Erro ao excluir empresa e usuários vinculados.", "Erro");
+        showErrorDialog(
+            context, "Erro ao excluir empresa e usuários vinculados.", "Erro");
       }
     } on FirebaseFunctionsException catch (e) {
       print('Erro na Cloud Function: ${e.code} - ${e.message}');
-      showErrorDialog(context, "Erro ao excluir empresa e usuários vinculados.", "Erro");
+      showErrorDialog(
+          context, "Erro ao excluir empresa e usuários vinculados.", "Erro");
     } catch (e) {
       print('Erro desconhecido: $e');
-      showErrorDialog(context, "Erro ao excluir empresa e usuários vinculados.", "Erro");
+      showErrorDialog(
+          context, "Erro ao excluir empresa e usuários vinculados.", "Erro");
     }
   }
 
@@ -278,7 +300,8 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Theme.of(context).colorScheme.primary,
-                      padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20.0),
                       ),
@@ -299,7 +322,8 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red,
-                      padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20.0),
                       ),
@@ -324,6 +348,17 @@ class _ManageCompaniesState extends State<ManageCompanies> {
 
   @override
   Widget build(BuildContext context) {
+    double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
+    double tabBarHeight = (kBottomNavigationBarHeight - (_scrollOffset / 2))
+        .clamp(0.0, kBottomNavigationBarHeight)
+        .ceilToDouble();
+    double opacity = (1.0 - (_scrollOffset / 100)).clamp(0.0, 1.0);
+
+    // Definindo a física com base na visibilidade da AppBar e TabBar
+    final pageViewPhysics = (appBarHeight > 0 && tabBarHeight > 0)
+        ? AlwaysScrollableScrollPhysics()
+        : NeverScrollableScrollPhysics();
+
     if (isLoading) {
       return ConnectivityBanner(
         child: Scaffold(
@@ -345,71 +380,109 @@ class _ManageCompaniesState extends State<ManageCompanies> {
       return ConnectivityBanner(
         child: GestureDetector(
           child: Scaffold(
-            floatingActionButton: FloatingActionButton(
-              onPressed: () async {
-                _navigateWithBottomToTopTransition(context, AddCompany());
-              },
-              child: Icon(
-                Icons.add,
-                color: Theme.of(context).colorScheme.outline,
-                size: 24,
-              ),
-              backgroundColor: Theme.of(context).primaryColor,
-              elevation: 8,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(50),
-              ),
-            ),
-            appBar: AppBar(
-              centerTitle: true,
-              backgroundColor: Theme.of(context).primaryColor,
-              automaticallyImplyLeading: false,
-              leading: IconButton(
-                icon: Icon(
-                  Icons.arrow_back_ios_new,
-                  color: Theme.of(context).colorScheme.outline,
-                  size: 24,
+            appBar: PreferredSize(
+              preferredSize: Size.fromHeight(appBarHeight),
+              child: Opacity(
+                opacity: opacity,
+                child: AppBar(
+                  toolbarHeight: appBarHeight,
+                  automaticallyImplyLeading: false,
+                  flexibleSpace: SafeArea(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // Botão de voltar e título
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.pop(context);
+                                },
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.arrow_back_ios_new,
+                                      color: Theme.of(context).colorScheme.onBackground,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Voltar',
+                                      style: TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontSize: 16,
+                                        color: Theme.of(context).colorScheme.onSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Parceiros',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w700,
+                                  color: Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          // Stack na direita
+                          Stack(
+                            children: [
+                              IconButton(
+                                icon: Icon(Icons.add_business,
+                                    color: Theme.of(context).colorScheme.onBackground,
+                                    size: 30),
+                                onPressed: () async {
+                                  _navigateWithBottomToTopTransition(context, AddCompany());
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  surfaceTintColor: Colors.transparent,
+                  backgroundColor: Theme.of(context).colorScheme.secondary,
                 ),
-                onPressed: () {
-                  Navigator.pop(context);
-                },
               ),
-              title: Text(
-                'Parceiros',
-                style: TextStyle(
-                  fontFamily: 'BrandingSF',
-                  fontWeight: FontWeight.w900,
-                  fontSize: 26,
-                  letterSpacing: 0,
-                  color: Theme.of(context).colorScheme.outline,
-                ),
-              ),
-              elevation: 0,
             ),
             body: SafeArea(
               top: true,
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('empresas').snapshots(),
+                stream: FirebaseFirestore.instance
+                    .collection('empresas')
+                    .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return Center(child: CircularProgressIndicator());
                   }
-        
+
                   if (snapshot.hasError) {
                     return Center(child: Text('Erro ao carregar empresas'));
                   }
-        
+
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                     return Center(child: Text('Nenhuma empresa encontrada'));
                   }
-        
+
                   final companies = snapshot.data!.docs;
-        
+
                   // Filtrar as empresas com base em isDevAccount e currentUserId
                   final filteredCompanies = companies.where((company) {
                     final isDevAccount = company['isDevAccount'] ?? false;
                     final companyId = company.id;
-        
+
                     if (isDevAccount == true) {
                       if (companyId == currentUserId) {
                         return true; // Incluir a empresa
@@ -420,18 +493,18 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                       return true; // Incluir a empresa
                     }
                   }).toList();
-        
+
                   return ListView.builder(
                     itemCount: filteredCompanies.length,
                     itemBuilder: (context, index) {
                       final company = filteredCompanies[index];
                       final nomeEmpresa = company['NomeEmpresa'];
                       final contract = company['contract'];
-        
+
                       return Card(
                         color: Theme.of(context).cardColor,
                         shadowColor: Theme.of(context).shadowColor,
-                        margin: EdgeInsets.all(10),
+                        margin: EdgeInsets.only(left: 10, right: 10, top: 20),
                         child: ListTile(
                           title: Text(
                             nomeEmpresa,
@@ -455,7 +528,10 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
-                                icon: Icon(Icons.edit, color: Theme.of(context).colorScheme.onSecondary),
+                                icon: Icon(Icons.edit,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary),
                                 onPressed: () {
                                   _navigateWithBottomToTopTransition(
                                     context,
@@ -465,14 +541,19 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                                       email: company['email'],
                                       contract: contract,
                                       cnpj: company['cnpj'],
+                                      founded: company['founded'],
                                       countArtsValue: company['countArtsValue'],
-                                      countVideosValue: company['countVideosValue'],
+                                      countVideosValue:
+                                          company['countVideosValue'],
                                       dashboard: company['dashboard'],
                                       leads: company['leads'],
-                                      gerenciarColaboradores: company['gerenciarColaboradores'],
+                                      gerenciarColaboradores:
+                                          company['gerenciarColaboradores'],
                                       configurarDash: company['configurarDash'],
                                       criarCampanha: company['criarCampanha'],
                                       criarForm: company['criarForm'],
+                                      copiarTelefones: company['copiarTelefones'],
+                                      alterarSenha: company['alterarSenha'],
                                     ),
                                   );
                                 },
@@ -480,7 +561,8 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                               IconButton(
                                 icon: Icon(Icons.delete, color: Colors.red),
                                 onPressed: () {
-                                  _showDeleteConfirmationDialog(company.id, company['email']);
+                                  _showDeleteConfirmationDialog(
+                                      company.id, company['email']);
                                 },
                               ),
                             ],

@@ -24,6 +24,8 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
   DateTime _dataFim = DateTime.now();
   bool _isLoading = false;
 
+  double _scrollOffset = 0.0;
+
   // Dropdown simulation
   String? _selectedEmpresaId;
   List<Map<String, dynamic>> _empresas = [];
@@ -145,30 +147,84 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
 
   @override
   Widget build(BuildContext context) {
+    double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
+
     return ConnectivityBanner(
       child: Scaffold(
         appBar: AppBar(
-          title: Text('Criar Campanha'),
-          centerTitle: true,
-          titleTextStyle: TextStyle(
-            fontFamily: 'Poppins',
-            fontWeight: FontWeight.w900,
-            fontSize: 26,
-            color: Theme.of(context).colorScheme.outline
-          ),
-          leading: IconButton(
-            icon: Icon(
-              Icons.arrow_back_ios_new,
-              color: Theme.of(context).colorScheme.outline,
-              size: 24,
+          toolbarHeight: appBarHeight,
+          automaticallyImplyLeading: false,
+          flexibleSpace: SafeArea(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Botão de voltar e título
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.pop(context);
+                        },
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.arrow_back_ios_new,
+                              color:
+                              Theme.of(context).colorScheme.onBackground,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Voltar',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 16,
+                                color:
+                                Theme.of(context).colorScheme.onSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Criar Formulário',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 26,
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(context).colorScheme.onSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Stack na direita
+                  Stack(
+                    children: [
+                      _isLoading
+                        ? CircularProgressIndicator()
+                        : IconButton(
+                          icon: Icon(
+                              Icons.save_alt_rounded,
+                              color: Theme.of(context).colorScheme.onBackground,
+                              size: 30
+                          ),
+                          onPressed: _isLoading ? null : _saveCampaign,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            onPressed: () {
-              Navigator.pop(context);
-            },
           ),
-          shadowColor: Theme.of(context).colorScheme.outline,
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          foregroundColor: Theme.of(context).colorScheme.outline,
+          surfaceTintColor: Colors.transparent,
+          backgroundColor: Theme.of(context).colorScheme.secondary,
         ),
         body: SingleChildScrollView(
           child: Padding(
@@ -238,6 +294,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                   size: 25,
                                 ),
                               ),
+                              textInputAction: TextInputAction.next,
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
                                   return 'Por favor, insira o nome da campanha';
@@ -313,6 +370,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                   size: 25,
                                 ),
                               ),
+                              textInputAction: TextInputAction.next,
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
                                   return 'Por favor, insira a descrição';
@@ -388,12 +446,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                   size: 25,
                                 ),
                               ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Por favor, insira a mensagem padrão';
-                                }
-                                return null;
-                              },
+                              textInputAction: TextInputAction.next,
                               onSaved: (value) {
                                 _mensagem = value!;
                               },
@@ -499,7 +552,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                               child: TextFormField(
                                 controller: TextEditingController(text: _dateFormat.format(_dataInicio)),
                                 decoration: InputDecoration(
-                                  labelText: 'Data de Início',
+                                  labelText: 'Início',
                                   labelStyle: TextStyle(
                                     fontFamily: 'Poppins',
                                     fontSize: 20,
@@ -558,7 +611,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                               child: TextFormField(
                                 controller: TextEditingController(text: _dateFormat.format(_dataFim)),
                                 decoration: InputDecoration(
-                                  labelText: 'Data de Fim',
+                                  labelText: 'Fim',
                                   labelStyle: TextStyle(
                                     fontFamily: 'Poppins',
                                     fontSize: 20,
@@ -615,45 +668,6 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                           ],
                         ),
                       ],
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  Align(
-                    alignment: AlignmentDirectional(0, 0),
-                    child: Padding(
-                      padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
-                      child: _isLoading
-                          ? CircularProgressIndicator()
-                          : ElevatedButton.icon(
-                        onPressed: _isLoading ? null : _saveCampaign,
-                        icon: Icon(
-                          Icons.save,
-                          color: Theme.of(context).colorScheme.outline,
-                          size: 25,
-                        ),
-                        label: Text(
-                          'Salvar Campanha',
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0,
-                            color: Theme.of(context).colorScheme.outline,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          padding: EdgeInsetsDirectional.fromSTEB(30, 15, 30, 15),
-                          backgroundColor: Theme.of(context).colorScheme.primary,
-                          elevation: 3,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(25),
-                          ),
-                          side: BorderSide(
-                            color: Colors.transparent,
-                            width: 1,
-                          ),
-                        ),
-                      ),
                     ),
                   ),
                 ],
