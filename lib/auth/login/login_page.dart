@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -5,7 +8,9 @@ import 'package:flutter/material.dart';
 import 'package:app_io/auth/providers/auth_provider.dart' as app_io_auth;
 import 'package:app_io/data/models/LoginModel/login_page_model.dart';
 import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:provider/provider.dart';
+import 'package:http/http.dart' as http;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -19,12 +24,15 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _passwordController = TextEditingController();
   final FocusNode _emailFocusNode = FocusNode();
   final FocusNode _passwordFocusNode = FocusNode();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   bool _passwordVisibility = false;
+  bool _rememberMe = false;
   Future<void>? _loginFuture;
 
   @override
   void initState() {
     super.initState();
+    _loadSavedCredentials();
     final authProvider = Provider.of<app_io_auth.AuthProvider>(context, listen: false);
     authProvider.listenToAuthChanges();
   }
@@ -38,6 +46,28 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  void _loadSavedCredentials() async {
+    final email = await _secureStorage.read(key: 'email');
+    final password = await _secureStorage.read(key: 'password');
+    final rememberMe = await _secureStorage.read(key: 'rememberMe') == 'true';
+
+    setState(() {
+      _emailController.text = email ?? '';
+      _passwordController.text = password ?? '';
+      _rememberMe = rememberMe;
+    });
+  }
+
+  void _saveCredentials(String email, String password) async {
+    if (_rememberMe) {
+      await _secureStorage.write(key: 'email', value: email);
+      await _secureStorage.write(key: 'password', value: password);
+      await _secureStorage.write(key: 'rememberMe', value: 'true');
+    } else {
+      await _secureStorage.deleteAll(); // Remove todos os dados
+    }
+  }
+
   Future<void> _login() async {
     FocusScope.of(context).unfocus();
     final authProvider = Provider.of<app_io_auth.AuthProvider>(context, listen: false);
@@ -49,23 +79,41 @@ class _LoginPageState extends State<LoginPage> {
       final usersCollection = FirebaseFirestore.instance.collection('users');
       final companiesCollection = FirebaseFirestore.instance.collection('empresas');
 
-      // Primeiro, tenta encontrar o documento na coleção 'users'
       QuerySnapshot userQuerySnapshot = await usersCollection.where('email', isEqualTo: email).get();
 
-      // Se não encontrar na coleção 'users', procura na coleção 'empresas'
       if (userQuerySnapshot.docs.isEmpty) {
         userQuerySnapshot = await companiesCollection.where('email', isEqualTo: email).get();
       }
 
-      // Verifica se encontrou o documento em qualquer uma das coleções
       if (userQuerySnapshot.docs.isNotEmpty) {
-        final userDoc = userQuerySnapshot.docs.first.data() as Map<String, dynamic>?;
-        final currentSessionId = userDoc?['sessionId'];
-        final newSessionId = authProvider.sessionId; // Supondo que sessionId esteja no AuthProvider
+        final userDoc = userQuerySnapshot.docs.first;
+        final userData = userDoc.data() as Map<String, dynamic>?;
+        final currentSessionId = userData?['sessionId'];
+        final emailVerified = userData?['emailVerified'] ?? false;
+        final newSessionId = authProvider.sessionId;
 
         if (currentSessionId != null && currentSessionId != newSessionId) {
           _showErrorDialog(context, 'Esta conta já está ativa em outro dispositivo. Por favor, desconecte-se de lá antes de continuar.');
           return;
+        }
+
+        // Verifique se o e-mail foi validado
+        if (!emailVerified) {
+          final verificationCode = _generateVerificationCode();
+
+          // Enviar código de verificação para o e-mail
+          await _sendVerificationEmail(email, verificationCode);
+
+          // Mostra a tela de inserção do código
+          final userEnteredCode = await _promptForVerificationCode();
+
+          if (userEnteredCode != verificationCode) {
+            _showErrorDialog(context, 'Código de verificação incorreto. Tente novamente.');
+            return;
+          }
+
+          // Atualiza o campo "emailVerified" no Firestore após o código ser validado corretamente
+          await userDoc.reference.update({'emailVerified': true});
         }
       }
 
@@ -76,51 +124,36 @@ class _LoginPageState extends State<LoginPage> {
         final user = FirebaseAuth.instance.currentUser;
 
         if (user != null) {
-          final sessionId = authProvider.sessionId;
+          final token = await user.getIdToken();
 
-          if (sessionId == null) {
-            _showErrorDialog(context, 'Ocorreu um erro ao obter o sessionId.');
+          if (token == null) {
+            _showErrorDialog(context, 'Ocorreu um erro ao obter o token.');
             return;
           }
 
-          // Atualiza o sessionId no Firestore
           final userDocRef = usersCollection.doc(user.uid);
           final companyDocRef = companiesCollection.doc(user.uid);
 
-          // Se o documento não existir na coleção 'users', verifica a coleção 'empresas'
           final userDocExists = (await userDocRef.get()).exists;
           final companyDocExists = (await companyDocRef.get()).exists;
 
           if (!userDocExists && companyDocExists) {
-            // Se encontrar o documento na coleção 'empresas', atualiza o sessionId lá
-            await companyDocRef.update({
-              'sessionId': sessionId,
-            });
+            await companyDocRef.update({'sessionId': authProvider.sessionId});
           } else if (!userDocExists && !companyDocExists) {
-            // Se não encontrar o documento em ambas as coleções, cria um novo documento na coleção 'users'
-            await userDocRef.set({
-              'sessionId': sessionId,
-              'email': email,
-            });
+            await userDocRef.set({'sessionId': authProvider.sessionId, 'email': email});
           } else if (userDocExists) {
-            // Se encontrar o documento na coleção 'users', atualiza o sessionId
-            await userDocRef.update({
-              'sessionId': sessionId,
-            });
+            await userDocRef.update({'sessionId': authProvider.sessionId});
           }
 
-          // Atualiza o FCM Token
           await _updateFcmToken();
 
-          // Navegação para a página principal
+          _saveCredentials(email, password);
+
           Navigator.of(context).pushReplacement(
             PageRouteBuilder(
               transitionDuration: Duration(milliseconds: 500),
               transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return FadeTransition(
-                  opacity: animation,
-                  child: child,
-                );
+                return FadeTransition(opacity: animation, child: child);
               },
               pageBuilder: (context, animation, secondaryAnimation) => CustomTabBarPage(),
             ),
@@ -131,9 +164,166 @@ class _LoginPageState extends State<LoginPage> {
       if (e is FirebaseException) {
         _showErrorDialogFirebase(context, e);
       } else {
-        _showErrorDialogFirebase(context, FirebaseException(message: 'Ocorreu um erro inesperado.', plugin: ''));
+        _showErrorDialog(context, 'Ocorreu um erro inesperado.');
       }
     }
+  }
+
+  Future<void> sendEmail(String toEmail, String subject, String content, {bool isHtml = false}) async {
+    const sendGridApiKey = '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'; // Substitua pela sua chave de API do SendGrid
+    const sendGridUrl = 'https://api.sendgrid.com/v3/mail/send';
+
+    final response = await http.post(
+      Uri.parse(sendGridUrl),
+      headers: {
+        'Authorization': 'Bearer $sendGridApiKey',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'personalizations': [
+          {
+            'to': [
+              {'email': toEmail}
+            ],
+            'subject': subject,
+          }
+        ],
+        'from': {'email': 'suporte.ioconnect@iomarketing.com.br'}, // Substitua pelo seu e-mail verificado no SendGrid
+        'content': [
+          {
+            'type': isHtml ? 'text/html' : 'text/plain',
+            'value': content,
+          }
+        ],
+      }),
+    );
+
+    if (response.statusCode != 202) {
+      throw Exception('Erro ao enviar e-mail: ${response.body}');
+    }
+  }
+
+  String _generateVerificationCode() {
+    final random = Random();
+    return List.generate(6, (index) => random.nextInt(10)).join(); // Gera um código de 6 dígitos
+  }
+
+  Future<void> _sendVerificationEmail(String email, String code) async {
+    // Coleções do Firestore
+    final usersCollection = FirebaseFirestore.instance.collection('users');
+    final companiesCollection = FirebaseFirestore.instance.collection('empresas');
+
+    // Buscando o documento correspondente
+    QuerySnapshot userQuerySnapshot = await usersCollection.where('email', isEqualTo: email).get();
+    String userName = 'usuário';
+
+    if (userQuerySnapshot.docs.isEmpty) {
+      userQuerySnapshot = await companiesCollection.where('email', isEqualTo: email).get();
+      if (userQuerySnapshot.docs.isNotEmpty) {
+        final companyData = userQuerySnapshot.docs.first.data() as Map<String, dynamic>?;
+        userName = companyData?['NomeEmpresa'] ?? 'usuário';
+      }
+    } else {
+      final userData = userQuerySnapshot.docs.first.data() as Map<String, dynamic>?;
+      userName = userData?['name'] ?? 'usuário';
+    }
+
+    // Envio do e-mail com o nome e token estilizado
+    await sendEmail(
+      email,
+      'Verificação de email necessária',
+      '''
+    <p>Prezado(a), <strong>$userName</strong>!</p>
+    <p>Segue seu token de verificação: <strong style="font-size: 18px;">$code</strong>.</p>
+    <p>Para sua segurança, insira este código no app para completar o acesso à sua conta.</p>
+    ''',
+      isHtml: true,
+    );
+  }
+
+  Future<String?> _promptForVerificationCode() async {
+    String? code;
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        final codeController = TextEditingController();
+        return AlertDialog(
+          backgroundColor: Theme.of(context).colorScheme.background,
+          title: Text(
+            'Verificação de E-mail',
+            textAlign: TextAlign.center,
+          ),
+          titleTextStyle: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            color: Theme.of(context).colorScheme.onSecondary,
+          ),
+          content: TextField(
+            controller: codeController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              hintText: 'Digite o código de verificação',
+              hintStyle: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Theme.of(context).colorScheme.onSecondary,
+              ),
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(
+                  color: Theme.of(context).colorScheme.tertiary,
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(
+                  color: Theme.of(context).colorScheme.tertiary,
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              errorBorder: UnderlineInputBorder(
+                borderSide: BorderSide(
+                  color: Theme.of(context).colorScheme.error,
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              focusedErrorBorder: UnderlineInputBorder(
+                borderSide: BorderSide(
+                  color: Theme.of(context).colorScheme.error,
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              contentPadding: EdgeInsets.symmetric(horizontal: 10)
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(codeController.text);
+              },
+              child: Text(
+                'Verificar',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.tertiary
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    ).then((value) {
+      code = value;
+    });
+
+    return code;
   }
 
   Future<void> _updateFcmToken() async {
@@ -597,6 +787,28 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         );
                       },
+                    ),
+                    SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: _rememberMe,
+                          onChanged: (value) {
+                            setState(() {
+                              _rememberMe = value ?? false;
+                            });
+                          },
+                        ),
+                        Text(
+                          'Lembrar de mim',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Theme.of(context).colorScheme.onSecondary
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

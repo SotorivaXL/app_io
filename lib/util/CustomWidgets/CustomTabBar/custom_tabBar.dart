@@ -1,13 +1,19 @@
+import 'dart:io';
+
 import 'package:app_io/features/screens/configurations/configurations.dart';
 import 'package:app_io/features/screens/dasboard/dashboard_page.dart';
 import 'package:app_io/features/screens/leads/leads_page.dart';
 import 'package:app_io/features/screens/panel/painel_adm.dart';
+import 'package:app_io/util/CustomWidgets/BirthdayAnimationPopup/birthday_animation_popup.dart';
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
+import 'package:app_io/util/CustomWidgets/TutorialPopup/tutorial_popup.dart';
+import 'package:bottom_navy_bar/bottom_navy_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:lottie/lottie.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class CustomTabBarPage extends StatefulWidget {
   @override
@@ -34,11 +40,11 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   bool hasCriarCampanhaAccess = false;
   bool hasAdmPanelAccess = true;
 
-  @override
   void initState() {
     super.initState();
     _pageController = PageController();
     _tabController = TabController(length: 0, vsync: this);
+    _checkBirthday();
 
     _scrollController.addListener(() {
       setState(() {
@@ -47,6 +53,31 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     });
 
     _listenToPermissionsChanges();
+    _showTutorialIfFirstTime(); // Chama o tutorial na primeira vez
+  }
+
+  Future<void> _showTutorialIfFirstTime() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    bool tutorialShown = prefs.getBool('tutorial_shown') ?? false;
+
+    if (!tutorialShown) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          // Usuário não pode fechar o popup clicando fora
+          builder: (BuildContext context) {
+            return TutorialPopup(
+              onComplete: () async {
+                // Marcar o tutorial como concluído
+                await prefs.setBool('tutorial_shown', true);
+                Navigator.of(context).pop(); // Fecha o popup
+              },
+            );
+          },
+        );
+      });
+    }
   }
 
   void _listenToPermissionsChanges() {
@@ -340,13 +371,70 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     );
   }
 
+  Future<void> _checkBirthday() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final uid = user.uid;
+    String? birthday;
+
+    // Busca na coleção `users`
+    final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    if (userDoc.exists) {
+      birthday = userDoc.data()?['birth'];
+    } else {
+      // Busca na coleção `empresas` caso não esteja em `users`
+      final empresaDoc = await FirebaseFirestore.instance.collection('empresas').doc(uid).get();
+      if (empresaDoc.exists) {
+        birthday = empresaDoc.data()?['founded'];
+      }
+    }
+
+    if (birthday != null) {
+      // Verifica se hoje é o aniversário
+      final today = DateTime.now();
+      final birthdayParts = birthday.split('-');
+      if (birthdayParts.length == 3) {
+        final birthDay = int.parse(birthdayParts[0]);
+        final birthMonth = int.parse(birthdayParts[1]);
+
+        if (birthDay == today.day && birthMonth == today.month) {
+          final prefs = await SharedPreferences.getInstance();
+          final key = 'birthday_shown_$uid${today.toIso8601String()}'; // Chave única baseada no UID e data
+
+          // Verifica se a chave foi salva hoje
+          final shownToday = prefs.getBool(key) ?? false;
+
+          if (!shownToday) {
+            _showBirthdayPopup(); // Mostra o popup
+            await prefs.setBool(key, true); // Marca como exibido
+          }
+        }
+      }
+    }
+  }
+
+  void _showBirthdayPopup() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return BirthdayAnimationPopup(
+          onDismiss: () => Navigator.of(context).pop(),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
-    double tabBarHeight = (kBottomNavigationBarHeight - (_scrollOffset / 2)).clamp(0.0, kBottomNavigationBarHeight).ceilToDouble();
-    double opacity = (1.0 - (_scrollOffset / 100)).clamp(0.0, 1.0);
+    // Ajuste do tabBarHeight baseado no sistema operacional
+    double tabBarHeight = Platform.isIOS
+        ? (111 - (_scrollOffset / 2)).clamp(0.0, 111).ceilToDouble()
+        : (79 - (_scrollOffset / 2)).clamp(0.0, 79).ceilToDouble();
+    double opacity = (1.0 - (_scrollOffset / 40)).clamp(0.0, 1.0);
 
-    // Definindo a física com base na visibilidade da AppBar e TabBar
     final pageViewPhysics = (appBarHeight > 0 && tabBarHeight > 0)
         ? AlwaysScrollableScrollPhysics()
         : NeverScrollableScrollPhysics();
@@ -372,7 +460,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                           fontFamily: 'BrandingSF',
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
-                          color: Theme.of(context).colorScheme.onBackground,
+                          color: Theme.of(context).colorScheme.onSecondary,
                         ),
                       ),
                       AnimatedSwitcher(
@@ -452,31 +540,58 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                 _tabController.index = index;
               });
             },
-            physics: pageViewPhysics, // Física atualizada com base na visibilidade
+            physics: pageViewPhysics,
             children: _pages,
           ),
         ),
-        bottomNavigationBar: SafeArea(
-          child: SizedBox(
-            height: tabBarHeight,
-            child: SingleChildScrollView(
-              child: Opacity(
-                opacity: opacity,
-                child: TabBar(
-                  controller: _tabController,
-                  labelColor: Theme.of(context).colorScheme.tertiary,
-                  unselectedLabelColor: Theme.of(context).colorScheme.onSecondary,
-                  indicator: BoxDecoration(),
-                  onTap: (index) {
-                    _pageController.animateToPage(
-                      index,
-                      duration: Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                    );
-                  },
-                  tabs: _tabs,
+        bottomNavigationBar: SizedBox(
+          height: tabBarHeight,
+          child: Opacity(
+            opacity: opacity,
+            child: BottomNavyBar(
+              backgroundColor: Theme.of(context).colorScheme.secondary,
+              showInactiveTitle: false,
+              selectedIndex: _currentIndex,
+              showElevation: true,
+              itemCornerRadius: 24,
+              iconSize: 25,
+              curve: Curves.easeIn,
+              onItemSelected: (index) {
+                setState(() {
+                  _currentIndex = index;
+                });
+                _pageController.jumpToPage(index);
+              },
+              items: <BottomNavyBarItem>[
+                BottomNavyBarItem(
+                  icon: Icon(Icons.dashboard),
+                  title: Text('Dashboard'),
+                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
+                  activeColor: Theme.of(context).colorScheme.tertiary,
+                  textAlign: TextAlign.center,
                 ),
-              ),
+                BottomNavyBarItem(
+                  icon: Icon(Icons.people),
+                  title: Text('Leads'),
+                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
+                  activeColor: Theme.of(context).colorScheme.tertiary,
+                  textAlign: TextAlign.center,
+                ),
+                BottomNavyBarItem(
+                  icon: Icon(Icons.admin_panel_settings),
+                  title: Text('Painel Adm'),
+                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
+                  activeColor: Theme.of(context).colorScheme.tertiary,
+                  textAlign: TextAlign.center,
+                ),
+                BottomNavyBarItem(
+                  icon: Icon(Icons.settings),
+                  title: Text('Configurações'),
+                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
+                  activeColor: Theme.of(context).colorScheme.tertiary,
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
           ),
         ),

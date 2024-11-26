@@ -3,7 +3,7 @@ import 'package:app_io/auth/providers/auth_provider.dart';
 import 'package:app_io/features/screens/campaign/create_campaign.dart';
 import 'package:app_io/features/screens/collaborator/manage_collaborators.dart';
 import 'package:app_io/features/screens/company/manage_companies.dart';
-import 'package:app_io/features/screens/dasboard/dashboard_configurations.dart';
+import 'package:app_io/features/screens/configurations/dashboard_configurations.dart';
 import 'package:app_io/features/screens/form/create_form.dart';
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';

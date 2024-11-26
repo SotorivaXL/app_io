@@ -1,6 +1,9 @@
+import 'package:app_io/util/CustomWidgets/ChangePasswordSheet/change_password_sheet.dart';
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:app_io/util/utils.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:app_io/data/models/RegisterCompanyModel/add_company_model.dart';
 import 'package:app_io/util/services/firestore_service.dart';
@@ -10,22 +13,26 @@ class EditCollaborators extends StatefulWidget {
   final String name;
   final String email;
   final String role;
+  final String birth;
   final bool dashboard;
   final bool leads;
   final bool configurarDash;
   final bool criarCampanha;
   final bool criarForm;
+  final bool copiarTelefones;
 
   EditCollaborators({
     required this.collaboratorId,
     required this.name,
     required this.email,
     required this.role,
+    required this.birth,
     required this.dashboard,
     required this.leads,
     required this.configurarDash,
     required this.criarCampanha,
     required this.criarForm,
+    required this.copiarTelefones,
   });
 
   @override
@@ -37,17 +44,23 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
   late AddCompanyModel _model;
   bool _isLoading = false;
 
+  double _scrollOffset = 0.0;
+
   Map<String, bool> accessRights = {
     'dashboard': false,
     'leads': false,
     'configurarDash': false,
     'criarCampanha': false,
     'criarForm': false,
+    'copiarTelefones': false,
   };
 
   late TextEditingController _nameController;
   late TextEditingController _emailController;
   late TextEditingController _roleController;
+  late TextEditingController _birthController;
+
+  bool _isChangingPassword = false;
 
   @override
   void initState() {
@@ -58,11 +71,15 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
     _emailController = TextEditingController(text: widget.email);
     _roleController = TextEditingController(text: widget.role);
 
+    final formattedBirth = widget.birth.replaceAll('-', '/');
+    _birthController = TextEditingController(text: formattedBirth);
+
     accessRights['dashboard'] = widget.dashboard;
     accessRights['leads'] = widget.leads;
     accessRights['configurarDash'] = widget.configurarDash;
     accessRights['criarCampanha'] = widget.criarCampanha;
     accessRights['criarForm'] = widget.criarForm;
+    accessRights['copiarTelefones'] = widget.copiarTelefones;
   }
 
   @override
@@ -103,6 +120,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
         'configurarDash': accessRights['configurarDash'],
         'criarCampanha': accessRights['criarCampanha'],
         'criarForm': accessRights['criarForm'],
+        'copiarTelefones': accessRights['copiarTelefones'],
       });
 
       // Volta para a tela anterior
@@ -121,38 +139,112 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
     }
   }
 
+  void _showChangePasswordSheet() {
+    showModalBottomSheet(
+      backgroundColor: Theme.of(context).colorScheme.background,
+      context: context,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(25.0)),
+      ),
+      builder: (context) {
+        return ChangePasswordSheet(
+          targetUid: widget.collaboratorId,
+          onClose: () {
+            setState(() {
+              _isChangingPassword = false;
+            });
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
+
+    String uid = FirebaseAuth.instance.currentUser?.uid ?? ''; // Obtenha o UID do usuário logado.
+
     return ConnectivityBanner(
       child: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         child: Scaffold(
           backgroundColor: Theme.of(context).colorScheme.background,
           appBar: AppBar(
-            backgroundColor: Theme.of(context).primaryColor,
+            toolbarHeight: appBarHeight,
             automaticallyImplyLeading: false,
-            leading: IconButton(
-              icon: Icon(
-                Icons.arrow_back_ios_new,
-                color: Theme.of(context).colorScheme.outline,
-                size: 24,
+            flexibleSpace: SafeArea(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Botão de voltar e título
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.pop(context);
+                          },
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.arrow_back_ios_new,
+                                color:
+                                Theme.of(context).colorScheme.onBackground,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Voltar',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 16,
+                                  color:
+                                  Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Editar Colaborador',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 26,
+                            fontWeight: FontWeight.w700,
+                            color: Theme.of(context).colorScheme.onSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Stack na direita
+                    Stack(
+                      children: [
+                        _isLoading
+                            ? CircularProgressIndicator()
+                            : IconButton(
+                          icon: Icon(Icons.save_alt_rounded,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onBackground,
+                              size: 30),
+                          onPressed: _isLoading ? null : _saveCollaborator,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              onPressed: () {
-                Navigator.pop(context);
-              },
             ),
-            title: Text(
-              'Editar Colaborador',
-              style: TextStyle(
-                fontFamily: 'BrandingSF',
-                fontSize: 26,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0,
-                color: Theme.of(context).colorScheme.outline,
-              ),
-            ),
-            centerTitle: true,
-            elevation: 2,
+            surfaceTintColor: Colors.transparent,
+            backgroundColor: Theme.of(context).colorScheme.secondary,
           ),
           body: SafeArea(
             top: true,
@@ -446,6 +538,79 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                   Padding(
                     padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
                     child: Row(
+                      mainAxisSize: MainAxisSize.max,
+                      children: [
+                        Expanded(
+                          child: Align(
+                            alignment: AlignmentDirectional(0, 0),
+                            child: Padding(
+                              padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                              child: TextFormField(
+                                controller: _birthController,
+                                autofocus: true,
+                                obscureText: false,
+                                enabled: false,
+                                decoration: InputDecoration(
+                                  labelText: 'Nascimento',
+                                  labelStyle: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0,
+                                    color: Theme.of(context).colorScheme.onSecondary,
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Theme.of(context).primaryColor,
+                                      width: 2,
+                                    ),
+                                    borderRadius: BorderRadius.circular(15),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Theme.of(context).colorScheme.tertiary,
+                                      width: 2,
+                                    ),
+                                    borderRadius: BorderRadius.circular(15),
+                                  ),
+                                  errorBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Theme.of(context).colorScheme.error,
+                                      width: 2,
+                                    ),
+                                    borderRadius: BorderRadius.circular(15),
+                                  ),
+                                  focusedErrorBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Theme.of(context).colorScheme.error,
+                                      width: 2,
+                                    ),
+                                    borderRadius: BorderRadius.circular(15),
+                                  ),
+                                  prefixIcon: Icon(
+                                    Icons.calendar_month,
+                                    color: Theme.of(context).colorScheme.tertiary,
+                                    size: 25,
+                                  ),
+                                ),
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: 0,
+                                  color: Theme.of(context).colorScheme.onSecondary,
+                                ),
+                                textAlign: TextAlign.start,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+                    child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Padding(
@@ -591,73 +756,99 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                           ),
                           dense: true,
                         ),
-                      ],
-                    ),
-                  ),
-                  Align(
-                    alignment: AlignmentDirectional(0, 0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.max,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Align(
-                          alignment: AlignmentDirectional(0, 0),
-                          child: Padding(
-                            padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
-                            child: _isLoading
-                                ? ElevatedButton(
-                              onPressed: null,
-                              style: ElevatedButton.styleFrom(
-                                padding: EdgeInsets.symmetric(horizontal: 25, vertical: 15),
-                                backgroundColor: Theme.of(context).colorScheme.primary,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(25),
-                                ),
-                              ),
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  strokeWidth: 2.0,
-                                ),
-                              ),
-                            )
-                                : ElevatedButton.icon(
-                              onPressed: _saveCollaborator,
-                              icon: Icon(
-                                Icons.save_alt,
-                                color: Theme.of(context).colorScheme.outline,
-                                size: 25,
-                              ),
-                              label: Text(
-                                'Salvar',
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0,
-                                  color: Theme.of(context).colorScheme.outline,
-                                ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                padding: EdgeInsetsDirectional.fromSTEB(30, 15, 30, 15),
-                                backgroundColor: Theme.of(context).colorScheme.primary,
-                                elevation: 3,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(25),
-                                ),
-                                side: BorderSide(
-                                  color: Colors.transparent,
-                                  width: 1,
-                                ),
-                              ),
+                        CheckboxListTile(
+                          title: Text(
+                            "Copiar telefones dos Leads",
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontWeight: FontWeight.w500,
+                              fontSize: 14,
+                              color: Theme.of(context).colorScheme.onSecondary,
                             ),
                           ),
+                          value: accessRights['copiarTelefones'],
+                          onChanged: (bool? value) {
+                            setState(() {
+                              accessRights['copiarTelefones'] = value ?? false;
+                            });
+                          },
+                          controlAffinity: ListTileControlAffinity.leading,
+                          activeColor: Theme.of(context).primaryColor,
+                          checkColor: Theme.of(context).colorScheme.outline,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(5.0),
+                          ),
+                          dense: true,
                         ),
                       ],
                     ),
                   ),
+                  StreamBuilder<DocumentSnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('empresas')
+                        .doc(uid)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return CircularProgressIndicator();
+                      }
+
+                      if (snapshot.hasError) {
+                        return Text('Erro ao carregar dados');
+                      }
+
+                      if (snapshot.hasData && snapshot.data != null) {
+                        bool canChangePassword =
+                            snapshot.data!.get('alterarSenha') ?? false;
+
+                        if (canChangePassword) {
+                          return Align(
+                            alignment: AlignmentDirectional(0, 0),
+                            child: Padding(
+                              padding:
+                              EdgeInsetsDirectional.fromSTEB(0, 20, 20, 0),
+                              child: ElevatedButton.icon(
+                                onPressed: _isChangingPassword
+                                    ? null
+                                    : _showChangePasswordSheet,
+                                icon: Icon(
+                                  Icons.settings_backup_restore_rounded,
+                                  color: Theme.of(context).colorScheme.outline,
+                                  size: 25,
+                                ),
+                                label: Text(
+                                  'Alterar senha',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0,
+                                    color: Theme.of(context).colorScheme.outline,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  padding: EdgeInsetsDirectional.fromSTEB(
+                                      30, 15, 30, 15),
+                                  backgroundColor:
+                                  Theme.of(context).colorScheme.primary,
+                                  elevation: 3,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(25),
+                                  ),
+                                  side: BorderSide(
+                                    color: Colors.transparent,
+                                    width: 1,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+                      }
+
+                      return SizedBox.shrink(); // Não exibe nada se não tiver permissão.
+                    },
+                  )
                 ],
               ),
             ),
