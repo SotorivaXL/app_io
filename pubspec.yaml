@@ -39,6 +39,7 @@ dependencies:
   bottom_navy_bar: ^6.1.0
   file_picker: ^8.1.4
   flutter_secure_storage: ^9.2.2
+  shimmer: ^3.0.0
 
 dev_dependencies:
   flutter_test:

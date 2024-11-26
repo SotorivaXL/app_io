@@ -31,6 +31,7 @@ class AppTheme {
       scrim: Color(0xFF18191a),
       onSecondaryContainer: Color(0xFFFFFFFF),
       onPrimaryContainer: Color(0xFFf5f8fe),
+      onTertiaryContainer: Color(0xFFF0F0F3),
       onTertiary: constantGreen,
     ),
     textTheme: const TextTheme(
@@ -74,6 +75,7 @@ class AppTheme {
       scrim: Color(0xFF18191a),
       onSecondaryContainer: Color(0xFF0F0F0F),
       onPrimaryContainer: Color(0xFFf5f8fe),
+      onTertiaryContainer: Color(0xFF1D1925),
       onTertiary: constantGreen,
     ),
     textTheme: const TextTheme(

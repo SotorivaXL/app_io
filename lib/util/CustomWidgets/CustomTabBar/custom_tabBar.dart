@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:app_io/features/screens/configurations/configurations.dart';
 import 'package:app_io/features/screens/dasboard/dashboard_page.dart';
 import 'package:app_io/features/screens/leads/leads_page.dart';
@@ -427,184 +429,169 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   @override
   Widget build(BuildContext context) {
     double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
-    double tabBarHeight = (kBottomNavigationBarHeight - (_scrollOffset / 2)).clamp(0.0, kBottomNavigationBarHeight).ceilToDouble();
+    // Ajuste do tabBarHeight baseado no sistema operacional
+    double tabBarHeight = Platform.isIOS
+        ? (111 - (_scrollOffset / 2)).clamp(0.0, 111).ceilToDouble()
+        : (79 - (_scrollOffset / 2)).clamp(0.0, 79).ceilToDouble();
     double opacity = (1.0 - (_scrollOffset / 40)).clamp(0.0, 1.0);
 
-    // Ajustando a troca de cor para saída e retorno
-    Color scaffoldBackgroundColor = opacity >= 0.5
-        ? Theme.of(context).colorScheme.secondary
-        : Theme.of(context).colorScheme.background;
-
-    // Duração dinâmica para animação
-    Duration animationDuration = opacity >= 0.5
-        ? Duration(milliseconds: 400) // Retorno mais lento
-        : Duration(milliseconds: 300); // Saída padrão
-
-    // Definindo a física com base na visibilidade da AppBar e TabBar
     final pageViewPhysics = (appBarHeight > 0 && tabBarHeight > 0)
         ? AlwaysScrollableScrollPhysics()
         : NeverScrollableScrollPhysics();
 
     return ConnectivityBanner(
-      child: AnimatedContainer(
-        duration: animationDuration, // Duração dinâmica
-        curve: Curves.easeInOut, // Suavidade da transição
-        color: scaffoldBackgroundColor, // Cor animada
-        child: Scaffold(
-          backgroundColor: Colors.transparent, // Deixe transparente para o AnimatedContainer controlar a cor
-          appBar: PreferredSize(
-            preferredSize: Size.fromHeight(appBarHeight),
-            child: Opacity(
-              opacity: opacity,
-              child: AppBar(
-                toolbarHeight: appBarHeight,
-                title: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _getPrefix(),
+      child: Scaffold(
+        backgroundColor: Theme.of(context).colorScheme.background,
+        appBar: PreferredSize(
+          preferredSize: Size.fromHeight(appBarHeight),
+          child: Opacity(
+            opacity: opacity,
+            child: AppBar(
+              toolbarHeight: appBarHeight,
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _getPrefix(),
+                        style: TextStyle(
+                          fontFamily: 'BrandingSF',
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: Theme.of(context).colorScheme.onSecondary,
+                        ),
+                      ),
+                      AnimatedSwitcher(
+                        duration: Duration(milliseconds: 300),
+                        child: Text(
+                          _getTitle(),
+                          key: ValueKey<String>(_getTitle()),
                           style: TextStyle(
                             fontFamily: 'BrandingSF',
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                            color: Theme.of(context).colorScheme.onSecondary,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 28,
+                            color: Theme.of(context).colorScheme.surfaceVariant,
                           ),
                         ),
-                        AnimatedSwitcher(
-                          duration: Duration(milliseconds: 300),
-                          child: Text(
-                            _getTitle(),
-                            key: ValueKey<String>(_getTitle()),
-                            style: TextStyle(
-                              fontFamily: 'BrandingSF',
-                              fontWeight: FontWeight.w700,
-                              fontSize: 28,
-                              color: Theme.of(context).colorScheme.surfaceVariant,
-                            ),
-                          ),
-                          transitionBuilder: (Widget child, Animation<double> animation) {
-                            final fadeInAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(animation);
-                            final slideAnimation = Tween<Offset>(begin: Offset(-1, 0), end: Offset.zero).animate(animation);
+                        transitionBuilder: (Widget child, Animation<double> animation) {
+                          final fadeInAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(animation);
+                          final slideAnimation = Tween<Offset>(begin: Offset(-1, 0), end: Offset.zero).animate(animation);
 
-                            return SlideTransition(
-                              position: slideAnimation,
-                              child: FadeTransition(
-                                opacity: fadeInAnimation,
-                                child: child,
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                    Stack(
-                      children: [
-                        IconButton(
-                          icon: Icon(Icons.notifications),
-                          color: Theme.of(context).colorScheme.onSecondary,
-                          iconSize: 30,
-                          onPressed: () async {
-                            _showNotificationsSidebar(context);
-                          },
-                        ),
-                        Positioned(
-                          right: 6,
-                          top: 6,
-                          child: CircleAvatar(
-                            radius: 8,
-                            backgroundColor: Theme.of(context).colorScheme.tertiary,
-                            child: Text(
-                              '3',
-                              style: TextStyle(color: Colors.white, fontSize: 10),
+                          return SlideTransition(
+                            position: slideAnimation,
+                            child: FadeTransition(
+                              opacity: fadeInAnimation,
+                              child: child,
                             ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  Stack(
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.notifications),
+                        color: Theme.of(context).colorScheme.onSecondary,
+                        iconSize: 30,
+                        onPressed: () async {
+                          _showNotificationsSidebar(context);
+                        },
+                      ),
+                      Positioned(
+                        right: 6,
+                        top: 6,
+                        child: CircleAvatar(
+                          radius: 8,
+                          backgroundColor: Theme.of(context).colorScheme.tertiary,
+                          child: Text(
+                            '3',
+                            style: TextStyle(color: Colors.white, fontSize: 10),
                           ),
                         ),
-                      ],
-                    ),
-                  ],
-                ),
-                centerTitle: false,
-                automaticallyImplyLeading: false,
-                backgroundColor: Theme.of(context).colorScheme.secondary,
-                foregroundColor: Theme.of(context).colorScheme.outline,
+                      ),
+                    ],
+                  ),
+                ],
               ),
+              centerTitle: false,
+              automaticallyImplyLeading: false,
+              backgroundColor: Theme.of(context).colorScheme.secondary,
+              foregroundColor: Theme.of(context).colorScheme.outline,
             ),
           ),
-          body: NotificationListener<ScrollNotification>(
-            onNotification: (ScrollNotification scrollInfo) {
-              if (scrollInfo.metrics.axis == Axis.vertical) {
-                setState(() {
-                  _scrollOffset = scrollInfo.metrics.pixels;
-                });
-              }
-              return true;
+        ),
+        body: NotificationListener<ScrollNotification>(
+          onNotification: (ScrollNotification scrollInfo) {
+            if (scrollInfo.metrics.axis == Axis.vertical) {
+              setState(() {
+                _scrollOffset = scrollInfo.metrics.pixels;
+              });
+            }
+            return true;
+          },
+          child: PageView(
+            controller: _pageController,
+            onPageChanged: (index) {
+              setState(() {
+                _currentIndex = index;
+                _tabController.index = index;
+              });
             },
-            child: PageView(
-              controller: _pageController,
-              onPageChanged: (index) {
+            physics: pageViewPhysics,
+            children: _pages,
+          ),
+        ),
+        bottomNavigationBar: SizedBox(
+          height: tabBarHeight,
+          child: Opacity(
+            opacity: opacity,
+            child: BottomNavyBar(
+              backgroundColor: Theme.of(context).colorScheme.secondary,
+              showInactiveTitle: false,
+              selectedIndex: _currentIndex,
+              showElevation: true,
+              itemCornerRadius: 24,
+              iconSize: 25,
+              curve: Curves.easeIn,
+              onItemSelected: (index) {
                 setState(() {
                   _currentIndex = index;
-                  _tabController.index = index;
                 });
+                _pageController.jumpToPage(index);
               },
-              physics: pageViewPhysics, // Física atualizada com base na visibilidade
-              children: _pages,
-            ),
-          ),
-          bottomNavigationBar: SafeArea(
-            child: SizedBox(
-              height: tabBarHeight,
-              child: Opacity(
-                opacity: opacity,
-                child: BottomNavyBar(
-                  backgroundColor: Theme.of(context).colorScheme.secondary,
-                  showInactiveTitle: false,
-                  selectedIndex: _currentIndex,
-                  showElevation: true,
-                  itemCornerRadius: 24,
-                  iconSize: 25,
-                  curve: Curves.easeIn,
-                  onItemSelected: (index) {
-                    setState(() {
-                      _currentIndex = index;
-                    });
-                    _pageController.jumpToPage(index); // Navega para a página correspondente
-                  },
-                  items: <BottomNavyBarItem>[
-                    BottomNavyBarItem(
-                      icon: Icon(Icons.dashboard),
-                      title: Text('Dashboard'),
-                      inactiveColor: Theme.of(context).colorScheme.onSecondary,
-                      activeColor: Theme.of(context).colorScheme.tertiary,
-                      textAlign: TextAlign.center,
-                    ),
-                    BottomNavyBarItem(
-                      icon: Icon(Icons.people),
-                      title: Text('Leads'),
-                      inactiveColor: Theme.of(context).colorScheme.onSecondary,
-                      activeColor: Theme.of(context).colorScheme.tertiary,
-                      textAlign: TextAlign.center,
-                    ),
-                    BottomNavyBarItem(
-                      icon: Icon(Icons.admin_panel_settings),
-                      title: Text('Painel Adm'),
-                      inactiveColor: Theme.of(context).colorScheme.onSecondary,
-                      activeColor: Theme.of(context).colorScheme.tertiary,
-                      textAlign: TextAlign.center,
-                    ),
-                    BottomNavyBarItem(
-                      icon: Icon(Icons.settings),
-                      title: Text('Configurações'),
-                      inactiveColor: Theme.of(context).colorScheme.onSecondary,
-                      activeColor: Theme.of(context).colorScheme.tertiary,
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+              items: <BottomNavyBarItem>[
+                BottomNavyBarItem(
+                  icon: Icon(Icons.dashboard),
+                  title: Text('Dashboard'),
+                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
+                  activeColor: Theme.of(context).colorScheme.tertiary,
+                  textAlign: TextAlign.center,
                 ),
-              ),
+                BottomNavyBarItem(
+                  icon: Icon(Icons.people),
+                  title: Text('Leads'),
+                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
+                  activeColor: Theme.of(context).colorScheme.tertiary,
+                  textAlign: TextAlign.center,
+                ),
+                BottomNavyBarItem(
+                  icon: Icon(Icons.admin_panel_settings),
+                  title: Text('Painel Adm'),
+                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
+                  activeColor: Theme.of(context).colorScheme.tertiary,
+                  textAlign: TextAlign.center,
+                ),
+                BottomNavyBarItem(
+                  icon: Icon(Icons.settings),
+                  title: Text('Configurações'),
+                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
+                  activeColor: Theme.of(context).colorScheme.tertiary,
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
           ),
         ),
