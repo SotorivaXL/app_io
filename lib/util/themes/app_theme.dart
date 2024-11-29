@@ -58,7 +58,7 @@ class AppTheme {
       secondary: Color(0xFF252423),
       tertiary: Color(0xFF933FFC),
       background: Color(0xFF18191a),
-      surface: Color(0xFFE8D5FF),
+      surface: Color(0xFF252423),
       surfaceVariant: Color(0xFFFFFFFF),
       onPrimary: Color(0xFF0D1117),
       onSecondary: Color(0xFFFFFFFF),

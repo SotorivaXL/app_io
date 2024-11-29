@@ -32,6 +32,7 @@ dependencies:
   lottie: ^3.1.3
   dropdown_button2: ^2.3.9
   flutter_colorpicker: ^1.1.0
+  modal_side_sheet: ^0.0.1
   async: ^2.11.0
   flutter_holo_date_picker: ^2.0.0
   fl_chart: ^0.69.0
@@ -54,15 +55,14 @@ flutter:
     - 'assets/images/icons/logoLight.png'
     - 'assets/images/icons/logoDark.png'
     - 'assets/images/icons/logoTransparente.png'
-    - 'assets/images/tutotial/Detalhes.jpg'
+    - 'assets/animations/no_internet.json'
+    -  'assets/animations/confetti.json'
+    - 'assets/animations/balloons.json'
+    - 'assets/animations/congratulations.gif'
+    -  'assets/images/tutotial/Detalhes.jpg'
     - 'assets/images/tutotial/Filtros.jpg'
     - 'assets/images/tutotial/Status.jpg'
     - 'assets/images/tutotial/WhatsApp.jpg'
-    - 'assets/animations/no_internet.json'
-    - 'assets/animations/confetti.json'
-    - 'assets/animations/balloons.json'
-    - 'assets/animations/congratulations.gif'
-
 
   uses-material-design: true
 
