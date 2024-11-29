@@ -534,21 +534,23 @@ class _LeadsPageState extends State<LeadsPage> {
       return Shimmer.fromColors(
         baseColor: Theme.of(context).colorScheme.onSecondaryContainer,
         highlightColor: Theme.of(context).colorScheme.onTertiaryContainer,
-        child: ListView.builder(
-          physics: NeverScrollableScrollPhysics(),
-          itemCount: 6, // Número de placeholders
-          itemBuilder: (context, index) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 16.0),
-              child: Container(
-                height: 100.0,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.tertiary,
-                  borderRadius: BorderRadius.circular(10.0),
+        child: Flexible(
+          child: ListView.builder(
+            physics: NeverScrollableScrollPhysics(),
+            itemCount: 6, // Número de placeholders
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 16.0),
+                child: Container(
+                  height: 100.0,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.tertiary,
+                    borderRadius: BorderRadius.circular(10.0),
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       );
     }

@@ -35,7 +35,18 @@ class _DashboardPageState extends State<DashboardPage> {
   List<Map<String, dynamic>> selectedAnuncios = [];
   List<Map<String, dynamic>> anunciosList = [];
 
-  Map<String, dynamic> initialInsightsData = {};
+  Map<String, dynamic> initialInsightsData = {
+    'clicks': 0.0,
+    'cost_per_inline_link_click': 0.0,
+    'cpc': 0.0,
+    'cpm': 0.0,
+    'impressions': 0.0,
+    'reach': 0.0,
+    'spend': 0.0,
+    'inline_link_clicks': 0.0,
+    'inline_post_engagement': 0.0,
+    // Adicione outras chaves conforme necessário
+  };
 
   DateTime? startDate;
   DateTime? endDate;
@@ -196,8 +207,6 @@ class _DashboardPageState extends State<DashboardPage> {
                 _buildInlineLinkClicksChart(),
                 const SizedBox(height: 20),
                 _buildClicksCPCCPMChart(),
-                const SizedBox(height: 20),
-                _buildRadialBarChart(),
               ],
             ),
           ),
@@ -977,17 +986,15 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _buildSpendPercentageChart() {
     // Realiza os cálculos
-    double totalSpend = initialInsightsData['spend']?.toDouble() ?? 0;
+    double totalSpend = initialInsightsData['spend']?.toDouble() ?? 0.0; // Alterado para 0.0
 
-    double cpcSpend = (initialInsightsData['cpc']?.toDouble() ?? 0) * (initialInsightsData['clicks']?.toDouble() ?? 0);
-    double cpmSpend = (initialInsightsData['cpm']?.toDouble() ?? 0) * (initialInsightsData['impressions']?.toDouble() ?? 0) / 1000;
-    double costPerLinkClickSpend = (initialInsightsData['cost_per_inline_link_click']?.toDouble() ?? 0) * (initialInsightsData['inline_link_clicks']?.toDouble() ?? 0);
+    double cpcSpend = (initialInsightsData['cpc']?.toDouble() ?? 0.0) * (initialInsightsData['clicks']?.toDouble() ?? 0.0);
+    double cpmSpend = (initialInsightsData['cpm']?.toDouble() ?? 0.0) * (initialInsightsData['impressions']?.toDouble() ?? 0.0) / 1000;
+    double costPerLinkClickSpend = (initialInsightsData['cost_per_inline_link_click']?.toDouble() ?? 0.0) * (initialInsightsData['inline_link_clicks']?.toDouble() ?? 0.0);
 
-    double totalCalculatedSpend = cpcSpend + cpmSpend + costPerLinkClickSpend;
-
-    double cpcPercentage = (cpcSpend / totalSpend) * 100;
-    double cpmPercentage = (cpmSpend / totalSpend) * 100;
-    double costPerLinkClickPercentage = (costPerLinkClickSpend / totalSpend) * 100;
+    double cpcPercentage = totalSpend > 0 ? (cpcSpend / totalSpend) * 100 : 0.0; // Garantir double
+    double cpmPercentage = totalSpend > 0 ? (cpmSpend / totalSpend) * 100 : 0.0; // Garantir double
+    double costPerLinkClickPercentage = totalSpend > 0 ? (costPerLinkClickSpend / totalSpend) * 100 : 0.0; // Garantir double
 
     return Card(
       elevation: 4,
@@ -1058,6 +1065,7 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
     );
   }
+
 
   Widget _buildCPCvsCPMChart() {
     return Card(
@@ -1435,171 +1443,6 @@ class _DashboardPageState extends State<DashboardPage> {
                   borderData: FlBorderData(show: false),
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRadialBarChart() {
-    double impressionsValue = initialInsightsData['impressions']?.toDouble() ?? 0;
-    double reachValue = initialInsightsData['reach']?.toDouble() ?? 0;
-    double spendValue = initialInsightsData['spend']?.toDouble() ?? 0;
-
-    // Normalizar os valores para percentuais
-    double maxValue = [impressionsValue, reachValue, spendValue].reduce((a, b) => a > b ? a : b);
-
-    double impressionsPercent = (impressionsValue / maxValue) * 100;
-    double reachPercent = (reachValue / maxValue) * 100;
-    double spendPercent = (spendValue / maxValue) * 100;
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      color: Theme.of(context).colorScheme.secondary,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              'Comparação Radial',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onBackground,
-              ),
-            ),
-            const SizedBox(height: 10),
-            AspectRatio(
-              aspectRatio: 1,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  PieChart(
-                    PieChartData(
-                      sections: [
-                        PieChartSectionData(
-                          color: Colors.blueAccent,
-                          value: 100,
-                          radius: 80,
-                          title: '',
-                        ),
-                      ],
-                      startDegreeOffset: 270,
-                      sectionsSpace: 0,
-                      centerSpaceRadius: 0,
-                    ),
-                  ),
-                  PieChart(
-                    PieChartData(
-                      sections: [
-                        PieChartSectionData(
-                          color: Theme.of(context).colorScheme.secondary,
-                          value: 100 - impressionsPercent,
-                          radius: 80,
-                          title: '',
-                        ),
-                      ],
-                      startDegreeOffset: 270 + (impressionsPercent / 100) * 360,
-                      sectionsSpace: 0,
-                      centerSpaceRadius: 0,
-                    ),
-                  ),
-                  PieChart(
-                    PieChartData(
-                      sections: [
-                        PieChartSectionData(
-                          color: Colors.greenAccent,
-                          value: 100,
-                          radius: 60,
-                          title: '',
-                        ),
-                      ],
-                      startDegreeOffset: 270,
-                      sectionsSpace: 0,
-                      centerSpaceRadius: 0,
-                    ),
-                  ),
-                  PieChart(
-                    PieChartData(
-                      sections: [
-                        PieChartSectionData(
-                          color: Theme.of(context).colorScheme.secondary,
-                          value: 100 - reachPercent,
-                          radius: 60,
-                          title: '',
-                        ),
-                      ],
-                      startDegreeOffset: 270 + (reachPercent / 100) * 360,
-                      sectionsSpace: 0,
-                      centerSpaceRadius: 0,
-                    ),
-                  ),
-                  PieChart(
-                    PieChartData(
-                      sections: [
-                        PieChartSectionData(
-                          color: Colors.redAccent,
-                          value: 100,
-                          radius: 40,
-                          title: '',
-                        ),
-                      ],
-                      startDegreeOffset: 270,
-                      sectionsSpace: 0,
-                      centerSpaceRadius: 0,
-                    ),
-                  ),
-                  PieChart(
-                    PieChartData(
-                      sections: [
-                        PieChartSectionData(
-                          color: Theme.of(context).colorScheme.secondary,
-                          value: 100 - spendPercent,
-                          radius: 40,
-                          title: '',
-                        ),
-                      ],
-                      startDegreeOffset: 270 + (spendPercent / 100) * 360,
-                      sectionsSpace: 0,
-                      centerSpaceRadius: 0,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: 10),
-            Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(width: 10, height: 10, color: Colors.blueAccent),
-                    SizedBox(width: 5),
-                    Text('Impressões'),
-                  ],
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(width: 10, height: 10, color: Colors.greenAccent),
-                    SizedBox(width: 5),
-                    Text('Alcance'),
-                  ],
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(width: 10, height: 10, color: Colors.redAccent),
-                    SizedBox(width: 5),
-                    Text('Gasto'),
-                  ],
-                ),
-              ],
             ),
           ],
         ),

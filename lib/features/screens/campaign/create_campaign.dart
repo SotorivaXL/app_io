@@ -194,7 +194,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Criar Formulário',
+                        'Criar Campanhas',
                         style: TextStyle(
                           fontFamily: 'Poppins',
                           fontSize: 26,
@@ -244,14 +244,6 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                             padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
                             child: TextFormField(
                               decoration: InputDecoration(
-                                labelText: 'Nome da Campanha',
-                                labelStyle: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0,
-                                  color: Theme.of(context).colorScheme.onSecondary,
-                                ),
                                 hintText: 'Digite o nome da campanha',
                                 hintStyle: TextStyle(
                                   fontFamily: 'Poppins',
@@ -260,33 +252,11 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                   letterSpacing: 0,
                                   color: Theme.of(context).colorScheme.onSecondary,
                                 ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).primaryColor,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.tertiary,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                errorBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.error,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                focusedErrorBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.error,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(15),
+                                filled: true,
+                                fillColor: Theme.of(context).colorScheme.secondary,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
                                 ),
                                 prefixIcon: Icon(
                                   Icons.text_fields,
@@ -320,14 +290,6 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                             padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
                             child: TextFormField(
                               decoration: InputDecoration(
-                                labelText: 'Descrição',
-                                labelStyle: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0,
-                                  color: Theme.of(context).colorScheme.onSecondary,
-                                ),
                                 hintText: 'Digite a descrição',
                                 hintStyle: TextStyle(
                                   fontFamily: 'Poppins',
@@ -336,33 +298,11 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                   letterSpacing: 0,
                                   color: Theme.of(context).colorScheme.onSecondary,
                                 ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).primaryColor,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.tertiary,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                errorBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.error,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                focusedErrorBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.error,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(15),
+                                filled: true,
+                                fillColor: Theme.of(context).colorScheme.secondary,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
                                 ),
                                 prefixIcon: Icon(
                                   Icons.text_fields,
@@ -396,14 +336,6 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                             padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
                             child: TextFormField(
                               decoration: InputDecoration(
-                                labelText: 'Mensagem padrão',
-                                labelStyle: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0,
-                                  color: Theme.of(context).colorScheme.onSecondary,
-                                ),
                                 hintText: 'Digite a mensagem padrão',
                                 hintStyle: TextStyle(
                                   fontFamily: 'Poppins',
@@ -412,33 +344,11 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                   letterSpacing: 0,
                                   color: Theme.of(context).colorScheme.onSecondary,
                                 ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).primaryColor,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.tertiary,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                errorBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.error,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                focusedErrorBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.error,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(15),
+                                filled: true,
+                                fillColor: Theme.of(context).colorScheme.secondary,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
                                 ),
                                 prefixIcon: Icon(
                                   Icons.text_fields,
@@ -489,35 +399,13 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                 );
                               }).toList(),
                               decoration: InputDecoration(
+                                filled: true,
+                                fillColor: Theme.of(context).colorScheme.secondary,
                                 contentPadding:
-                                EdgeInsetsDirectional.fromSTEB(16, 20, 16, 20),
-                                enabledBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).primaryColor,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.tertiary,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                errorBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.error,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                focusedErrorBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.error,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(15),
+                                EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                                border: UnderlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
                                 ),
                               ),
                               hint: Text(
@@ -540,7 +428,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                       ],
                     ),
                   ),
-                  SizedBox(height: 16),
+                  SizedBox(height: 35),
                   Padding(
                     padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
                     child: Column(
