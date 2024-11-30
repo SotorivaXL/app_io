@@ -741,7 +741,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                         size: 25,
                                       ),
                                       label: Text(
-                                        'Cópiar telefones',
+                                        'Copiar telefones',
                                         style: TextStyle(
                                           fontFamily: 'Poppins',
                                           fontSize: 18,
