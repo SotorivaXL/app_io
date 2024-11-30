@@ -334,16 +334,6 @@ class _EditCompaniesState extends State<EditCompanies> {
                                 autofocus: true,
                                 obscureText: false,
                                 decoration: InputDecoration(
-                                  labelText: 'Empresa',
-                                  labelStyle: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary,
-                                  ),
                                   hintText: 'Digite o nome da empresa',
                                   hintStyle: TextStyle(
                                     fontFamily: 'Poppins',
@@ -354,37 +344,11 @@ class _EditCompaniesState extends State<EditCompanies> {
                                         .colorScheme
                                         .onSecondary,
                                   ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Theme.of(context).primaryColor,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .tertiary,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                  errorBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color:
-                                      Theme.of(context).colorScheme.error,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                  focusedErrorBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color:
-                                      Theme.of(context).colorScheme.error,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
+                                  filled: true,
+                                  fillColor: Theme.of(context).colorScheme.secondary,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: BorderSide.none,
                                   ),
                                   prefixIcon: Icon(
                                     Icons.corporate_fare,
@@ -429,16 +393,6 @@ class _EditCompaniesState extends State<EditCompanies> {
                                 obscureText: false,
                                 enabled: false,
                                 decoration: InputDecoration(
-                                  labelText: 'Email',
-                                  labelStyle: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary,
-                                  ),
                                   hintText: 'Digite o email da empresa',
                                   hintStyle: TextStyle(
                                     fontFamily: 'Poppins',
@@ -449,37 +403,11 @@ class _EditCompaniesState extends State<EditCompanies> {
                                         .colorScheme
                                         .onSecondary,
                                   ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Theme.of(context).primaryColor,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .tertiary,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                  errorBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color:
-                                      Theme.of(context).colorScheme.error,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                  focusedErrorBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color:
-                                      Theme.of(context).colorScheme.error,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
+                                  filled: true,
+                                  fillColor: Theme.of(context).colorScheme.secondary,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: BorderSide.none,
                                   ),
                                   prefixIcon: Icon(
                                     Icons.mail,
@@ -524,16 +452,6 @@ class _EditCompaniesState extends State<EditCompanies> {
                                 autofocus: true,
                                 obscureText: false,
                                 decoration: InputDecoration(
-                                  labelText: 'Contrato',
-                                  labelStyle: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary,
-                                  ),
                                   hintText: 'Digite a data final do contrato',
                                   hintStyle: TextStyle(
                                     fontFamily: 'Poppins',
@@ -544,37 +462,11 @@ class _EditCompaniesState extends State<EditCompanies> {
                                         .colorScheme
                                         .onSecondary,
                                   ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Theme.of(context).primaryColor,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .tertiary,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                  errorBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color:
-                                      Theme.of(context).colorScheme.error,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                  focusedErrorBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color:
-                                      Theme.of(context).colorScheme.error,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
+                                  filled: true,
+                                  fillColor: Theme.of(context).colorScheme.secondary,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: BorderSide.none,
                                   ),
                                   prefixIcon: Icon(
                                     Icons.import_contacts,
@@ -621,16 +513,6 @@ class _EditCompaniesState extends State<EditCompanies> {
                                 obscureText: false,
                                 enabled: false,
                                 decoration: InputDecoration(
-                                  labelText: 'CNPJ',
-                                  labelStyle: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary,
-                                  ),
                                   hintText: 'Digite o CNPJ da empresa',
                                   hintStyle: TextStyle(
                                     fontFamily: 'Poppins',
@@ -641,37 +523,11 @@ class _EditCompaniesState extends State<EditCompanies> {
                                         .colorScheme
                                         .onSecondary,
                                   ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Theme.of(context).primaryColor,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .tertiary,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                  errorBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color:
-                                      Theme.of(context).colorScheme.error,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                  focusedErrorBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color:
-                                      Theme.of(context).colorScheme.error,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
+                                  filled: true,
+                                  fillColor: Theme.of(context).colorScheme.secondary,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: BorderSide.none,
                                   ),
                                   prefixIcon: Icon(
                                     Icons.contact_emergency_sharp,
@@ -717,49 +573,11 @@ class _EditCompaniesState extends State<EditCompanies> {
                                 obscureText: false,
                                 enabled: false,
                                 decoration: InputDecoration(
-                                  labelText: 'Fundada em',
-                                  labelStyle: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary,
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Theme.of(context).primaryColor,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .tertiary,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                  errorBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .error,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                  focusedErrorBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .error,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(15),
+                                  filled: true,
+                                  fillColor: Theme.of(context).colorScheme.secondary,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: BorderSide.none,
                                   ),
                                   prefixIcon: Icon(
                                     Icons.calendar_month,
@@ -1178,7 +996,7 @@ class _EditCompaniesState extends State<EditCompanies> {
                             alignment: AlignmentDirectional(0, 0),
                             child: Padding(
                               padding:
-                              EdgeInsetsDirectional.fromSTEB(0, 20, 20, 0),
+                              EdgeInsetsDirectional.fromSTEB(20, 20, 20, 20),
                               child: ElevatedButton.icon(
                                 onPressed: _isChangingPassword
                                     ? null

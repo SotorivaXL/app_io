@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:app_io/features/screens/configurations/configurations.dart';
 import 'package:app_io/features/screens/dasboard/dashboard_page.dart';
 import 'package:app_io/features/screens/leads/leads_page.dart';
@@ -183,7 +182,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     tabs.add(
       Tab(
         icon: Icon(Icons.settings),
-        text: 'Configurações',
+        text: 'Config.',
       ),
     );
 
@@ -586,7 +585,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                 ),
                 BottomNavyBarItem(
                   icon: Icon(Icons.settings),
-                  title: Text('Configurações'),
+                  title: Text('Config.'),
                   inactiveColor: Theme.of(context).colorScheme.onSecondary,
                   activeColor: Theme.of(context).colorScheme.tertiary,
                   textAlign: TextAlign.center,

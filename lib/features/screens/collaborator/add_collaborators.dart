@@ -194,15 +194,6 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                   autofocus: true,
                                   obscureText: false,
                                   decoration: InputDecoration(
-                                    labelText: 'Nome',
-                                    labelStyle: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0,
-                                      color:
-                                      Theme.of(context).colorScheme.onSecondary,
-                                    ),
                                     hintText: 'Digite o nome do colaborador',
                                     hintStyle: TextStyle(
                                       fontFamily: 'Poppins',
@@ -212,34 +203,11 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                       color:
                                       Theme.of(context).colorScheme.onSecondary,
                                     ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).primaryColor,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color:
-                                        Theme.of(context).colorScheme.tertiary,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    errorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedErrorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
+                                    filled: true,
+                                    fillColor: Theme.of(context).colorScheme.secondary,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide.none,
                                     ),
                                     prefixIcon: Icon(
                                       Icons.person,
@@ -281,15 +249,6 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                   autofocus: true,
                                   obscureText: false,
                                   decoration: InputDecoration(
-                                    labelText: 'Email',
-                                    labelStyle: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0,
-                                      color:
-                                      Theme.of(context).colorScheme.onSecondary,
-                                    ),
                                     hintText: 'Digite o email do colaborador',
                                     hintStyle: TextStyle(
                                       fontFamily: 'Poppins',
@@ -299,34 +258,11 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                       color:
                                       Theme.of(context).colorScheme.onSecondary,
                                     ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).primaryColor,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color:
-                                        Theme.of(context).colorScheme.tertiary,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    errorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedErrorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
+                                    filled: true,
+                                    fillColor: Theme.of(context).colorScheme.secondary,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide.none,
                                     ),
                                     prefixIcon: Icon(
                                       Icons.mail,
@@ -369,15 +305,6 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                   autofocus: true,
                                   obscureText: false,
                                   decoration: InputDecoration(
-                                    labelText: 'Cargo',
-                                    labelStyle: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0,
-                                      color:
-                                      Theme.of(context).colorScheme.onSecondary,
-                                    ),
                                     hintText: 'Digite o cargo do colaborador',
                                     hintStyle: TextStyle(
                                       fontFamily: 'Poppins',
@@ -387,34 +314,11 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                       color:
                                       Theme.of(context).colorScheme.onSecondary,
                                     ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).primaryColor,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color:
-                                        Theme.of(context).colorScheme.tertiary,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    errorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedErrorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
+                                    filled: true,
+                                    fillColor: Theme.of(context).colorScheme.secondary,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide.none,
                                     ),
                                     prefixIcon: Icon(
                                       Icons.business_center,
@@ -468,7 +372,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                           ),
                                           child: Container(
                                             decoration: BoxDecoration(
-                                              color: Theme.of(context).colorScheme.background,
+                                              color: Theme.of(context).colorScheme.secondary,
                                               borderRadius: BorderRadius.vertical(
                                                 top: Radius.circular(25),
                                               ),
@@ -496,7 +400,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                                     locale: DateTimePickerLocale.pt_br,
                                                     looping: false, // Desativa o loop para evitar que datas iniciais fiquem abaixo da data atual
                                                     pickerTheme: DateTimePickerTheme(
-                                                      backgroundColor: Theme.of(context).colorScheme.background, // Fundo
+                                                      backgroundColor: Theme.of(context).colorScheme.secondary, // Fundo
                                                       itemTextStyle: TextStyle(
                                                         color: Theme.of(context).colorScheme.onSecondary, // Cor do texto
                                                         fontSize: 18,
@@ -550,14 +454,6 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                     child: TextFormField(
                                       controller: _model.tfBirthTextController,
                                       decoration: InputDecoration(
-                                        labelText: 'Nascimento',
-                                        labelStyle: TextStyle(
-                                          fontFamily: 'Poppins',
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.w600,
-                                          letterSpacing: 0,
-                                          color: Theme.of(context).colorScheme.onSecondary,
-                                        ),
                                         hintText: 'Selecione a data de nascimento',
                                         hintStyle: TextStyle(
                                           fontFamily: 'Poppins',
@@ -566,19 +462,11 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                           letterSpacing: 0,
                                           color: Theme.of(context).colorScheme.onSecondary,
                                         ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color: Theme.of(context).primaryColor,
-                                            width: 2,
-                                          ),
-                                          borderRadius: BorderRadius.circular(15),
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color: Theme.of(context).colorScheme.tertiary,
-                                            width: 2,
-                                          ),
-                                          borderRadius: BorderRadius.circular(15),
+                                        filled: true,
+                                        fillColor: Theme.of(context).colorScheme.secondary,
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: BorderSide.none,
                                         ),
                                         prefixIcon: Icon(
                                           Icons.calendar_month,
@@ -620,15 +508,6 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                   autofocus: true,
                                   obscureText: !_model.tfPasswordVisibility,
                                   decoration: InputDecoration(
-                                    labelText: 'Senha',
-                                    labelStyle: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0,
-                                      color:
-                                      Theme.of(context).colorScheme.onSecondary,
-                                    ),
                                     hintText: 'Crie uma senha para o colaborador',
                                     hintStyle: TextStyle(
                                       fontFamily: 'Poppins',
@@ -638,34 +517,11 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                       color:
                                       Theme.of(context).colorScheme.onSecondary,
                                     ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).primaryColor,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color:
-                                        Theme.of(context).colorScheme.tertiary,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    errorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedErrorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
+                                    filled: true,
+                                    fillColor: Theme.of(context).colorScheme.secondary,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide.none,
                                     ),
                                     prefixIcon: Icon(
                                       Icons.lock,
@@ -723,15 +579,6 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                   autofocus: true,
                                   obscureText: !_model.tfPasswordConfirmVisibility,
                                   decoration: InputDecoration(
-                                    labelText: 'Confirmar senha',
-                                    labelStyle: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0,
-                                      color:
-                                      Theme.of(context).colorScheme.onSecondary,
-                                    ),
                                     hintText: 'Confirme a senha do colaborador',
                                     hintStyle: TextStyle(
                                       fontFamily: 'Poppins',
@@ -741,34 +588,11 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                       color:
                                       Theme.of(context).colorScheme.onSecondary,
                                     ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).primaryColor,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color:
-                                        Theme.of(context).colorScheme.tertiary,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    errorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedErrorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
+                                    filled: true,
+                                    fillColor: Theme.of(context).colorScheme.secondary,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide.none,
                                     ),
                                     prefixIcon: Icon(
                                       Icons.lock,
@@ -992,7 +816,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                           Align(
                             alignment: AlignmentDirectional(0, 0),
                             child: Padding(
-                              padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+                              padding: EdgeInsetsDirectional.fromSTEB(20, 20, 20, 20),
                               child: _isLoading
                                   ? Center(
                                 child: CircularProgressIndicator(),

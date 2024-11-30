@@ -6,7 +6,7 @@ import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';
 import 'package:app_io/util/services/firestore_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:dropdown_button2/dropdown_button2.dart';
+// Removido: import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:provider/provider.dart';
 
 class DashboardConfigurations extends StatefulWidget {
@@ -18,7 +18,8 @@ class DashboardConfigurations extends StatefulWidget {
 }
 
 class _DashboardConfigurationsState extends State<DashboardConfigurations> {
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userDocSubscription;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+  _userDocSubscription;
   bool hasConfigurarDashAccess = false;
   bool isLoading = true;
   bool _hasShownPermissionRevokedDialog = false;
@@ -185,12 +186,15 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
       await _updateContasAnuncioList();
 
       // Criar um mapa de contasAnuncio disponíveis
-      final contaMap = {for (var conta in contasAnuncioList) conta['id']: conta['name']};
+      final contaMap = {
+        for (var conta in contasAnuncioList) conta['id']: conta['name']
+      };
 
       // Atualizar anuncios['contasAnuncio']
       setState(() {
         anuncios['contasAnuncio'] = contaIds
-            .map((id) => {'id': id, 'name': contaMap[id] ?? 'Conta desconhecida'})
+            .map((id) =>
+        {'id': id, 'name': contaMap[id] ?? 'Conta desconhecida'})
             .toList();
       });
     } else {
@@ -214,13 +218,15 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
       isLoading = true;
     });
 
-    final authProvider = Provider.of<appProvider.AuthProvider>(context, listen: false);
+    final authProvider =
+    Provider.of<appProvider.AuthProvider>(context, listen: false);
     final user = authProvider.user;
 
     if (user != null) {
       try {
         // Verifica se o documento existe na coleção 'empresas'
-        DocumentSnapshot<Map<String, dynamic>> userDoc = await FirebaseFirestore.instance
+        DocumentSnapshot<Map<String, dynamic>> userDoc = await FirebaseFirestore
+            .instance
             .collection('empresas')
             .doc(user.uid)
             .get();
@@ -237,7 +243,8 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
           if (userDoc.exists) {
             _listenToUserDocument('users', user.uid);
           } else {
-            print("Documento do usuário não encontrado nas coleções 'empresas' ou 'users'.");
+            print(
+                "Documento do usuário não encontrado nas coleções 'empresas' ou 'users'.");
             setState(() {
               isLoading = false;
             });
@@ -266,7 +273,8 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
       if (userDoc.exists) {
         _updatePermissions(userDoc);
       } else {
-        print("Documento do usuário não encontrado na coleção '$collectionName'.");
+        print(
+            "Documento do usuário não encontrado na coleção '$collectionName'.");
       }
     });
   }
@@ -299,7 +307,8 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                 padding: EdgeInsets.all(16.0),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.background,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
+                  borderRadius:
+                  BorderRadius.vertical(top: Radius.circular(20.0)),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -330,7 +339,8 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).colorScheme.primary,
-                        padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                        padding:
+                        EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20.0),
                         ),
@@ -360,7 +370,8 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
         });
       }
     } else {
-      _hasShownPermissionRevokedDialog = false; // Reseta a flag se a permissão voltar
+      _hasShownPermissionRevokedDialog =
+      false; // Reseta a flag se a permissão voltar
     }
   }
 
@@ -403,8 +414,7 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                           children: [
                             Icon(
                               Icons.arrow_back_ios_new,
-                              color:
-                              Theme.of(context).colorScheme.onBackground,
+                              color: Theme.of(context).colorScheme.onBackground,
                               size: 20,
                             ),
                             const SizedBox(width: 4),
@@ -413,8 +423,7 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                               style: TextStyle(
                                 fontFamily: 'Poppins',
                                 fontSize: 16,
-                                color:
-                                Theme.of(context).colorScheme.onSecondary,
+                                color: Theme.of(context).colorScheme.onSecondary,
                               ),
                             ),
                           ],
@@ -436,13 +445,12 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                   Stack(
                     children: [
                       _isLoading
-                        ? CircularProgressIndicator()
-                        : IconButton(
-                          icon: Icon(
-                              Icons.save_alt_rounded,
-                              color: Theme.of(context).colorScheme.onBackground,
-                              size: 30
-                          ),
+                          ? CircularProgressIndicator()
+                          : IconButton(
+                        icon: Icon(Icons.save_alt_rounded,
+                            color:
+                            Theme.of(context).colorScheme.onBackground,
+                            size: 30),
                         onPressed: _isLoading ? null : _saveAnuncios,
                       ),
                     ],
@@ -458,8 +466,10 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
           padding: const EdgeInsets.all(20.0),
           child: SingleChildScrollView(
             child: Column(
-              mainAxisSize: MainAxisSize
-                  .min, // Definindo Column para ocupar apenas o espaço necessário
+              mainAxisSize:
+              MainAxisSize.min, // Ocupa apenas o espaço necessário
+              crossAxisAlignment:
+              CrossAxisAlignment.start, // Alinha o conteúdo à esquerda
               children: [
                 FutureBuilder<List<Map<String, dynamic>>>(
                   future: _fetchEmpresas(),
@@ -469,11 +479,21 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                     return Row(
                       children: [
                         Expanded(
-                          child: DropdownButtonFormField2<String>(
+                          child: DropdownButtonFormField<String>(
+                            value: empresaSelecionada,
                             items: snapshot.data!.map((empresa) {
                               return DropdownMenuItem<String>(
                                 value: empresa['id'] as String,
-                                child: Text(empresa['NomeEmpresa']),
+                                child: Text(
+                                  empresa['NomeEmpresa'],
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 12,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
+                                  ),
+                                ),
                               );
                             }).toList(),
                             onChanged: (value) {
@@ -484,52 +504,31 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                                 }
                               });
                             },
-                            decoration: InputDecoration(
-                              hintText: 'Selecionar Empresa',
-                              hintStyle: TextStyle(
+                            hint: Text(
+                              'Selecionar Empresa',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
                                 fontFamily: 'Poppins',
-                                fontSize: 12,
+                                fontSize: 15,
                                 color:
                                 Theme.of(context).colorScheme.onSecondary,
                               ),
-                              enabledBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.primary,
-                                    width: 2),
-                                borderRadius: BorderRadius.circular(7.0),
-                              ),
-                              focusedBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(
-                                    color:
-                                    Theme.of(context).colorScheme.tertiary,
-                                    width: 2),
-                                borderRadius: BorderRadius.circular(7.0),
-                              ),
-                              errorBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.error,
-                                    width: 2),
-                                borderRadius: BorderRadius.circular(7.0),
-                              ),
-                              focusedErrorBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.error,
-                                    width: 2),
-                                borderRadius: BorderRadius.circular(7.0),
+                            ),
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor: Theme.of(context).colorScheme.secondary,
+                              contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 0),
+                              border: UnderlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide.none,
                               ),
                             ),
-                            dropdownStyleData: DropdownStyleData(
-                              maxHeight: 200.0,
-                              width: dropdownWidth,
-                              decoration: BoxDecoration(
-                                color:
-                                Theme.of(context).colorScheme.background,
-                              ),
-                            ),
-                            menuItemStyleData: const MenuItemStyleData(
-                              padding:
-                              EdgeInsets.symmetric(horizontal: 16.0),
-                            ),
+                            icon: Icon(Icons.arrow_drop_down,
+                                color: Theme.of(context).colorScheme.onSecondary),
+                            dropdownColor: Theme.of(context)
+                                .colorScheme
+                                .background, // Cor de fundo do dropdown
                           ),
                         ),
                       ],
@@ -545,7 +544,8 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                     return Row(
                       children: [
                         Expanded(
-                          child: DropdownButtonFormField2<String>(
+                          child: DropdownButtonFormField<String>(
+                            value: null,
                             items: snapshot.data!.map((bm) {
                               return DropdownMenuItem<String>(
                                 value: bm['id'] as String,
@@ -554,8 +554,9 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                                   style: TextStyle(
                                     fontFamily: 'Poppins',
                                     fontSize: 12,
-                                    color:
-                                    Theme.of(context).colorScheme.onSecondary,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
                                   ),
                                 ),
                               );
@@ -578,58 +579,37 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                                 });
                               }
                             },
-                            decoration: InputDecoration(
-                              hintText: 'Selecione as BMs',
-                              hintStyle: TextStyle(
+                            hint: Text(
+                              'Selecione as BMs',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
                                 fontFamily: 'Poppins',
-                                fontSize: 12,
+                                fontSize: 15,
                                 color:
                                 Theme.of(context).colorScheme.onSecondary,
                               ),
-                              enabledBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.primary,
-                                    width: 2),
-                                borderRadius: BorderRadius.circular(7.0),
-                              ),
-                              focusedBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(
-                                    color:
-                                    Theme.of(context).colorScheme.tertiary,
-                                    width: 2),
-                                borderRadius: BorderRadius.circular(7.0),
-                              ),
-                              errorBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.error,
-                                    width: 2),
-                                borderRadius: BorderRadius.circular(7.0),
-                              ),
-                              focusedErrorBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.error,
-                                    width: 2),
-                                borderRadius: BorderRadius.circular(7.0),
+                            ),
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor: Theme.of(context).colorScheme.secondary,
+                              contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 0),
+                              border: UnderlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide.none,
                               ),
                             ),
-                            dropdownStyleData: DropdownStyleData(
-                              maxHeight: 200.0,
-                              width: dropdownWidth,
-                              decoration: BoxDecoration(
-                                color:
-                                Theme.of(context).colorScheme.background,
-                              ),
-                            ),
-                            menuItemStyleData: const MenuItemStyleData(
-                              padding:
-                              EdgeInsets.symmetric(horizontal: 16.0),
-                            ),
+                            icon: Icon(Icons.arrow_drop_down,
+                                color: Theme.of(context).colorScheme.onSecondary),
+                            dropdownColor:
+                            Theme.of(context).colorScheme.background,
                           ),
                         ),
                       ],
                     );
                   },
                 ),
+                const SizedBox(height: 8.0),
                 Wrap(
                   spacing: 8.0, // Espaçamento horizontal entre os chips
                   runSpacing: 4.0, // Espaçamento vertical entre as linhas
@@ -653,7 +633,8 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                 Row(
                   children: [
                     Expanded(
-                      child: DropdownButtonFormField2<String>(
+                      child: DropdownButtonFormField<String>(
+                        value: null,
                         items: contasAnuncioList.map((conta) {
                           return DropdownMenuItem<String>(
                             value: conta['id'] as String,
@@ -677,61 +658,40 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                                 anuncios['contasAnuncio'].add({
                                   'id': value,
                                   'name': contasAnuncioList
-                                      .firstWhere((conta) =>
-                                  conta['id'] == value)['name'],
+                                      .firstWhere(
+                                          (conta) => conta['id'] == value)['name'],
                                 });
                               }
                             });
                           }
                         },
-                        decoration: InputDecoration(
-                          hintText: 'Selecione as contas de anúncio',
-                          hintStyle: TextStyle(
+                        hint: Text(
+                          'Selecione as contas de anúncio',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
                             fontFamily: 'Poppins',
-                            fontSize: 12,
+                            fontSize: 15,
                             color: Theme.of(context).colorScheme.onSecondary,
                           ),
-                          enabledBorder: UnderlineInputBorder(
-                            borderSide: BorderSide(
-                                color: Theme.of(context).colorScheme.primary,
-                                width: 2),
-                            borderRadius: BorderRadius.circular(7.0),
-                          ),
-                          focusedBorder: UnderlineInputBorder(
-                            borderSide: BorderSide(
-                                color: Theme.of(context).colorScheme.tertiary,
-                                width: 2),
-                            borderRadius: BorderRadius.circular(7.0),
-                          ),
-                          errorBorder: UnderlineInputBorder(
-                            borderSide: BorderSide(
-                                color: Theme.of(context).colorScheme.error,
-                                width: 2),
-                            borderRadius: BorderRadius.circular(7.0),
-                          ),
-                          focusedErrorBorder: UnderlineInputBorder(
-                            borderSide: BorderSide(
-                                color: Theme.of(context).colorScheme.error,
-                                width: 2),
-                            borderRadius: BorderRadius.circular(7.0),
+                        ),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: Theme.of(context).colorScheme.secondary,
+                          contentPadding:
+                          EdgeInsets.symmetric(horizontal: 20, vertical: 0),
+                          border: UnderlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide.none,
                           ),
                         ),
-                        isExpanded: true,
-                        dropdownStyleData: DropdownStyleData(
-                          maxHeight: 200.0,
-                          width: dropdownWidth,
-                          decoration: BoxDecoration(
-                            color:
-                            Theme.of(context).colorScheme.background,
-                          ),
-                        ),
-                        menuItemStyleData: const MenuItemStyleData(
-                          padding: EdgeInsets.symmetric(horizontal: 16.0),
-                        ),
+                        icon: Icon(Icons.arrow_drop_down,
+                            color: Theme.of(context).colorScheme.onSecondary),
+                        dropdownColor: Theme.of(context).colorScheme.background,
                       ),
                     ),
                   ],
                 ),
+                const SizedBox(height: 8.0),
                 Wrap(
                   spacing: 8.0, // Espaçamento horizontal entre os chips
                   runSpacing: 4.0, // Espaçamento vertical entre as linhas

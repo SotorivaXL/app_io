@@ -178,14 +178,6 @@ class _AddCompanyState extends State<AddCompany> {
                                   autofocus: true,
                                   obscureText: false,
                                   decoration: InputDecoration(
-                                    labelText: 'Empresa',
-                                    labelStyle: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0,
-                                      color: Theme.of(context).colorScheme.onSecondary,
-                                    ),
                                     hintText: 'Digite o nome da empresa',
                                     hintStyle: TextStyle(
                                       fontFamily: 'Poppins',
@@ -194,40 +186,19 @@ class _AddCompanyState extends State<AddCompany> {
                                       letterSpacing: 0,
                                       color: Theme.of(context).colorScheme.onSecondary,
                                     ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).primaryColor,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.tertiary,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    errorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedErrorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
                                     prefixIcon: Icon(
                                       Icons.corporate_fare,
                                       color: Theme.of(context).colorScheme.tertiary,
                                       size: 25,
                                     ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    filled: true,
+                                    fillColor: Theme.of(context).colorScheme.secondary,
                                   ),
+
                                   style: TextStyle(
                                     fontFamily: 'Poppins',
                                     fontSize: 14,
@@ -260,14 +231,6 @@ class _AddCompanyState extends State<AddCompany> {
                                   autofocus: true,
                                   obscureText: false,
                                   decoration: InputDecoration(
-                                    labelText: 'Email',
-                                    labelStyle: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0,
-                                      color: Theme.of(context).colorScheme.onSecondary,
-                                    ),
                                     hintText: 'Digite o email da empresa',
                                     hintStyle: TextStyle(
                                       fontFamily: 'Poppins',
@@ -276,33 +239,11 @@ class _AddCompanyState extends State<AddCompany> {
                                       letterSpacing: 0,
                                       color: Theme.of(context).colorScheme.onSecondary,
                                     ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).primaryColor,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.tertiary,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    errorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedErrorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
+                                    filled: true,
+                                    fillColor: Theme.of(context).colorScheme.secondary,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide.none,
                                     ),
                                     prefixIcon: Icon(
                                       Icons.mail,
@@ -343,14 +284,6 @@ class _AddCompanyState extends State<AddCompany> {
                                   autofocus: true,
                                   obscureText: false,
                                   decoration: InputDecoration(
-                                    labelText: 'Contrato',
-                                    labelStyle: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0,
-                                      color: Theme.of(context).colorScheme.onSecondary,
-                                    ),
                                     hintText: 'Digite a data final do contrato',
                                     hintStyle: TextStyle(
                                       fontFamily: 'Poppins',
@@ -359,33 +292,11 @@ class _AddCompanyState extends State<AddCompany> {
                                       letterSpacing: 0,
                                       color: Theme.of(context).colorScheme.onSecondary,
                                     ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).primaryColor,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.tertiary,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    errorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedErrorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
+                                    filled: true,
+                                    fillColor: Theme.of(context).colorScheme.secondary,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide.none,
                                     ),
                                     prefixIcon: Icon(
                                       Icons.import_contacts,
@@ -427,14 +338,6 @@ class _AddCompanyState extends State<AddCompany> {
                                   autofocus: true,
                                   obscureText: false,
                                   decoration: InputDecoration(
-                                    labelText: 'CNPJ',
-                                    labelStyle: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0,
-                                      color: Theme.of(context).colorScheme.onSecondary,
-                                    ),
                                     hintText: 'Digite o CNPJ da empresa',
                                     hintStyle: TextStyle(
                                       fontFamily: 'Poppins',
@@ -443,33 +346,11 @@ class _AddCompanyState extends State<AddCompany> {
                                       letterSpacing: 0,
                                       color: Theme.of(context).colorScheme.onSecondary,
                                     ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).primaryColor,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.tertiary,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    errorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedErrorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
+                                    filled: true,
+                                    fillColor: Theme.of(context).colorScheme.secondary,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide.none,
                                     ),
                                     prefixIcon: Icon(
                                       Icons.contact_emergency_sharp,
@@ -524,7 +405,7 @@ class _AddCompanyState extends State<AddCompany> {
                                           ),
                                           child: Container(
                                             decoration: BoxDecoration(
-                                              color: Theme.of(context).colorScheme.background,
+                                              color: Theme.of(context).colorScheme.secondary,
                                               borderRadius: BorderRadius.vertical(
                                                 top: Radius.circular(25),
                                               ),
@@ -552,7 +433,7 @@ class _AddCompanyState extends State<AddCompany> {
                                                     locale: DateTimePickerLocale.pt_br,
                                                     looping: false, // Desativa o loop para evitar que datas iniciais fiquem abaixo da data atual
                                                     pickerTheme: DateTimePickerTheme(
-                                                      backgroundColor: Theme.of(context).colorScheme.background, // Fundo
+                                                      backgroundColor: Theme.of(context).colorScheme.secondary, // Fundo
                                                       itemTextStyle: TextStyle(
                                                         color: Theme.of(context).colorScheme.onSecondary, // Cor do texto
                                                         fontSize: 18,
@@ -605,14 +486,6 @@ class _AddCompanyState extends State<AddCompany> {
                                     child: TextFormField(
                                       controller: _model.tfBirthTextController,
                                       decoration: InputDecoration(
-                                        labelText: 'Abertura',
-                                        labelStyle: TextStyle(
-                                          fontFamily: 'Poppins',
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.w600,
-                                          letterSpacing: 0,
-                                          color: Theme.of(context).colorScheme.onSecondary,
-                                        ),
                                         hintText: 'Selecione a data de abertura',
                                         hintStyle: TextStyle(
                                           fontFamily: 'Poppins',
@@ -621,19 +494,11 @@ class _AddCompanyState extends State<AddCompany> {
                                           letterSpacing: 0,
                                           color: Theme.of(context).colorScheme.onSecondary,
                                         ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color: Theme.of(context).primaryColor,
-                                            width: 2,
-                                          ),
-                                          borderRadius: BorderRadius.circular(15),
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color: Theme.of(context).colorScheme.tertiary,
-                                            width: 2,
-                                          ),
-                                          borderRadius: BorderRadius.circular(15),
+                                        filled: true,
+                                        fillColor: Theme.of(context).colorScheme.secondary,
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: BorderSide.none,
                                         ),
                                         prefixIcon: Icon(
                                           Icons.calendar_month,
@@ -674,14 +539,6 @@ class _AddCompanyState extends State<AddCompany> {
                                   autofocus: true,
                                   obscureText: !_model.tfPasswordVisibility,
                                   decoration: InputDecoration(
-                                    labelText: 'Senha',
-                                    labelStyle: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0,
-                                      color: Theme.of(context).colorScheme.onSecondary,
-                                    ),
                                     hintText: 'Crie uma senha para a empresa',
                                     hintStyle: TextStyle(
                                       fontFamily: 'Poppins',
@@ -690,33 +547,11 @@ class _AddCompanyState extends State<AddCompany> {
                                       letterSpacing: 0,
                                       color: Theme.of(context).colorScheme.onSecondary,
                                     ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).primaryColor,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.tertiary,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    errorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedErrorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
+                                    filled: true,
+                                    fillColor: Theme.of(context).colorScheme.secondary,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide.none,
                                     ),
                                     prefixIcon: Icon(
                                       Icons.lock,
@@ -769,14 +604,6 @@ class _AddCompanyState extends State<AddCompany> {
                                   autofocus: true,
                                   obscureText: !_model.tfPasswordConfirmVisibility,
                                   decoration: InputDecoration(
-                                    labelText: 'Confirmar senha',
-                                    labelStyle: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0,
-                                      color: Theme.of(context).colorScheme.onSecondary,
-                                    ),
                                     hintText: 'Confirme a senha da empresa',
                                     hintStyle: TextStyle(
                                       fontFamily: 'Poppins',
@@ -785,33 +612,11 @@ class _AddCompanyState extends State<AddCompany> {
                                       letterSpacing: 0,
                                       color: Theme.of(context).colorScheme.onSecondary,
                                     ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).primaryColor,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.tertiary,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    errorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                    focusedErrorBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: Theme.of(context).colorScheme.error,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(15),
+                                    filled: true,
+                                    fillColor: Theme.of(context).colorScheme.secondary,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide.none,
                                     ),
                                     prefixIcon: Icon(
                                       Icons.lock,
@@ -945,7 +750,7 @@ class _AddCompanyState extends State<AddCompany> {
                           Padding(
                             padding: EdgeInsetsDirectional.fromSTEB(20, 10, 20, 10),
                             child: Text(
-                              'Marque os acessos do colaborador:',
+                              'Marque os acessos da empresa:',
                               textAlign: TextAlign.start,
                               style: TextStyle(
                                 fontFamily: 'Poppins',
@@ -1193,18 +998,13 @@ class _AddCompanyState extends State<AddCompany> {
                           Align(
                             alignment: AlignmentDirectional(0, 0),
                             child: Padding(
-                              padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+                              padding: EdgeInsetsDirectional.fromSTEB(20, 20, 20, 20),
                               child: _isLoading
                                   ? Center(
                                 child: CircularProgressIndicator(),  // Exibe a barra de progresso
                               )
                                   : ElevatedButton.icon(
                                 onPressed: _isLoading ? null : _addCompany,  // Desabilita o botão enquanto carrega
-                                icon: Icon(
-                                  Icons.add,
-                                  color: Theme.of(context).colorScheme.outline,
-                                  size: 25,
-                                ),
                                 label: Text(
                                   'ADICIONAR',
                                   style: TextStyle(
