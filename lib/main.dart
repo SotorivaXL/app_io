@@ -14,6 +14,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
@@ -33,6 +34,12 @@ void main() async {
   // Inicialize o serviço de conectividade
   final connectivityService = ConnectivityService();
   connectivityService.initialize();
+
+  if (Platform.isAndroid || Platform.isIOS) {
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp, // Permite apenas a orientação vertical
+    ]);
+  }
 
   runApp(
     MultiProvider(

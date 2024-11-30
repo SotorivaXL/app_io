@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:app_io/auth/providers/auth_provider.dart' as appProvider;
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,10 +9,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
-import 'dart:math' as math;
-import 'package:intl/intl.dart';
-import 'package:syncfusion_flutter_core/theme.dart';
-
+import 'package:http/http.dart' as http;
 
 class DashboardPage extends StatefulWidget {
   @override
@@ -20,11 +18,16 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
+  String? selectedContaAnuncioId;
   String? selectedCampaignId;
-  String? selectedGrupoAnuncio;
-  String? selectedAnuncio;
+  String? selectedGrupoAnuncioId;
   bool _isExpanded = false;
+  bool _isLoading = true;
   final DateRangePickerController _datePickerController = DateRangePickerController();
+
+  final String apiUrl = "https://2709-2804-6fc-ae9e-e600-b01f-4cf0-99d8-7314.ngrok-free.app/dynamic_insights";
+
+  List<Map<String, dynamic>> adAccounts = [];
 
   List<Map<String, dynamic>> selectedCampaigns = [];
   List<Map<String, dynamic>> campaignsList = [];
@@ -32,17 +35,28 @@ class _DashboardPageState extends State<DashboardPage> {
   List<Map<String, dynamic>> selectedGruposAnuncios = [];
   List<Map<String, dynamic>> gruposAnunciosList = [];
 
-  List<Map<String, dynamic>> selectedAnuncios = [];
-  List<Map<String, dynamic>> anunciosList = [];
-
   Map<String, dynamic> initialInsightsData = {};
 
   DateTime? startDate;
   DateTime? endDate;
+
   @override
   void initState() {
     super.initState();
-    _fetchInitialInsights();
+    _initilizeData();
+  }
+
+  void _initilizeData() async {
+    await _fetchInitialInsights();
+  }
+
+  double _parseToDouble(dynamic value) {
+    if (value is String) {
+      return double.tryParse(value) ?? 0.0;
+    } else if (value is num) {
+      return value.toDouble();
+    }
+    return 0.0; // Valor padrão para valores nulos ou não numéricos
   }
 
   void _openDateRangePicker() {
@@ -62,15 +76,17 @@ class _DashboardPageState extends State<DashboardPage> {
               'Selecione o intervalo de datas',
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
                 color: Theme.of(context).colorScheme.onSecondary,
+                fontFamily: 'Poppins',
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
               ),
             ),
             content: SizedBox(
               width: 400,
               height: 350,
               child: SfDateRangePicker(
+                maxDate: DateTime.now(),
                 controller: _datePickerController,
                 backgroundColor: Theme.of(context).colorScheme.secondary,
                 view: DateRangePickerView.month,
@@ -84,17 +100,23 @@ class _DashboardPageState extends State<DashboardPage> {
                   textAlign: TextAlign.center,
                   textStyle: TextStyle(
                     color: Theme.of(context).colorScheme.onSecondary,
+                    fontFamily: 'Poppins',
                     fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 monthCellStyle: DateRangePickerMonthCellStyle(
                   textStyle: TextStyle(
-                    color: Theme.of(context).colorScheme.onBackground,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                    fontFamily: 'Poppins',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                   ),
                   todayTextStyle: TextStyle(
                     color: Theme.of(context).colorScheme.tertiary,
-                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Poppins',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
                   ),
                   blackoutDatesDecoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.error,
@@ -103,19 +125,19 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
                 startRangeSelectionColor: Theme.of(context).colorScheme.primary,
                 endRangeSelectionColor: Theme.of(context).colorScheme.primary,
-                rangeSelectionColor:
-                Theme.of(context).colorScheme.tertiary.withOpacity(0.3),
+                rangeSelectionColor: Theme.of(context).colorScheme.tertiary.withOpacity(0.3),
                 todayHighlightColor: Theme.of(context).colorScheme.tertiary,
                 monthViewSettings: DateRangePickerMonthViewSettings(
                   viewHeaderStyle: DateRangePickerViewHeaderStyle(
                     backgroundColor: Theme.of(context).colorScheme.secondary,
                     textStyle: TextStyle(
                       color: Theme.of(context).colorScheme.onSecondary,
-                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Poppins',
+                      fontSize: 12, // Ajuste o tamanho da fonte aqui
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
-                // Personalização dos meses usando yearCellStyle
                 yearCellStyle: DateRangePickerYearCellStyle(
                   textStyle: TextStyle(
                     fontSize: 15,
@@ -123,7 +145,6 @@ class _DashboardPageState extends State<DashboardPage> {
                     fontWeight: FontWeight.w500,
                     color: Theme.of(context).colorScheme.onSecondary,
                   ),
-                  // Destaque para o mês atual (opcional)
                   todayTextStyle: TextStyle(
                     fontSize: 15,
                     fontFamily: 'Poppins',
@@ -137,7 +158,7 @@ class _DashboardPageState extends State<DashboardPage> {
             actions: [
               TextButton(
                 child: Text(
-                  'CANCELAR',
+                  'Cancelar'.toUpperCase(),
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSecondary,
                   ),
@@ -148,18 +169,25 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
               TextButton(
                 child: Text(
-                  'OK',
+                  'Ok'.toUpperCase(),
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSecondary,
                   ),
                 ),
                 onPressed: () {
+                  // Certifique-se de que o `selectedRange` não é nulo antes de acessar suas propriedades
                   PickerDateRange? selectedRange = _datePickerController.selectedRange;
-                  if (selectedRange != null) {
+                  if (selectedRange != null && selectedRange.startDate != null && selectedRange.endDate != null) {
                     setState(() {
                       startDate = selectedRange.startDate;
                       endDate = selectedRange.endDate;
                     });
+
+                    // Adiciona o print das datas selecionadas
+                    print('Data inicial: ${DateFormat('dd/MM/yyyy').format(selectedRange.startDate!)}');
+                    print('Data final: ${DateFormat('dd/MM/yyyy').format(selectedRange.endDate!)}');
+                  } else {
+                    print('Nenhuma data foi selecionada ou o intervalo está incompleto.');
                   }
                   Navigator.pop(context);
                 },
@@ -177,7 +205,11 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Scaffold(
         body: Padding(
           padding: EdgeInsetsDirectional.fromSTEB(10, 20, 10, 0),
-          child: SingleChildScrollView(
+          child: _isLoading
+              ? Center(
+            child: CircularProgressIndicator(),
+          )
+              : SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -196,8 +228,6 @@ class _DashboardPageState extends State<DashboardPage> {
                 _buildInlineLinkClicksChart(),
                 const SizedBox(height: 20),
                 _buildClicksCPCCPMChart(),
-                const SizedBox(height: 20),
-                _buildRadialBarChart(),
               ],
             ),
           ),
@@ -206,6 +236,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  // Atualizações no método _buildFilters()
   Widget _buildFilters() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -285,7 +316,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                     ),
                   ),
-                  // Espaçamento
+                  // FutureBuilder para buscar campanhas
                   FutureBuilder<List<Map<String, dynamic>>>(
                     future: _fetchCampaigns(),
                     builder: (context, snapshot) {
@@ -293,14 +324,26 @@ class _DashboardPageState extends State<DashboardPage> {
                         return const CircularProgressIndicator();
                       } else if (snapshot.hasError) {
                         return Text('Erro: ${snapshot.error}');
-                      } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                        return Text('Nenhuma campanha encontrada.');
                       } else {
-                        campaignsList = snapshot.data!;
+                        campaignsList = snapshot.data ?? [];
+
+                        // Converte todos os IDs para String e remove duplicatas
+                        campaignsList = campaignsList.map((campaign) {
+                          campaign['id'] = campaign['id'].toString();
+                          return campaign;
+                        }).toList();
+
+                        // Remove duplicatas com base no ID
+                        final ids = Set();
+                        campaignsList.retainWhere((campaign) => ids.add(campaign['id']));
 
                         // Lista de opções combinada para itens e selectedItemBuilder
                         List<Map<String, dynamic>> campaignOptions = [
-                          {'id': '', 'name': 'Limpar Filtro', 'isError': true},
+                          {
+                            'id': '',
+                            'name': 'Limpar Filtro',
+                            'isError': true
+                          },
                           ...campaignsList.map((campaign) {
                             return {
                               'id': campaign['id'],
@@ -309,6 +352,17 @@ class _DashboardPageState extends State<DashboardPage> {
                             };
                           }).toList(),
                         ];
+
+                        // Certifica-se de que selectedCampaignId é uma String
+                        if (selectedCampaignId != null) {
+                          selectedCampaignId = selectedCampaignId.toString();
+                        }
+
+                        // Verifica se selectedCampaignId está na lista de opções
+                        bool isSelectedIdValid = campaignOptions.any((option) => option['id'] == selectedCampaignId);
+                        if (!isSelectedIdValid) {
+                          selectedCampaignId = null;
+                        }
 
                         return Column(
                           children: [
@@ -323,17 +377,19 @@ class _DashboardPageState extends State<DashboardPage> {
                                   value: selectedCampaignId,
                                   items: campaignOptions.map((option) {
                                     return DropdownMenuItem<String>(
-                                      value: option['id'] as String,
+                                      value: option['id'],
                                       child: Center(
                                         child: Text(
-                                          option['name'],
+                                          option['name'], // Exibe o nome no dropdown
                                           textAlign: TextAlign.center,
                                           style: TextStyle(
                                             fontFamily: 'Poppins',
-                                            fontSize: 15,
+                                            fontSize: 14,
                                             fontWeight: FontWeight.w500,
                                             color: option['isError']
-                                                ? Theme.of(context).colorScheme.error
+                                                ? Theme.of(context)
+                                                .colorScheme
+                                                .error
                                                 : Theme.of(context)
                                                 .colorScheme
                                                 .onSecondary,
@@ -348,12 +404,9 @@ class _DashboardPageState extends State<DashboardPage> {
                                         // Limpa o filtro
                                         selectedCampaignId = null;
                                         selectedCampaigns.clear();
-                                        selectedGrupoAnuncio = null;
+                                        selectedGrupoAnuncioId = null;
                                         selectedGruposAnuncios.clear();
                                         gruposAnunciosList.clear();
-                                        selectedAnuncio = null;
-                                        selectedAnuncios.clear();
-                                        anunciosList.clear();
                                       } else {
                                         selectedCampaignId = value;
                                         // Atualiza a campanha selecionada
@@ -361,43 +414,20 @@ class _DashboardPageState extends State<DashboardPage> {
                                           campaignsList.firstWhere(
                                                   (campaign) => campaign['id'] == value),
                                         ];
-                                        // Limpa as seleções abaixo
-                                        selectedGrupoAnuncio = null;
+                                        print('ID da campanha selecionada: $selectedCampaignId');
+                                        // Limpa os grupos de anúncio
+                                        selectedGrupoAnuncioId = null;
                                         selectedGruposAnuncios.clear();
                                         gruposAnunciosList.clear();
-                                        selectedAnuncio = null;
-                                        selectedAnuncios.clear();
-                                        anunciosList.clear();
                                       }
                                     });
-                                  },
-                                  selectedItemBuilder: (BuildContext context) {
-                                    return campaignOptions.map((option) {
-                                      return Align(
-                                        alignment: Alignment.center,
-                                        child: Text(
-                                          option['name'],
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontFamily: 'Poppins',
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w500,
-                                            color: option['isError']
-                                                ? Theme.of(context).colorScheme.error
-                                                : Theme.of(context)
-                                                .colorScheme
-                                                .onSecondary,
-                                          ),
-                                        ),
-                                      );
-                                    }).toList();
                                   },
                                   decoration: InputDecoration(
                                     filled: true,
                                     fillColor:
                                     Theme.of(context).colorScheme.secondary,
                                     contentPadding: EdgeInsets.symmetric(
-                                        vertical: 10.0, horizontal: 0),
+                                        vertical: 10.0, horizontal: 5),
                                     border: UnderlineInputBorder(
                                       borderRadius: BorderRadius.circular(10),
                                       borderSide: BorderSide.none,
@@ -414,10 +444,11 @@ class _DashboardPageState extends State<DashboardPage> {
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
                                         fontFamily: 'Poppins',
-                                        fontSize: 15,
+                                        fontSize: 14,
                                         fontWeight: FontWeight.w500,
-                                        color:
-                                        Theme.of(context).colorScheme.onSecondary,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSecondary,
                                       ),
                                     ),
                                   ),
@@ -435,281 +466,98 @@ class _DashboardPageState extends State<DashboardPage> {
                                     return const CircularProgressIndicator();
                                   } else if (snapshot.hasError) {
                                     return Text('Erro: ${snapshot.error}');
-                                  } else if (!snapshot.hasData ||
-                                      snapshot.data!.isEmpty) {
-                                    return Text(
-                                        'Nenhum grupo de anúncios encontrado.');
                                   } else {
-                                    gruposAnunciosList = snapshot.data!;
+                                    gruposAnunciosList = snapshot.data ?? [];
 
-                                    // Lista de opções combinada para itens e selectedItemBuilder
                                     List<Map<String, dynamic>> grupoOptions = [
-                                      {'id': '', 'name': 'Limpar Filtro', 'isError': true},
+                                      {
+                                        'id': '',
+                                        'name': 'Limpar Filtro',
+                                        'isError': true
+                                      },
                                       ...gruposAnunciosList.map((grupo) {
                                         return {
                                           'id': grupo['id'],
                                           'name': grupo['name'],
-                                          'isError': false
+                                          'isError': false,
                                         };
                                       }).toList(),
                                     ];
 
-                                    return Column(
-                                      children: [
-                                        // Dropdown de Grupos de Anúncios
-                                        SizedBox(
-                                          height: 50, // Aumenta a altura do dropdown
-                                          child: DropdownButtonFormField<String>(
-                                            isExpanded: true,
-                                            alignment: Alignment.center,
-                                            value: selectedGrupoAnuncio,
-                                            items: grupoOptions.map((option) {
-                                              return DropdownMenuItem<String>(
-                                                value: option['id'] as String,
-                                                child: Center(
-                                                  child: Text(
-                                                    option['name'],
-                                                    textAlign: TextAlign.center,
-                                                    style: TextStyle(
-                                                      fontFamily: 'Poppins',
-                                                      fontSize: 15,
-                                                      fontWeight: FontWeight.w500,
-                                                      color: option['isError']
-                                                          ? Theme.of(context)
-                                                          .colorScheme
-                                                          .error
-                                                          : Theme.of(context)
-                                                          .colorScheme
-                                                          .onSecondary,
-                                                    ),
-                                                  ),
-                                                ),
-                                              );
-                                            }).toList(),
-                                            onChanged: (value) {
-                                              setState(() {
-                                                if (value == '') {
-                                                  // Limpa o filtro
-                                                  selectedGrupoAnuncio = null;
-                                                  selectedGruposAnuncios.clear();
-                                                  selectedAnuncio = null;
-                                                  selectedAnuncios.clear();
-                                                  anunciosList.clear();
-                                                } else {
-                                                  selectedGrupoAnuncio = value;
-                                                  selectedGruposAnuncios = [
-                                                    gruposAnunciosList.firstWhere(
-                                                            (grupo) =>
-                                                        grupo['id'] == value),
-                                                  ];
-                                                  // Limpa as seleções abaixo
-                                                  selectedAnuncio = null;
-                                                  selectedAnuncios.clear();
-                                                  anunciosList.clear();
-                                                }
-                                              });
-                                            },
-                                            selectedItemBuilder:
-                                                (BuildContext context) {
-                                              return grupoOptions.map((option) {
-                                                return Align(
-                                                  alignment: Alignment.center,
-                                                  child: Text(
-                                                    option['name'],
-                                                    textAlign: TextAlign.center,
-                                                    style: TextStyle(
-                                                      fontFamily: 'Poppins',
-                                                      fontSize: 15,
-                                                      fontWeight: FontWeight.w500,
-                                                      color: option['isError']
-                                                          ? Theme.of(context)
-                                                          .colorScheme
-                                                          .error
-                                                          : Theme.of(context)
-                                                          .colorScheme
-                                                          .onSecondary,
-                                                    ),
-                                                  ),
-                                                );
-                                              }).toList();
-                                            },
-                                            decoration: InputDecoration(
-                                              filled: true,
-                                              fillColor: Theme.of(context)
-                                                  .colorScheme
-                                                  .secondary,
-                                              contentPadding: EdgeInsets.symmetric(
-                                                  vertical: 10.0, horizontal: 0),
-                                              border: UnderlineInputBorder(
-                                                borderRadius:
-                                                BorderRadius.circular(10),
-                                                borderSide: BorderSide.none,
-                                              ),
-                                              isDense: true,
-                                            ),
-                                            icon: SizedBox.shrink(),
-                                            dropdownColor: Theme.of(context)
-                                                .colorScheme
-                                                .secondary,
-                                            hint: Align(
-                                              alignment: Alignment.center,
-                                              child: Text(
-                                                'Selecione o grupo de anúncios',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(
-                                                  fontSize: 15,
-                                                  fontWeight: FontWeight.w500,
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .onSecondary,
-                                                ),
+                                    return DropdownButtonFormField<String>(
+                                      isExpanded: true,
+                                      alignment: Alignment.center,
+                                      value: selectedGrupoAnuncioId == '' ? null : selectedGrupoAnuncioId,
+                                      items: grupoOptions.map((option) {
+                                        return DropdownMenuItem<String>(
+                                          value: option['id'],
+                                          child: Center(
+                                            child: Text(
+                                              option['name'],
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                fontFamily: 'Poppins',
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w500,
+                                                color: option['isError']
+                                                    ? Theme.of(context)
+                                                    .colorScheme
+                                                    .error
+                                                    : Theme.of(context)
+                                                    .colorScheme
+                                                    .onSecondary,
                                               ),
                                             ),
                                           ),
-                                        ),
-                                      ],
-                                    );
-                                  }
-                                },
-                              ),
-                            ],
-                            // Se grupos foram selecionados, exibe o dropdown de anúncios
-                            if (selectedGruposAnuncios.isNotEmpty) ...[
-                              const SizedBox(height: 20),
-                              FutureBuilder<List<Map<String, dynamic>>>(
-                                future: _fetchAnuncios(),
-                                builder: (context, snapshot) {
-                                  if (snapshot.connectionState ==
-                                      ConnectionState.waiting) {
-                                    return const CircularProgressIndicator();
-                                  } else if (snapshot.hasError) {
-                                    return Text('Erro: ${snapshot.error}');
-                                  } else if (!snapshot.hasData ||
-                                      snapshot.data!.isEmpty) {
-                                    return Text('Nenhum anúncio encontrado.');
-                                  } else {
-                                    anunciosList = snapshot.data!;
-
-                                    // Lista de opções combinada para itens e selectedItemBuilder
-                                    List<Map<String, dynamic>> anuncioOptions = [
-                                      {'id': '', 'name': 'Limpar Filtro', 'isError': true},
-                                      ...anunciosList.map((anuncio) {
-                                        return {
-                                          'id': anuncio['id'],
-                                          'name': anuncio['name'],
-                                          'isError': false
-                                        };
+                                        );
                                       }).toList(),
-                                    ];
-
-                                    return Column(
-                                      children: [
-                                        // Dropdown de Anúncios
-                                        SizedBox(
-                                          height: 50, // Aumenta a altura do dropdown
-                                          child: DropdownButtonFormField<String>(
-                                            isExpanded: true,
-                                            alignment: Alignment.center,
-                                            value: selectedAnuncio,
-                                            items: anuncioOptions.map((option) {
-                                              return DropdownMenuItem<String>(
-                                                value: option['id'] as String,
-                                                child: Center(
-                                                  child: Text(
-                                                    option['name'],
-                                                    textAlign: TextAlign.center,
-                                                    style: TextStyle(
-                                                      fontFamily: 'Poppins',
-                                                      fontSize: 15,
-                                                      fontWeight: FontWeight.w500,
-                                                      color: option['isError']
-                                                          ? Theme.of(context)
-                                                          .colorScheme
-                                                          .error
-                                                          : Theme.of(context)
-                                                          .colorScheme
-                                                          .onSecondary,
-                                                    ),
-                                                  ),
-                                                ),
-                                              );
-                                            }).toList(),
-                                            onChanged: (value) {
-                                              setState(() {
-                                                if (value == '') {
-                                                  // Limpa o filtro
-                                                  selectedAnuncio = null;
-                                                  selectedAnuncios.clear();
-                                                } else {
-                                                  selectedAnuncio = value;
-                                                  selectedAnuncios = [
-                                                    anunciosList.firstWhere(
-                                                            (anuncio) =>
-                                                        anuncio['id'] == value),
-                                                  ];
-                                                }
-                                              });
-                                            },
-                                            selectedItemBuilder:
-                                                (BuildContext context) {
-                                              return anuncioOptions.map((option) {
-                                                return Align(
-                                                  alignment: Alignment.center,
-                                                  child: Text(
-                                                    option['name'],
-                                                    textAlign: TextAlign.center,
-                                                    style: TextStyle(
-                                                      fontFamily: 'Poppins',
-                                                      fontSize: 15,
-                                                      fontWeight: FontWeight.w500,
-                                                      color: option['isError']
-                                                          ? Theme.of(context)
-                                                          .colorScheme
-                                                          .error
-                                                          : Theme.of(context)
-                                                          .colorScheme
-                                                          .onSecondary,
-                                                    ),
-                                                  ),
-                                                );
-                                              }).toList();
-                                            },
-                                            decoration: InputDecoration(
-                                              filled: true,
-                                              fillColor: Theme.of(context)
-                                                  .colorScheme
-                                                  .secondary,
-                                              contentPadding: EdgeInsets.symmetric(
-                                                  vertical: 10.0, horizontal: 0),
-                                              border: UnderlineInputBorder(
-                                                borderRadius:
-                                                BorderRadius.circular(10),
-                                                borderSide: BorderSide.none,
-                                              ),
-                                              isDense: true,
-                                            ),
-                                            icon: SizedBox.shrink(),
-                                            dropdownColor: Theme.of(context)
+                                      onChanged: (value) {
+                                        setState(() {
+                                          if (value == '') {
+                                            selectedGrupoAnuncioId = null;
+                                            selectedGruposAnuncios.clear();
+                                          } else {
+                                            selectedGrupoAnuncioId = value;
+                                            selectedGruposAnuncios = [
+                                              gruposAnunciosList.firstWhere(
+                                                      (grupo) =>
+                                                  grupo['id'] == value),
+                                            ];
+                                            print(
+                                                'ID do grupo de anúncios selecionado: $selectedGrupoAnuncioId');
+                                          }
+                                        });
+                                      },
+                                      decoration: InputDecoration(
+                                        filled: true,
+                                        fillColor: Theme.of(context)
+                                            .colorScheme
+                                            .secondary,
+                                        contentPadding: EdgeInsets.symmetric(
+                                            vertical: 10.0, horizontal: 5),
+                                        border: UnderlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: BorderSide.none,
+                                        ),
+                                        isDense: true,
+                                      ),
+                                      icon: SizedBox.shrink(),
+                                      dropdownColor:
+                                      Theme.of(context).colorScheme.secondary,
+                                      hint: Align(
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          'Selecione o grupo de anúncios',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w500,
+                                            color: Theme.of(context)
                                                 .colorScheme
-                                                .secondary,
-                                            hint: Align(
-                                              alignment: Alignment.center,
-                                              child: Text(
-                                                'Selecione o anúncio',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(
-                                                  fontFamily: 'Poppins',
-                                                  fontSize: 15,
-                                                  fontWeight: FontWeight.w500,
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .onSecondary,
-                                                ),
-                                              ),
-                                            ),
+                                                .onSecondary,
                                           ),
                                         ),
-                                      ],
+                                      ),
                                     );
                                   }
                                 },
@@ -720,6 +568,99 @@ class _DashboardPageState extends State<DashboardPage> {
                       }
                     },
                   ),
+                  // Espaçamento antes do botão
+                  const SizedBox(height: 20),
+                  // Botão "Filtrar" fora do FutureBuilder
+                  ElevatedButton.icon(
+                    icon: Icon(
+                      Icons.manage_search,
+                      size: 22,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                    label: Text(
+                      'Filtrar',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      padding:
+                      EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                    ),
+                    onPressed: () async {
+                      // Verifica se o campo de data foi preenchido
+                      if (startDate == null || endDate == null) {
+                        print('Erro: Nenhum intervalo de datas foi selecionado.');
+                        return;
+                      }
+
+                      // Obtém o intervalo de datas
+                      String dataInicial = DateFormat('yyyy-MM-dd').format(startDate!);
+                      String dataFinal = DateFormat('yyyy-MM-dd').format(endDate!);
+                      print('Intervalo de datas: $dataInicial - $dataFinal');
+
+                      // Verifica se o ID da conta de anúncios está disponível
+                      if (selectedContaAnuncioId == null) {
+                        await _fetchInitialInsights();
+                        if (selectedContaAnuncioId == null) {
+                          print('Erro: ID da conta de anúncios não encontrado.');
+                          return;
+                        }
+                      }
+
+                      // Determina o ID e o nível selecionado (conta, campanha ou grupo de anúncios)
+                      String? id;
+                      String level;
+
+                      if (selectedGrupoAnuncioId != null) {
+                        id = selectedGrupoAnuncioId;
+                        level = "adset";
+                        print('ID do grupo de anúncios selecionado: $id');
+                      } else if (selectedCampaignId != null) {
+                        id = selectedCampaignId;
+                        level = "campaign";
+                        print('ID da campanha selecionada: $id');
+                      } else {
+                        id = selectedContaAnuncioId;
+                        level = "account";
+                        print('ID da conta de anúncios selecionada: $id');
+                      }
+
+                      if (id == null) {
+                        print('Erro: Nenhum ID válido foi selecionado.');
+                        return;
+                      }
+
+                      try {
+                        // Chama a API para buscar insights
+                        final insights = await _fetchMetaInsights(id, level, dataInicial, dataFinal);
+                        final pixelData = await _fetchPixelData(id, dataInicial, dataFinal);
+
+                        // Exibe os dados de insights da Meta em prints separados
+                        print('\n--- Dados de Insights Recuperados ---');
+                        insights.forEach((key, value) {
+                          print('$key: $value');
+                        });
+
+                        // Exibe os dados do Pixel em prints separados
+                        print('\n--- Dados do Pixel Recuperados ---');
+                        pixelData.forEach((key, value) {
+                          print('$key: $value');
+                        });
+                      } catch (e) {
+                        print('Erro ao buscar dados: $e');
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 20), // Espaçamento após o botão
                 ],
               ),
             ),
@@ -729,41 +670,20 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-
   Widget _buildMetricCards() {
-    // Lista de métricas com títulos, chaves e ícones correspondentes
     final List<Map<String, dynamic>> metrics = [
-      {
-        'title': 'Alcance',
-        'key': 'reach',
-        'icon': FontAwesomeIcons.chartSimple,
-      },
-      {
-        'title': 'Resultado',
-        'key': 'conversions',
-        'icon': FontAwesomeIcons.filterCircleDollar,
-      },
-      {
-        'title': 'Custo por Resultado',
-        'key': 'conversions',
-        'icon': FontAwesomeIcons.circleDollarToSlot,
-      },
-      {
-        'title': 'Valor Gasto',
-        'key': 'spend',
-        'icon': FontAwesomeIcons.moneyBillTransfer,
-      },
+      {'title': 'Alcance', 'key': 'reach', 'icon': FontAwesomeIcons.chartSimple},
+      {'title': 'Valor Gasto', 'key': 'spend', 'icon': FontAwesomeIcons.moneyBillTransfer},
+      {'title': 'Resultado', 'key': 'results', 'icon': FontAwesomeIcons.filterCircleDollar},
+      {'title': 'Custo por Resultado', 'key': 'cost_per_result', 'icon': FontAwesomeIcons.circleDollarToSlot},
     ];
 
     final formatter = NumberFormat('#,##0', 'pt_BR');
-    final currencyFormatter =
-    NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+    final currencyFormatter = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Determina o número de colunas com base na largura disponível
-        int columns = constraints.maxWidth ~/
-            160; // Cada card precisa de pelo menos 160 pixels
+        int columns = constraints.maxWidth ~/ 160;
         columns = columns > 0 ? columns : 1;
         double itemWidth = (constraints.maxWidth - (columns - 1) * 16) / columns;
 
@@ -771,38 +691,21 @@ class _DashboardPageState extends State<DashboardPage> {
           spacing: 16,
           runSpacing: 16,
           children: metrics.map((metric) {
-            String value = '—'; // Placeholder quando não há dados
-            if (selectedCampaigns.isEmpty && initialInsightsData.isNotEmpty) {
-              // Se nenhuma campanha selecionada, usa os dados iniciais
-              dynamic dataValue = initialInsightsData[metric['key']];
-              if (dataValue != null) {
-                // Formata o valor de acordo com o tipo
-                if (metric['key'] == 'spend' ||
-                    metric['key'] == 'CPM' ||
-                    metric['key'] == 'CPC' ||
-                    metric['key'] == 'cost_per_result') {
-                  // Valores monetários
-                  value = currencyFormatter.format(dataValue);
-                } else if (metric['key'] == 'frequency') {
-                  // Valores decimais
-                  value = dataValue.toStringAsFixed(2);
-                } else {
-                  // Outros valores numéricos
-                  value = formatter.format(dataValue);
-                }
+            String value = '—'; // Placeholder
+            dynamic dataValue = initialInsightsData[metric['key']];
+
+            if (dataValue != null) {
+              double numericValue = _parseToDouble(dataValue);
+              if (metric['key'] == 'spend' || metric['key'] == 'cpm' || metric['key'] == 'cpc') {
+                value = currencyFormatter.format(numericValue);
+              } else {
+                value = formatter.format(numericValue);
               }
-            } else {
-              // Se campanhas selecionadas, você pode implementar a lógica para obter os dados correspondentes
-              value = '—'; // Placeholder
             }
 
             return SizedBox(
               width: itemWidth,
-              child: _buildMetricCard(
-                metric['title'],
-                value,
-                metric['icon'],
-              ),
+              child: _buildMetricCard(metric['title'], value, metric['icon']),
             );
           }).toList(),
         );
@@ -836,6 +739,8 @@ class _DashboardPageState extends State<DashboardPage> {
                 fontSize: 14,
                 color: Theme.of(context).colorScheme.onBackground,
               ),
+              overflow: TextOverflow.ellipsis, // Adiciona elipses se o texto for muito longo
+              maxLines: 1, // Limita o texto a uma linha
             ),
             const SizedBox(height: 8),
             Text(
@@ -852,6 +757,9 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildClicksReachImpressionsChart() {
+    if (initialInsightsData.isEmpty) {
+      return SizedBox(); // Ou exiba um indicador de carregamento ou mensagem
+    }
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(
@@ -879,16 +787,16 @@ class _DashboardPageState extends State<DashboardPage> {
                   BarChartData(
                     alignment: BarChartAlignment.spaceEvenly,
                     maxY: _getMaxYValue([
-                      initialInsightsData['clicks'],
-                      initialInsightsData['reach'],
-                      initialInsightsData['impressions'],
+                      _parseToDouble(initialInsightsData['clicks']),
+                      _parseToDouble(initialInsightsData['reach']),
+                      _parseToDouble(initialInsightsData['impressions']),
                     ]),
                     barGroups: [
                       BarChartGroupData(
                         x: 0,
                         barRods: [
                           BarChartRodData(
-                            toY: initialInsightsData['clicks']?.toDouble() ?? 0,
+                            toY: _parseToDouble(initialInsightsData['clicks']),
                             color: Colors.blueAccent,
                             width: 20,
                             borderRadius: BorderRadius.circular(4),
@@ -899,7 +807,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         x: 1,
                         barRods: [
                           BarChartRodData(
-                            toY: initialInsightsData['reach']?.toDouble() ?? 0,
+                            toY: _parseToDouble(initialInsightsData['reach']),
                             color: Colors.greenAccent,
                             width: 20,
                             borderRadius: BorderRadius.circular(4),
@@ -910,7 +818,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         x: 2,
                         barRods: [
                           BarChartRodData(
-                            toY: initialInsightsData['impressions']?.toDouble() ?? 0,
+                            toY: _parseToDouble(initialInsightsData['impressions']),
                             color: Colors.purpleAccent,
                             width: 20,
                             borderRadius: BorderRadius.circular(4),
@@ -964,30 +872,39 @@ class _DashboardPageState extends State<DashboardPage> {
   double _getMaxYValue(List<dynamic> values) {
     double max = 0;
     for (var value in values) {
-      double val = value?.toDouble() ?? 0;
+      double val = _parseToDouble(value);
       if (val > max) {
         max = val;
       }
     }
-    // Adiciona um buffer de 10% ao valor máximo
-    return max * 1.1;
+    return max * 1.1; // Adiciona um buffer de 10% ao valor máximo
   }
 
 
 
   Widget _buildSpendPercentageChart() {
-    // Realiza os cálculos
-    double totalSpend = initialInsightsData['spend']?.toDouble() ?? 0;
+    if (initialInsightsData.isEmpty) {
+      return SizedBox(); // Ou exiba um indicador de carregamento ou mensagem
+    }
 
-    double cpcSpend = (initialInsightsData['cpc']?.toDouble() ?? 0) * (initialInsightsData['clicks']?.toDouble() ?? 0);
-    double cpmSpend = (initialInsightsData['cpm']?.toDouble() ?? 0) * (initialInsightsData['impressions']?.toDouble() ?? 0) / 1000;
-    double costPerLinkClickSpend = (initialInsightsData['cost_per_inline_link_click']?.toDouble() ?? 0) * (initialInsightsData['inline_link_clicks']?.toDouble() ?? 0);
+    // Converte todos os valores para double de forma segura
+    double totalSpend = _parseToDouble(initialInsightsData['spend']);
+    double cpcValue = _parseToDouble(initialInsightsData['cpc']);
+    double clicksValue = _parseToDouble(initialInsightsData['clicks']);
+    double cpmValue = _parseToDouble(initialInsightsData['cpm']);
+    double impressionsValue = _parseToDouble(initialInsightsData['impressions']);
+    double costPerInlineLinkClick = _parseToDouble(initialInsightsData['cost_per_inline_link_click']);
+    double inlineLinkClicks = _parseToDouble(initialInsightsData['inline_link_clicks']);
 
-    double totalCalculatedSpend = cpcSpend + cpmSpend + costPerLinkClickSpend;
+    double cpcSpend = cpcValue * clicksValue;
+    double cpmSpend = (cpmValue * impressionsValue) / 1000;
+    double costPerLinkClickSpend = costPerInlineLinkClick * inlineLinkClicks;
 
-    double cpcPercentage = (cpcSpend / totalSpend) * 100;
-    double cpmPercentage = (cpmSpend / totalSpend) * 100;
-    double costPerLinkClickPercentage = (costPerLinkClickSpend / totalSpend) * 100;
+    double cpcPercentage = totalSpend > 0 ? (cpcSpend / totalSpend) * 100 : 0.0;
+    double cpmPercentage = totalSpend > 0 ? (cpmSpend / totalSpend) * 100 : 0.0;
+    double costPerLinkClickPercentage = totalSpend > 0
+        ? (costPerLinkClickSpend / totalSpend) * 100
+        : 0.0;
 
     return Card(
       elevation: 4,
@@ -1059,7 +976,16 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+
   Widget _buildCPCvsCPMChart() {
+    if (initialInsightsData.isEmpty) {
+      return SizedBox(); // Ou exiba um indicador de carregamento ou mensagem
+    }
+
+    // Converte os valores de forma segura
+    double cpcValue = _parseToDouble(initialInsightsData['cpc']);
+    double cpmValue = _parseToDouble(initialInsightsData['cpm']);
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(
@@ -1085,16 +1011,13 @@ class _DashboardPageState extends State<DashboardPage> {
               child: BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceEvenly,
-                  maxY: _getMaxYValue([
-                    initialInsightsData['cpc'],
-                    initialInsightsData['cpm'],
-                  ]),
+                  maxY: _getMaxYValue([cpcValue, cpmValue]),
                   barGroups: [
                     BarChartGroupData(
                       x: 0,
                       barRods: [
                         BarChartRodData(
-                          toY: initialInsightsData['cpc']?.toDouble() ?? 0,
+                          toY: cpcValue,
                           color: Colors.tealAccent,
                           width: 20,
                           borderRadius: BorderRadius.circular(4),
@@ -1105,7 +1028,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       x: 1,
                       barRods: [
                         BarChartRodData(
-                          toY: initialInsightsData['cpm']?.toDouble() ?? 0,
+                          toY: cpmValue,
                           color: Colors.indigoAccent,
                           width: 20,
                           borderRadius: BorderRadius.circular(4),
@@ -1153,6 +1076,14 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildEngagementChart() {
+    if (initialInsightsData.isEmpty) {
+      return SizedBox(); // Ou exiba um indicador de carregamento ou mensagem
+    }
+
+    double inlineLinkClicks = _parseToDouble(initialInsightsData['inline_link_clicks']);
+    double inlinePostEngagement = _parseToDouble(initialInsightsData['inline_post_engagement']);
+    double totalEngagement = inlineLinkClicks + inlinePostEngagement;
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(
@@ -1178,31 +1109,18 @@ class _DashboardPageState extends State<DashboardPage> {
               child: BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.center,
-                  maxY: _getMaxYValue([
-                    (initialInsightsData['inline_link_clicks']?.toDouble() ?? 0) +
-                        (initialInsightsData['inline_post_engagement']?.toDouble() ?? 0),
-                  ]),
+                  maxY: totalEngagement * 1.1,
                   barGroups: [
                     BarChartGroupData(
                       x: 0,
                       barRods: [
                         BarChartRodData(
-                          toY: (initialInsightsData['inline_link_clicks']?.toDouble() ?? 0) +
-                              (initialInsightsData['inline_post_engagement']?.toDouble() ?? 0),
+                          toY: totalEngagement,
                           rodStackItems: [
-                            BarChartRodStackItem(
-                              0,
-                              initialInsightsData['inline_link_clicks']?.toDouble() ?? 0,
-                              Colors.orangeAccent,
-                            ),
-                            BarChartRodStackItem(
-                              initialInsightsData['inline_link_clicks']?.toDouble() ?? 0,
-                              (initialInsightsData['inline_link_clicks']?.toDouble() ?? 0) +
-                                  (initialInsightsData['inline_post_engagement']?.toDouble() ?? 0),
-                              Colors.pinkAccent,
-                            ),
+                            BarChartRodStackItem(0, inlineLinkClicks, Colors.orangeAccent),
+                            BarChartRodStackItem(inlineLinkClicks, totalEngagement, Colors.pinkAccent),
                           ],
-                          width: 40,
+                          width: 40.0,
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ],
@@ -1219,15 +1137,9 @@ class _DashboardPageState extends State<DashboardPage> {
                         },
                       ),
                     ),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    rightTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    topTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
+                    leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   ),
                   gridData: FlGridData(show: false),
                   borderData: FlBorderData(show: false),
@@ -1241,6 +1153,9 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildInlineLinkClicksChart() {
+    if (initialInsightsData.isEmpty) {
+      return SizedBox(); // Ou exiba um indicador de carregamento ou mensagem
+    }
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(
@@ -1336,6 +1251,15 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildClicksCPCCPMChart() {
+    if (initialInsightsData.isEmpty) {
+      return SizedBox(); // Exibe vazio caso não haja dados
+    }
+
+    // Converte os valores de forma segura
+    double clicks = _parseToDouble(initialInsightsData['clicks']);
+    double cpc = _parseToDouble(initialInsightsData['cpc']);
+    double cpm = _parseToDouble(initialInsightsData['cpm']);
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(
@@ -1361,17 +1285,13 @@ class _DashboardPageState extends State<DashboardPage> {
               child: BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceEvenly,
-                  maxY: _getMaxYValue([
-                    initialInsightsData['clicks'],
-                    initialInsightsData['cpc'],
-                    initialInsightsData['cpm'],
-                  ]),
+                  maxY: _getMaxYValue([clicks, cpc, cpm]),
                   barGroups: [
                     BarChartGroupData(
                       x: 0,
                       barRods: [
                         BarChartRodData(
-                          toY: initialInsightsData['clicks']?.toDouble() ?? 0,
+                          toY: clicks,
                           color: Colors.blueAccent,
                           width: 20,
                           borderRadius: BorderRadius.circular(4),
@@ -1382,7 +1302,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       x: 1,
                       barRods: [
                         BarChartRodData(
-                          toY: initialInsightsData['cpc']?.toDouble() ?? 0,
+                          toY: cpc,
                           color: Colors.greenAccent,
                           width: 20,
                           borderRadius: BorderRadius.circular(4),
@@ -1393,7 +1313,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       x: 2,
                       barRods: [
                         BarChartRodData(
-                          toY: initialInsightsData['cpm']?.toDouble() ?? 0,
+                          toY: cpm,
                           color: Colors.purpleAccent,
                           width: 20,
                           borderRadius: BorderRadius.circular(4),
@@ -1442,178 +1362,21 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildRadialBarChart() {
-    double impressionsValue = initialInsightsData['impressions']?.toDouble() ?? 0;
-    double reachValue = initialInsightsData['reach']?.toDouble() ?? 0;
-    double spendValue = initialInsightsData['spend']?.toDouble() ?? 0;
-
-    // Normalizar os valores para percentuais
-    double maxValue = [impressionsValue, reachValue, spendValue].reduce((a, b) => a > b ? a : b);
-
-    double impressionsPercent = (impressionsValue / maxValue) * 100;
-    double reachPercent = (reachValue / maxValue) * 100;
-    double spendPercent = (spendValue / maxValue) * 100;
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      color: Theme.of(context).colorScheme.secondary,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              'Comparação Radial',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onBackground,
-              ),
-            ),
-            const SizedBox(height: 10),
-            AspectRatio(
-              aspectRatio: 1,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  PieChart(
-                    PieChartData(
-                      sections: [
-                        PieChartSectionData(
-                          color: Colors.blueAccent,
-                          value: 100,
-                          radius: 80,
-                          title: '',
-                        ),
-                      ],
-                      startDegreeOffset: 270,
-                      sectionsSpace: 0,
-                      centerSpaceRadius: 0,
-                    ),
-                  ),
-                  PieChart(
-                    PieChartData(
-                      sections: [
-                        PieChartSectionData(
-                          color: Theme.of(context).colorScheme.secondary,
-                          value: 100 - impressionsPercent,
-                          radius: 80,
-                          title: '',
-                        ),
-                      ],
-                      startDegreeOffset: 270 + (impressionsPercent / 100) * 360,
-                      sectionsSpace: 0,
-                      centerSpaceRadius: 0,
-                    ),
-                  ),
-                  PieChart(
-                    PieChartData(
-                      sections: [
-                        PieChartSectionData(
-                          color: Colors.greenAccent,
-                          value: 100,
-                          radius: 60,
-                          title: '',
-                        ),
-                      ],
-                      startDegreeOffset: 270,
-                      sectionsSpace: 0,
-                      centerSpaceRadius: 0,
-                    ),
-                  ),
-                  PieChart(
-                    PieChartData(
-                      sections: [
-                        PieChartSectionData(
-                          color: Theme.of(context).colorScheme.secondary,
-                          value: 100 - reachPercent,
-                          radius: 60,
-                          title: '',
-                        ),
-                      ],
-                      startDegreeOffset: 270 + (reachPercent / 100) * 360,
-                      sectionsSpace: 0,
-                      centerSpaceRadius: 0,
-                    ),
-                  ),
-                  PieChart(
-                    PieChartData(
-                      sections: [
-                        PieChartSectionData(
-                          color: Colors.redAccent,
-                          value: 100,
-                          radius: 40,
-                          title: '',
-                        ),
-                      ],
-                      startDegreeOffset: 270,
-                      sectionsSpace: 0,
-                      centerSpaceRadius: 0,
-                    ),
-                  ),
-                  PieChart(
-                    PieChartData(
-                      sections: [
-                        PieChartSectionData(
-                          color: Theme.of(context).colorScheme.secondary,
-                          value: 100 - spendPercent,
-                          radius: 40,
-                          title: '',
-                        ),
-                      ],
-                      startDegreeOffset: 270 + (spendPercent / 100) * 360,
-                      sectionsSpace: 0,
-                      centerSpaceRadius: 0,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: 10),
-            Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(width: 10, height: 10, color: Colors.blueAccent),
-                    SizedBox(width: 5),
-                    Text('Impressões'),
-                  ],
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(width: 10, height: 10, color: Colors.greenAccent),
-                    SizedBox(width: 5),
-                    Text('Alcance'),
-                  ],
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(width: 10, height: 10, color: Colors.redAccent),
-                    SizedBox(width: 5),
-                    Text('Gasto'),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _fetchInitialInsights() async {
+  // Método atualizado _fetchInitialInsights()
+  Future<void> _fetchInitialInsights({bool shouldSetState = true}) async {
     try {
+      setState(() {
+        _isLoading = true; // Inicia o carregamento
+      });
+
       final authProvider = Provider.of<appProvider.AuthProvider>(context, listen: false);
       final user = authProvider.user;
 
       if (user == null) {
         print('Usuário não está logado.');
+        setState(() {
+          _isLoading = false; // Finaliza o carregamento em caso de erro
+        });
         return;
       }
 
@@ -1641,10 +1404,16 @@ class _DashboardPageState extends State<DashboardPage> {
 
           if (!empresaDoc.exists) {
             print('Documento da empresa não encontrado para o companyId: $companyId');
+            setState(() {
+              _isLoading = false; // Finaliza o carregamento em caso de erro
+            });
             return;
           }
         } else {
           print('Campo "createdBy" não encontrado no documento do usuário.');
+          setState(() {
+            _isLoading = false; // Finaliza o carregamento em caso de erro
+          });
           return;
         }
       } else {
@@ -1660,6 +1429,9 @@ class _DashboardPageState extends State<DashboardPage> {
           companyId = user.uid;
         } else {
           print('Usuário não é "user" nem "empresa". Documento não encontrado.');
+          setState(() {
+            _isLoading = false; // Finaliza o carregamento em caso de erro
+          });
           return;
         }
       }
@@ -1668,6 +1440,9 @@ class _DashboardPageState extends State<DashboardPage> {
       print('Verificando se os campos BMs e contasAnuncio existem...');
       if (!empresaDoc.data()!.containsKey('BMs') || !empresaDoc.data()!.containsKey('contasAnuncio')) {
         print('Campos BMs ou contasAnuncio não existem no documento da empresa.');
+        setState(() {
+          _isLoading = false; // Finaliza o carregamento em caso de erro
+        });
         return;
       }
 
@@ -1696,78 +1471,157 @@ class _DashboardPageState extends State<DashboardPage> {
 
       print('BM IDs após processamento: $bmIds, Conta Anúncio IDs após processamento: $contaAnuncioIds');
 
-      Map<String, dynamic> combinedInsights = {};
+      adAccounts = []; // Garante que adAccounts esteja vazio antes de preenchê-lo
 
       for (var bmId in bmIds) {
-        for (var contaAnuncioId in contaAnuncioIds) {
-          print('Processando BM ID: $bmId, Conta Anúncio ID: $contaAnuncioId');
+        for (var contaAnuncioDocId in contaAnuncioIds) {
+          print('Processando BM ID: $bmId, Conta Anúncio Doc ID: $contaAnuncioDocId');
 
-          // Acessa o documento "dados_insights" na coleção "insights"
-          final dadosInsightsDoc = await FirebaseFirestore.instance
+          // Obtém o documento da conta de anúncio
+          final adAccountDoc = await FirebaseFirestore.instance
               .collection('dashboard')
               .doc(bmId)
               .collection('contasAnuncio')
-              .doc(contaAnuncioId)
-              .collection('insights')
-              .doc('dados_insights')
+              .doc(contaAnuncioDocId)
               .get();
 
-          if (dadosInsightsDoc.exists) {
-            print('Documento de insights encontrado para BM ID $bmId e Conta Anúncio ID $contaAnuncioId');
-            List<dynamic>? insightsList = dadosInsightsDoc.data()?['insights'];
-
-            if (insightsList != null && insightsList is List) {
-              // Itera sobre cada item da lista de insights
-              for (var insight in insightsList) {
-                if (insight is Map<String, dynamic>) {
-                  insight.forEach((key, value) {
-                    if (value is String) {
-                      final numValue = num.tryParse(value);
-                      if (numValue != null) {
-                        if (combinedInsights.containsKey(key)) {
-                          combinedInsights[key] += numValue;
-                        } else {
-                          combinedInsights[key] = numValue;
-                        }
-                      }
-                    } else if (value is num) {
-                      if (combinedInsights.containsKey(key)) {
-                        combinedInsights[key] += value;
-                      } else {
-                        combinedInsights[key] = value;
-                      }
-                    }
-                  });
-                } else {
-                  print('Formato inesperado de item de insight: $insight');
-                }
-              }
-            } else {
-              print('Nenhum dado de insights encontrado no documento de insights.');
-            }
+          if (adAccountDoc.exists) {
+            // Armazena o 'id' e 'name' da conta de anúncio
+            adAccounts.add({
+              'id': adAccountDoc.data()?['id'], // 'id' dentro do documento
+              'name': adAccountDoc.data()?['name'],
+              'bmId': bmId,
+              'contaAnuncioDocId': contaAnuncioDocId, // ID do documento no Firestore
+            });
           } else {
-            print('Documento de insights não encontrado para BM ID $bmId e Conta Anúncio ID $contaAnuncioId');
+            print('Conta de anúncio não encontrada para BM ID $bmId e Conta Anúncio Doc ID $contaAnuncioDocId');
           }
         }
       }
 
-      setState(() {
+      if (adAccounts.isNotEmpty) {
+        // Seleciona a primeira conta de anúncio
+        selectedContaAnuncioId = adAccounts.first['id']; // Usa o 'id' dentro do documento
+        print('ID da conta de anúncios selecionada: $selectedContaAnuncioId');
+      } else {
+        print('Nenhuma conta de anúncio encontrada.');
+        setState(() {
+          _isLoading = false; // Finaliza o carregamento em caso de erro
+        });
+        return;
+      }
+
+      // Agora, prossegue para buscar os insights usando o 'contaAnuncioDocId' para acessar o documento
+      Map<String, dynamic> combinedInsights = {};
+
+      for (var adAccount in adAccounts) {
+        String bmId = adAccount['bmId'];
+        String contaAnuncioDocId = adAccount['contaAnuncioDocId']; // ID do documento no Firestore
+
+        print('Processando BM ID: $bmId, Conta Anúncio Doc ID: $contaAnuncioDocId');
+
+        // Acessa o documento "dados_insights" na coleção "insights"
+        final dadosInsightsDoc = await FirebaseFirestore.instance
+            .collection('dashboard')
+            .doc(bmId)
+            .collection('contasAnuncio')
+            .doc(contaAnuncioDocId)
+            .collection('insights')
+            .doc('dados_insights')
+            .get();
+
+        if (dadosInsightsDoc.exists) {
+          print('Documento de insights encontrado para BM ID $bmId e Conta Anúncio Doc ID $contaAnuncioDocId');
+
+          Map<String, dynamic>? insightsData = dadosInsightsDoc.data();
+
+          if (insightsData != null) {
+            // Verifica se existe a chave 'insights' no documento
+            if (insightsData.containsKey('insights')) {
+              List<dynamic>? insightsList = insightsData['insights'];
+
+              if (insightsList != null && insightsList is List) {
+                // Itera sobre cada item da lista de insights
+                for (var insight in insightsList) {
+                  if (insight is Map<String, dynamic>) {
+                    insight.forEach((key, value) {
+                      if (value is String) {
+                        final numValue = num.tryParse(value);
+                        if (numValue != null) {
+                          if (combinedInsights.containsKey(key)) {
+                            combinedInsights[key] += numValue;
+                          } else {
+                            combinedInsights[key] = numValue;
+                          }
+                        }
+                      } else if (value is num) {
+                        if (combinedInsights.containsKey(key)) {
+                          combinedInsights[key] += value;
+                        } else {
+                          combinedInsights[key] = value;
+                        }
+                      }
+                    });
+                  } else {
+                    print('Formato inesperado de item de insight: $insight');
+                  }
+                }
+              } else {
+                print('A lista de insights está vazia ou não é uma lista.');
+              }
+            } else {
+              // Caso o documento 'dados_insights' não tenha a chave 'insights', utiliza os dados do documento diretamente
+              insightsData.forEach((key, value) {
+                if (value is String) {
+                  final numValue = num.tryParse(value);
+                  if (numValue != null) {
+                    if (combinedInsights.containsKey(key)) {
+                      combinedInsights[key] += numValue;
+                    } else {
+                      combinedInsights[key] = numValue;
+                    }
+                  }
+                } else if (value is num) {
+                  if (combinedInsights.containsKey(key)) {
+                    combinedInsights[key] += value;
+                  } else {
+                    combinedInsights[key] = value;
+                  }
+                }
+              });
+            }
+          } else {
+            print('Dados de insights não encontrados no documento.');
+          }
+        } else {
+          print('Documento de insights não encontrado para BM ID $bmId e Conta Anúncio Doc ID $contaAnuncioDocId');
+        }
+      }
+
+      if (shouldSetState) {
+        setState(() {
+          initialInsightsData = combinedInsights;
+          _isLoading = false; // Finaliza o carregamento após sucesso
+        });
+      } else {
         initialInsightsData = combinedInsights;
-      });
+        _isLoading = false; // Finaliza o carregamento após sucesso
+      }
 
       print('Dados de insights combinados: $combinedInsights');
     } catch (e, stacktrace) {
       print('Erro ao buscar insights iniciais: $e');
       print(stacktrace);
+      setState(() {
+        _isLoading = false; // Finaliza o carregamento em caso de exceção
+      });
     }
   }
 
-
-  // Método para buscar campanhas
-  Future<List<Map<String, dynamic>>> _fetchCampaigns() async {
+  // Método para buscar contas de anúncio
+  Future<List<Map<String, dynamic>>> _fetchAdAccounts() async {
     try {
-      final authProvider =
-      Provider.of<appProvider.AuthProvider>(context, listen: false);
+      final authProvider = Provider.of<appProvider.AuthProvider>(context, listen: false);
       final user = authProvider.user;
 
       if (user == null) {
@@ -1785,7 +1639,6 @@ class _DashboardPageState extends State<DashboardPage> {
           .get();
 
       if (userDoc.exists) {
-        print('Usuário é um "user"');
         companyId = userDoc['createdBy'];
 
         // Obtém o documento da empresa usando o companyId
@@ -1795,8 +1648,7 @@ class _DashboardPageState extends State<DashboardPage> {
             .get();
 
         if (!empresaDoc.exists) {
-          print(
-              'Documento da empresa não encontrado para o companyId: $companyId');
+          print('Documento da empresa não encontrado para o companyId: $companyId');
           return [];
         }
       } else {
@@ -1807,7 +1659,6 @@ class _DashboardPageState extends State<DashboardPage> {
             .get();
 
         if (empresaDoc.exists) {
-          print('Usuário é uma "empresa"');
           companyId = user.uid;
         } else {
           print('Usuário não é "user" nem "empresa"');
@@ -1815,19 +1666,15 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      // Verifica se os campos BMs e contasAnuncio existem
+      // Verifica se o campo contasAnuncio existe
       if (!empresaDoc.data()!.containsKey('BMs') ||
           !empresaDoc.data()!.containsKey('contasAnuncio')) {
-        print(
-            'Campos BMs ou contasAnuncio não existem no documento da empresa.');
+        print('Campos BMs ou contasAnuncio não existem no documento da empresa.');
         return [];
       }
 
-      // Obtém as BMs e as contas de anúncio vinculadas à empresa
       var bmIds = empresaDoc['BMs'];
       var contaAnuncioIds = empresaDoc['contasAnuncio'];
-
-      print('BM IDs: $bmIds, Conta Anúncio IDs: $contaAnuncioIds');
 
       // Garante que bmIds e contaAnuncioIds sejam listas
       if (bmIds is! List) {
@@ -1837,33 +1684,88 @@ class _DashboardPageState extends State<DashboardPage> {
         contaAnuncioIds = [contaAnuncioIds];
       }
 
-      List<Map<String, dynamic>> allCampaigns = [];
+      List<Map<String, dynamic>> adAccounts = [];
 
       for (var bmId in bmIds) {
         for (var contaAnuncioId in contaAnuncioIds) {
-          print('Processando BM ID: $bmId, Conta Anúncio ID: $contaAnuncioId');
+          final adAccountDoc = await FirebaseFirestore.instance
+              .collection('dashboard')
+              .doc(bmId)
+              .collection('contasAnuncio')
+              .doc(contaAnuncioId)
+              .get();
 
-          // Busca as campanhas na coleção "dashboard"
-          final dashboardDoc =
-          FirebaseFirestore.instance.collection('dashboard').doc(bmId);
-
-          final contaAnuncioDoc =
-          dashboardDoc.collection('contasAnuncio').doc(contaAnuncioId);
-
-          final campanhasSnapshot =
-          await contaAnuncioDoc.collection('campanhas').get();
-
-          print(
-              'Número de campanhas encontradas para BM $bmId e Conta $contaAnuncioId: ${campanhasSnapshot.docs.length}');
-
-          allCampaigns.addAll(campanhasSnapshot.docs.map((doc) => {
-            'id': doc.id,
-            'name': doc['name'],
-            'bmId': bmId,
-            'contaAnuncioId': contaAnuncioId,
-          }));
+          if (adAccountDoc.exists) {
+            adAccounts.add({
+              'id': adAccountDoc.data()?['id'],
+              'name': adAccountDoc.data()?['name'],
+              'bmId': bmId,
+            });
+          } else {
+            print('Documento da conta de anúncio não encontrado para BM ID: $bmId, Conta Anúncio ID: $contaAnuncioId');
+          }
         }
       }
+
+      return adAccounts;
+    } catch (e, stacktrace) {
+      print('Erro ao buscar contas de anúncio: $e');
+      print(stacktrace);
+      throw 'Erro ao buscar contas de anúncio: $e';
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchCampaigns() async {
+    try {
+      List<Map<String, dynamic>> allCampaigns = [];
+
+      // Verifica se adAccounts está preenchido
+      if (adAccounts.isEmpty) {
+        // Evita loop infinito ao não chamar setState durante a construção
+        await _fetchInitialInsights(shouldSetState: false);
+        if (adAccounts.isEmpty) {
+          print('Nenhuma conta de anúncio disponível para buscar campanhas.');
+          return [];
+        }
+      }
+
+      // Percorre cada conta de anúncio
+      for (var adAccount in adAccounts) {
+        String bmId = adAccount['bmId'];
+        String contaAnuncioDocId = adAccount['contaAnuncioDocId'];
+        String contaAnuncioId = adAccount['id']; // 'id' dentro do documento
+
+        print('Processando BM ID: $bmId, Conta Anúncio ID: $contaAnuncioId');
+
+        // Acessa o documento da conta de anúncio
+        final contaAnuncioDoc = FirebaseFirestore.instance
+            .collection('dashboard')
+            .doc(bmId)
+            .collection('contasAnuncio')
+            .doc(contaAnuncioDocId);
+
+        // Obtém as campanhas dentro da subcoleção 'campanhas'
+        final campanhasSnapshot = await contaAnuncioDoc.collection('campanhas').get();
+
+        print('Número de campanhas encontradas para BM $bmId e Conta $contaAnuncioId: ${campanhasSnapshot.docs.length}');
+
+        // Percorre cada documento de campanha
+        for (var doc in campanhasSnapshot.docs) {
+          var data = doc.data();
+          allCampaigns.add({
+            'id': data['id'].toString(), // Converte 'id' para String
+            'name': data['name'], // 'name' dentro do documento da campanha
+            'bmId': bmId,
+            'contaAnuncioId': contaAnuncioId,
+            'contaAnuncioDocId': contaAnuncioDocId,
+            'campaignDocId': doc.id, // ID do documento da campanha no Firestore
+          });
+        }
+      }
+
+      // Remove duplicatas com base no ID
+      final ids = Set();
+      allCampaigns.retainWhere((campaign) => ids.add(campaign['id']));
 
       return allCampaigns;
     } catch (e, stacktrace) {
@@ -1880,26 +1782,32 @@ class _DashboardPageState extends State<DashboardPage> {
 
       for (var campaign in selectedCampaigns) {
         String bmId = campaign['bmId'];
-        String contaAnuncioId = campaign['contaAnuncioId'];
-        String campaignId = campaign['id'];
+        String contaAnuncioDocId = campaign['contaAnuncioDocId'];
+        String campaignId = campaign['id']; // 'id' da campanha selecionada
+        String campaignDocId = campaign['campaignDocId']; // ID do documento da campanha no Firestore
 
         final gruposAnunciosSnapshot = await FirebaseFirestore.instance
             .collection('dashboard')
             .doc(bmId)
             .collection('contasAnuncio')
-            .doc(contaAnuncioId)
+            .doc(contaAnuncioDocId)
             .collection('campanhas')
-            .doc(campaignId)
+            .doc(campaignDocId)
             .collection('gruposAnuncios')
             .get();
 
-        allGruposAnuncios.addAll(gruposAnunciosSnapshot.docs.map((doc) => {
-          'id': doc.id,
-          'name': doc['name'],
-          'bmId': bmId,
-          'contaAnuncioId': contaAnuncioId,
-          'campaignId': campaignId,
-        }));
+        for (var doc in gruposAnunciosSnapshot.docs) {
+          var data = doc.data();
+          allGruposAnuncios.add({
+            'id': data['id'], // 'id' dentro do documento do grupo de anúncios
+            'name': data['name'],
+            'bmId': bmId,
+            'contaAnuncioDocId': contaAnuncioDocId,
+            'campaignId': campaignId,
+            'campaignDocId': campaignDocId,
+            'grupoAnuncioDocId': doc.id, // ID do documento do grupo de anúncios no Firestore
+          });
+        }
       }
 
       return allGruposAnuncios;
@@ -1910,44 +1818,69 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  // Método para buscar anúncios
-  Future<List<Map<String, dynamic>>> _fetchAnuncios() async {
+  Future<Map<String, dynamic>> _fetchMetaInsights(
+      String id, String level, String startDate, String endDate) async {
     try {
-      List<Map<String, dynamic>> allAnuncios = [];
+      final response = await http.post(
+        Uri.parse(apiUrl),
+        headers: {"Content-Type": "application/json"},
+        body: json.encode({
+          "id": id,
+          "level": level,
+          "start_date": startDate,
+          "end_date": endDate,
+        }),
+      );
 
-      for (var grupo in selectedGruposAnuncios) {
-        String bmId = grupo['bmId'];
-        String contaAnuncioId = grupo['contaAnuncioId'];
-        String campaignId = grupo['campaignId'];
-        String grupoAnuncioId = grupo['id'];
-
-        final anunciosSnapshot = await FirebaseFirestore.instance
-            .collection('dashboard')
-            .doc(bmId)
-            .collection('contasAnuncio')
-            .doc(contaAnuncioId)
-            .collection('campanhas')
-            .doc(campaignId)
-            .collection('gruposAnuncios')
-            .doc(grupoAnuncioId)
-            .collection('anuncios')
-            .get();
-
-        allAnuncios.addAll(anunciosSnapshot.docs.map((doc) => {
-          'id': doc.id,
-          'name': doc['name'],
-          'bmId': bmId,
-          'contaAnuncioId': contaAnuncioId,
-          'campaignId': campaignId,
-          'grupoAnuncioId': grupoAnuncioId,
-        }));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          // Atualiza os dados globais com os insights retornados
+          setState(() {
+            initialInsightsData = data['data']['insights'][0] ?? {};
+          });
+          return initialInsightsData;
+        } else {
+          throw Exception('Erro: ${data['data']}');
+        }
+      } else {
+        throw Exception('Erro na API: ${response.statusCode} - ${response.body}');
       }
+    } catch (e) {
+      print('Erro ao buscar insights da API: $e');
+      throw e;
+    }
+  }
 
-      return allAnuncios;
-    } catch (e, stacktrace) {
-      print('Erro ao buscar anúncios: $e');
-      print(stacktrace);
-      throw 'Erro ao buscar anúncios: $e';
+  Future<Map<String, dynamic>> _fetchPixelData(
+      String id, String startDate, String endDate) async {
+    try {
+      final response = await http.post(
+        Uri.parse(apiUrl),
+        headers: {"Content-Type": "application/json"},
+        body: json.encode({
+          "id": id,
+          "level": "account", // Pixel está vinculado a nível de conta
+          "start_date": startDate,
+          "end_date": endDate,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          return {
+            'pixel_data': data['data']['pixel_data'] ?? [],
+          };
+        } else {
+          throw Exception('Erro: ${data['data']}');
+        }
+      } else {
+        throw Exception('Erro na API: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      print('Erro ao buscar dados do Pixel da API: $e');
+      throw e;
     }
   }
 }
