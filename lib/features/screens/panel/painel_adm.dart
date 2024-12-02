@@ -371,8 +371,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           title,
           textAlign: TextAlign.start,
           style: TextStyle(
-            fontFamily: 'BrandingSF',
-            fontSize: 22,
+            fontFamily: 'Poppins',
+            fontSize: 19,
             fontWeight: FontWeight.w600,
             letterSpacing: 0,
             color: Theme.of(context).colorScheme.onSecondary,

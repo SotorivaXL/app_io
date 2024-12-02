@@ -1,5 +1,4 @@
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
-import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';
 import 'package:app_io/util/CustomWidgets/LeadCard/lead_card.dart';
 import 'package:app_io/util/utils.dart';
 import 'package:async/async.dart';
@@ -8,13 +7,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:app_io/features/screens/dasboard/dashboard_page.dart';
-import 'package:app_io/features/screens/panel/painel_adm.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 class LeadsPage extends StatefulWidget {
   @override
@@ -32,9 +26,10 @@ class _LeadsPageState extends State<LeadsPage> {
   List<Map<String, dynamic>> allLeads = [];
   String? empresaId;
   bool isLoading = true;
-
+  int totalLeads = 0; // Inicialmente zero
   bool areLeadsLoaded = false;
   List<Map<String, dynamic>> leadsData = [];
+  int totalAguardandoLeads = 0;
 
   final ScrollController _scrollController = ScrollController();
 
@@ -80,6 +75,8 @@ class _LeadsPageState extends State<LeadsPage> {
       leadsData = allLeads;
       areLeadsLoaded = true;
     });
+
+    await _updateTotalLeads(); // Atualiza totalLeads com base nos filtros atuais
   }
 
   Future<void> _getUserData() async {
@@ -120,7 +117,7 @@ class _LeadsPageState extends State<LeadsPage> {
         showErrorDialog(context, 'Erro ao carregar os dados: $e', 'Erro');
       } finally {
         // Aguarde pelo menos 5 segundos antes de remover o carregamento
-        Future.delayed(Duration(seconds: 5), () {
+        Future.delayed(Duration(seconds: 1), () {
           setState(() {
             isLoading = false;
           });
@@ -172,53 +169,6 @@ class _LeadsPageState extends State<LeadsPage> {
       return allLeads;
     });
   }
-
-  void _navigateTo(BuildContext context, String routeName) {
-    final isAdminPanel = routeName == '/admin';
-
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            _getPageByRouteName(routeName),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          if (isAdminPanel) {
-            return FadeTransition(
-              opacity: animation,
-              child: child,
-            );
-          } else {
-            const begin = Offset(1.0, 0.0);
-            const end = Offset.zero;
-            const curve = Curves.easeInOut;
-
-            var tween =
-            Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-            var offsetAnimation = animation.drive(tween);
-
-            return SlideTransition(
-              position: offsetAnimation,
-              child: child,
-            );
-          }
-        },
-      ),
-    );
-  }
-
-  Widget _getPageByRouteName(String routeName) {
-    switch (routeName) {
-      case '/dashboard':
-        return DashboardPage();
-      case '/leads':
-        return LeadsPage();
-      case '/admin':
-        return AdminPanelPage();
-      default:
-        return CustomTabBarPage();
-    }
-  }
-
 
   void _showLeadDetails(BuildContext context, Map<String, dynamic> leadData, Function(String) onStatusChanged) {
     // Cria uma cópia dos dados para evitar modificações diretas
@@ -407,141 +357,123 @@ class _LeadsPageState extends State<LeadsPage> {
     );
   }
 
-  String _capitalize(String text) {
-    if (text.isEmpty) return text;
-    return text[0].toUpperCase() + text.substring(1);
-  }
-
-  Future<void> _openWhatsAppWithMessage(String phoneNumber, String empresaId,
-      String campaignId, String leadId) async {
-    try {
-      // Busca a mensagem padrão da campanha
-      final campaignDoc = await FirebaseFirestore.instance
-          .collection('empresas')
-          .doc(empresaId)
-          .collection('campanhas')
-          .doc(campaignId)
-          .get();
-
-      if (!campaignDoc.exists) {
-        showErrorDialog(context, 'Campanha não encontrada.', 'Erro');
-        return;
-      }
-
-      // Obtém a mensagem padrão da campanha
-      String message = campaignDoc.data()?['mensagem_padrao'] ?? '';
-
-      // Busca o lead pelo ID correto
-      print('Buscando lead com ID: $leadId');
-      final leadDoc = await FirebaseFirestore.instance
-          .collection('empresas')
-          .doc(empresaId)
-          .collection('campanhas')
-          .doc(campaignId)
-          .collection('leads')
-          .doc(leadId) // Certifique-se de passar o leadId aqui
-          .get();
-
-      if (!leadDoc.exists) {
-        showErrorDialog(context, 'Lead não encontrado.', 'Erro');
-        return;
-      }
-
-      // Processa o nome do cliente (primeiro nome e nome completo)
-      String? nomeClienteCompleto = leadDoc.data()?['nome'];
-      String? nomeCliente = nomeClienteCompleto?.split(' ')?.first;
-
-      // Dados do usuário logado
-      final user = FirebaseAuth.instance.currentUser;
-      String? userName;
-      String? empresaName;
-
-      if (user != null) {
-        // Verifica se o usuário está na coleção 'users'
-        final userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
-        if (userDoc.exists) {
-          userName = userDoc.data()?['name']?.split(' ')?.first;
-
-          // Busca o nome da empresa associada ao usuário (caso 'createdBy' esteja definido)
-          final createdBy = userDoc.data()?['createdBy'];
-          if (createdBy != null) {
-            final empresaDoc = await FirebaseFirestore.instance
-                .collection('empresas')
-                .doc(createdBy)
-                .get();
-            empresaName = empresaDoc.data()?['NomeEmpresa'];
-          }
-        } else {
-          // Caso o usuário esteja na coleção 'empresas'
-          final empresaDoc = await FirebaseFirestore.instance
-              .collection('empresas')
-              .doc(user.uid)
-              .get();
-          if (empresaDoc.exists) {
-            userName = empresaDoc.data()?['NomeEmpresa']?.split(' ')?.first;
-            empresaName = empresaDoc.data()?['NomeEmpresa'];
-          }
-        }
-      }
-
-      // Substitui as variáveis na mensagem
-      message = message
-          .replaceAll('{nome_cliente}', nomeCliente ?? '')
-          .replaceAll('{nome_cliente_completo}', nomeClienteCompleto ?? '')
-          .replaceAll('{nome_usuario}', userName ?? '')
-          .replaceAll('{nome_empresa}', empresaName ?? '');
-
-      // Limpa o número de telefone
-      final cleanedPhone = phoneNumber.replaceAll(RegExp(r'\D'), '');
-
-      if (cleanedPhone.length >= 10) {
-        // URL para abrir o WhatsApp com a mensagem
-        final url = kIsWeb
-            ? 'https://wa.me/$cleanedPhone?text=${Uri.encodeComponent(message)}'
-            : 'whatsapp://send?phone=$cleanedPhone&text=${Uri.encodeComponent(message)}';
-
-        if (await canLaunch(url)) {
-          await launch(url);
-        } else {
-          showErrorDialog(
-            context,
-            'Não foi possível abrir o WhatsApp. Verifique se o WhatsApp está instalado ou tente novamente mais tarde!',
-            'Atenção',
-          );
-        }
-      } else {
-        showErrorDialog(
-          context,
-          'Número de telefone inválido.',
-          'Atenção',
-        );
-      }
-    } catch (e) {
-      showErrorDialog(
-        context,
-        'Erro ao abrir o WhatsApp: $e',
-        'Erro',
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return ConnectivityBanner(
       child: Scaffold(
-        body: SafeArea(
-          top: true,
-          child: isLoading
-              ? _buildShimmerEffect()
-              : (empresaId == null
-              ? Center(child: Text('Erro: Empresa não encontrada.'))
-              : _buildCampanhasStream(empresaId!)),
+        body: Stack(
+          children: [
+            SafeArea(
+              top: true,
+              child: isLoading
+                  ? _buildShimmerEffect()
+                  : (empresaId == null
+                  ? Center(child: Text('Erro: Empresa não encontrada.'))
+                  : _buildCampanhasStream(empresaId!)),
+            ),
+            Positioned(
+              bottom: 16.0,
+              right: 16.0,
+              child: Card(
+                elevation: 4.0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.0),
+                ),
+                color: Theme.of(context).colorScheme.primary, // Escolha uma cor apropriada
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Total de Leads',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        totalLeads.toString(), // Variável que será atualizada
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  Future<void> _updateTotalLeads() async {
+    try {
+      int leadsCount = 0;
+
+      // Referência à coleção de campanhas
+      CollectionReference campanhasRef = FirebaseFirestore.instance
+          .collection('empresas')
+          .doc(empresaId)
+          .collection('campanhas');
+
+      QuerySnapshot campanhasSnapshot = await campanhasRef.get();
+
+      for (var campanha in campanhasSnapshot.docs) {
+        // Se uma campanha específica estiver selecionada, ignore as outras
+        if (selectedCampaignId != null && campanha.id != selectedCampaignId) {
+          continue;
+        }
+
+        CollectionReference leadsRef = campanha.reference.collection('leads');
+
+        if (selectedStatus != null && selectedStatus != 'Sem Filtros') {
+          if (selectedStatus == 'Aguardando') {
+            // Contar leads com status 'Aguardando'
+            QuerySnapshot leadsSnapshotAguardando = await leadsRef
+                .where('status', isEqualTo: 'Aguardando')
+                .get();
+
+            // Contar leads sem o campo 'status'
+            QuerySnapshot leadsSnapshotSemStatus = await leadsRef
+                .where('status', isEqualTo: null)
+                .get();
+
+            leadsCount += leadsSnapshotAguardando.docs.length +
+                leadsSnapshotSemStatus.docs.length;
+          } else {
+            // Contar leads com status igual ao selecionado
+            QuerySnapshot leadsSnapshot = await leadsRef
+                .where('status', isEqualTo: selectedStatus)
+                .get();
+
+            leadsCount += leadsSnapshot.docs.length;
+          }
+        } else {
+          // Sem filtro de status: contar todos os leads
+          QuerySnapshot leadsSnapshot = await leadsRef.get();
+          leadsCount += leadsSnapshot.docs.length;
+        }
+      }
+
+      setState(() {
+        totalLeads = leadsCount;
+      });
+    } catch (e) {
+      print('Erro ao atualizar total de leads: $e');
+      // Opcional: Exibir uma mensagem de erro para o usuário
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao atualizar total de leads: $e')),
+      );
+    }
   }
 
   Future<void> _loadCampaignLeads(String empresaId, String campaignId) async {
@@ -564,6 +496,8 @@ class _LeadsPageState extends State<LeadsPage> {
       }).toList();
       areLeadsLoaded = true;
     });
+
+    await _updateTotalLeads(); // Atualiza totalLeads com base nos filtros atuais
   }
 
   Widget _buildCampanhasStream(String empresaId) {
@@ -627,8 +561,7 @@ class _LeadsPageState extends State<LeadsPage> {
                                 selectedCampaignId = value == 'Todas' ? null : value;
                                 selectedCampaignName = value == 'Todas'
                                     ? 'Todas'
-                                    : campanhas.firstWhere((campanha) =>
-                                campanha.id == value)['nome_campanha'];
+                                    : campanhas.firstWhere((campanha) => campanha.id == value)['nome_campanha'];
                                 leadsData.clear(); // Limpa os leads visíveis
                               });
 
@@ -637,6 +570,8 @@ class _LeadsPageState extends State<LeadsPage> {
                               } else {
                                 await _loadLeads(empresaId); // Carrega todos os leads
                               }
+
+                              await _updateTotalLeads(); // Atualiza totalLeads com base nos filtros atuais
 
                               setState(() {
                                 isLoading = false; // Desativa o Shimmer
@@ -714,10 +649,18 @@ class _LeadsPageState extends State<LeadsPage> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(15),
                             ),
-                            onSelected: (value) {
+                            onSelected: (value) async {
                               setState(() {
                                 selectedStatus = value;
+                                isLoading = true; // Ativa o Shimmer
                               });
+
+                              await _updateTotalLeads(); // Atualiza totalLeads com base nos filtros atuais
+
+                              setState(() {
+                                isLoading = false; // Desativa o Shimmer
+                              });
+
                             },
                             itemBuilder: (context) => [
                               'Sem Filtros',
@@ -815,28 +758,82 @@ class _LeadsPageState extends State<LeadsPage> {
           );
         }
 
+        // Filtrar leads com base no status
+        final filteredLeads = leads.where((lead) {
+          final data = lead.data() as Map<String, dynamic>;
+          final status = data.containsKey('status') ? data['status'] : 'Aguardando';
+          return (selectedStatus == null ||
+              selectedStatus == 'Sem Filtros' ||
+              status == selectedStatus);
+        }).toList();
+
+        if (filteredLeads.isEmpty) {
+          return Center(
+            child: Text(
+              'Nenhum lead disponível para os filtros selecionados',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+          );
+        }
+
+        // Contar leads "Aguardando" na lista filtrada
+        int aguardandoCount = 0;
+        if (selectedStatus == 'Aguardando' || selectedStatus == null || selectedStatus == 'Sem Filtros') {
+          aguardandoCount = filteredLeads.where((lead) {
+            final data = lead.data() as Map<String, dynamic>;
+            return !data.containsKey('status') || data['status'] == 'Aguardando';
+          }).length;
+        }
+
+        // Atualizar o estado do contador "Aguardando"
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          setState(() {
+            totalAguardandoLeads = aguardandoCount;
+          });
+        });
+
         return ListView.builder(
           shrinkWrap: true,
           physics: NeverScrollableScrollPhysics(),
-          itemCount: leads.length,
+          itemCount: filteredLeads.length,
           itemBuilder: (context, index) {
-            final lead = leads[index];
+            final lead = filteredLeads[index];
             final leadData = Map<String, dynamic>.from(lead.data() as Map);
             leadData['leadId'] = lead.id;
             leadData['empresaId'] = empresaId;
             leadData['campaignId'] = campaignId;
+            leadData['status'] = leadData['status'] ?? 'Aguardando'; // Garantir status
 
             return LeadCard(
               leadData: leadData,
               onTap: (data) => _showLeadDetails(
                 context,
                 data,
-                    (newStatus) {
-                  leadData['status'] = newStatus; // Atualiza localmente
+                    (newStatus) async {
+                  setState(() {
+                    leadData['status'] = newStatus;
+                  });
+
+                  // Atualizar o status no Firestore
+                  await FirebaseFirestore.instance
+                      .collection('empresas')
+                      .doc(empresaId)
+                      .collection('campanhas')
+                      .doc(campaignId)
+                      .collection('leads')
+                      .doc(lead.id)
+                      .update({'status': newStatus});
+
+                  // A contagem será atualizada automaticamente via StreamBuilder
                 },
               ),
-              onStatusChanged: (newStatus) {
-                FirebaseFirestore.instance
+              onStatusChanged: (newStatus) async {
+                setState(() {
+                  leadData['status'] = newStatus;
+                });
+
+                // Atualizar o status no Firestore
+                await FirebaseFirestore.instance
                     .collection('empresas')
                     .doc(empresaId)
                     .collection('campanhas')
@@ -844,6 +841,8 @@ class _LeadsPageState extends State<LeadsPage> {
                     .collection('leads')
                     .doc(lead.id)
                     .update({'status': newStatus});
+
+                // A contagem será atualizada automaticamente via StreamBuilder
               },
               statusColor: _getStatusColor(leadData['status'] ?? 'Aguardando'),
             );
@@ -852,6 +851,7 @@ class _LeadsPageState extends State<LeadsPage> {
       },
     );
   }
+
 
   Widget _buildAllLeadsView(String empresaId) {
     return StreamBuilder<List<Map<String, dynamic>>>(
@@ -878,10 +878,13 @@ class _LeadsPageState extends State<LeadsPage> {
 
         final allLeads = snapshot.data!;
         final filteredLeads = allLeads.where((leadData) {
-          final status = leadData['status'] ?? 'Aguardando';
-          return selectedStatus == null ||
+          final data = leadData as Map<String, dynamic>;
+          final status = data.containsKey('status') ? data['status'] : 'Aguardando';
+          return (selectedStatus == null ||
               selectedStatus == 'Sem Filtros' ||
-              status == selectedStatus;
+              status == selectedStatus) &&
+              (selectedCampaignId == null ||
+                  leadData['campaignId'] == selectedCampaignId);
         }).toList();
 
         if (filteredLeads.isEmpty) {
@@ -907,7 +910,8 @@ class _LeadsPageState extends State<LeadsPage> {
   }
 
   Widget _buildLeadItem(Map<String, dynamic> leadData) {
-    final status = leadData['status'] ?? 'Aguardando';
+    final data = leadData as Map<String, dynamic>;
+    final status = data.containsKey('status') ? data['status'] : 'Aguardando';
     final timestamp = leadData['timestamp'] ?? Timestamp.now();
     final nome = leadData['nome'] ?? 'Nome não disponível';
 
@@ -1006,35 +1010,6 @@ class _LeadsPageState extends State<LeadsPage> {
             }).toList(),
           ),
         );
-      },
-    );
-  }
-
-  Widget _buildStatusOption(BuildContext context, String status, String leadId,
-      String empresaId, String campanhaId) {
-    return ListTile(
-      title: Text(
-        status,
-        style: TextStyle(
-          fontFamily: 'Poppins',
-          fontWeight: FontWeight.w500,
-          fontSize: 16,
-          color: Theme.of(context).colorScheme.onSecondary,
-        ),
-      ),
-      leading: CircleAvatar(
-        backgroundColor: _getStatusColor(status),
-      ),
-      onTap: () {
-        FirebaseFirestore.instance
-            .collection('empresas')
-            .doc(empresaId)
-            .collection('campanhas')
-            .doc(campanhaId)
-            .collection('leads')
-            .doc(leadId)
-            .update({'status': status});
-        Navigator.of(context).pop(); // Fecha o diálogo após a atualização
       },
     );
   }

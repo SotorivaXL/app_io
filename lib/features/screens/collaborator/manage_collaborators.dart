@@ -463,9 +463,8 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                   itemBuilder: (context, index) {
                     final collaborator = collaborators[index];
                     return Card(
-                      color: Theme.of(context).cardColor,
-                      shadowColor: Theme.of(context).shadowColor,
-                      margin: EdgeInsets.only(top: 20, right: 10, left: 10),
+                      elevation: 4,
+                      margin: EdgeInsets.only(top: 20, right: 15, left: 15),
                       child: ListTile(
                         title: Text(
                           collaborator['name'] ?? 'Nome não disponível',

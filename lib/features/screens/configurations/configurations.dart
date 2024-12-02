@@ -511,272 +511,179 @@ class _SettingsPageState extends State<SettingsPage> {
         body: SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.all(20.0),
-            child: Center(
-              child: userName == null
-                  ? CircularProgressIndicator()
-                  : Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircleAvatar(
-                          radius: 55,
-                          backgroundColor:
-                              Theme.of(context).colorScheme.primary,
-                          child: Icon(
-                            Icons.camera_alt,
-                            color: Theme.of(context).colorScheme.outline,
-                            size: 40,
-                          ),
+            child: userName == null
+                ? Center(child: CircularProgressIndicator())
+                : Column(
+              crossAxisAlignment: CrossAxisAlignment.start, // Alinha tudo à esquerda
+              children: [
+                // Avatar e Nome do Usuário
+                Center(
+                  child: Column(
+                    children: [
+                      CircleAvatar(
+                        radius: 55,
+                        backgroundColor:
+                        Theme.of(context).colorScheme.primary,
+                        child: Icon(
+                          Icons.camera_alt,
+                          color: Theme.of(context).colorScheme.outline,
+                          size: 40,
                         ),
-                        SizedBox(height: 20),
-                        Text(
-                          '$userName',
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 22,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.surfaceVariant,
-                          ),
+                      ),
+                      SizedBox(height: 20),
+                      Text(
+                        '$userName',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 22,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceVariant,
                         ),
-                        SizedBox(height: 20),
-                        TextField(
-                          readOnly: true,
-                          enableInteractiveSelection: false,
-                          controller: TextEditingController(
-                              text: userEmail ?? 'Email não disponível'),
-                          decoration: InputDecoration(
-                            labelText: 'Email',
-                            labelStyle: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Theme.of(context).colorScheme.onSecondary,
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: Theme.of(context).colorScheme.primary,
-                                width: 2,
-                              ),
-                              borderRadius: BorderRadius.circular(10)
-                            ),
-                            border: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: Theme.of(context).colorScheme.primary,
-                                width: 2,
-                              ),
-                              borderRadius: BorderRadius.circular(10)
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: Theme.of(context).colorScheme.primary,
-                                width: 2,
-                              ),
-                              borderRadius: BorderRadius.circular(10)
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 20),
-                        if (cnpj != null) ...[
-                          TextField(
-                            readOnly: true,
-                            controller: TextEditingController(
-                                text: cnpj ?? 'CNPJ não disponível'),
-                            decoration: InputDecoration(
-                              labelText: 'CNPJ',
-                              labelStyle: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context).colorScheme.onSecondary,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: Theme.of(context).colorScheme.primary,
-                                width: 2,
-                              ),
-                              borderRadius: BorderRadius.circular(10)
-                            ),
-                              border: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: Theme.of(context).colorScheme.primary,
-                                width: 2,
-                              ),
-                              borderRadius: BorderRadius.circular(10)
-                            ),
-                              focusedBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: Theme.of(context).colorScheme.primary,
-                                width: 2,
-                              ),
-                              borderRadius: BorderRadius.circular(10)
-                            ),
-                            ),
-                          ),
-                          SizedBox(height: 20),
-                          TextField(
-                            readOnly: true,
-                            enableInteractiveSelection: false,
-                            controller: TextEditingController(
-                                text: contract ?? 'Contrato não disponível'),
-                            decoration: InputDecoration(
-                              labelText: 'Final do contrato',
-                              labelStyle: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context).colorScheme.onSecondary,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.primary,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(10)
-                              ),
-                              border: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.primary,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(10)
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.primary,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(10)
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: 20),
-                        ],
-                        if (role != null) ...[
-                          TextField(
-                            readOnly: true,
-                            enableInteractiveSelection: false,
-                            controller: TextEditingController(
-                                text: role ?? 'Função não disponível'),
-                            decoration: InputDecoration(
-                              labelText: 'Função',
-                              labelStyle: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context).colorScheme.onSecondary,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.primary,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(10)
-                              ),
-                              border: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.primary,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(10)
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.primary,
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(10)
-                              ),
-                            ),
-                          ),
-                        ],
-                        // SizedBox(height: 30),
-                        // _buildNotificationToggle(),
-                        // SizedBox(height: 30),
-                        // if (copiarTelefones == true)
-                        //   Align(
-                        //     alignment: AlignmentDirectional(0, 0),
-                        //     child: Row(
-                        //       mainAxisSize: MainAxisSize.max,
-                        //       mainAxisAlignment: MainAxisAlignment.center,
-                        //       children: [
-                        //         Align(
-                        //           alignment: AlignmentDirectional(0, 0),
-                        //           child: Padding(
-                        //             padding:
-                        //             EdgeInsetsDirectional.fromSTEB(0, 20, 20, 0),
-                        //             child:
-                        //             _isLoading // Exibe a barra de progresso se estiver carregando
-                        //                 ? ElevatedButton(
-                        //               onPressed: null,
-                        //               // Botão desabilitado durante o carregamento
-                        //               style: ElevatedButton.styleFrom(
-                        //                 padding: EdgeInsets.symmetric(
-                        //                     horizontal: 25, vertical: 15),
-                        //                 backgroundColor: Theme.of(context)
-                        //                     .colorScheme
-                        //                     .primary,
-                        //                 shape: RoundedRectangleBorder(
-                        //                   borderRadius:
-                        //                   BorderRadius.circular(25),
-                        //                 ),
-                        //               ),
-                        //               child: SizedBox(
-                        //                 width: 20,
-                        //                 height:
-                        //                 20, // Define o tamanho da ProgressBar
-                        //                 child: CircularProgressIndicator(
-                        //                   valueColor:
-                        //                   AlwaysStoppedAnimation<Color>(
-                        //                       Colors.white),
-                        //                   strokeWidth: 2.0,
-                        //                 ),
-                        //               ),
-                        //             )
-                        //                 : ElevatedButton.icon(
-                        //               onPressed: () => _showCampaignsSheet(context),
-                        //               icon: Icon(
-                        //                 Icons.copy_all,
-                        //                 color: Theme.of(context)
-                        //                     .colorScheme
-                        //                     .outline,
-                        //                 size: 25,
-                        //               ),
-                        //               label: Text(
-                        //                 'Copiar telefones',
-                        //                 style: TextStyle(
-                        //                   fontFamily: 'Poppins',
-                        //                   fontSize: 18,
-                        //                   fontWeight: FontWeight.w600,
-                        //                   letterSpacing: 0,
-                        //                   color: Theme.of(context)
-                        //                       .colorScheme
-                        //                       .outline,
-                        //                 ),
-                        //               ),
-                        //               style: ElevatedButton.styleFrom(
-                        //                 padding:
-                        //                 EdgeInsetsDirectional.fromSTEB(
-                        //                     30, 15, 30, 15),
-                        //                 backgroundColor: Theme.of(context)
-                        //                     .colorScheme
-                        //                     .primary,
-                        //                 elevation: 3,
-                        //                 shape: RoundedRectangleBorder(
-                        //                   borderRadius:
-                        //                   BorderRadius.circular(25),
-                        //                 ),
-                        //                 side: BorderSide(
-                        //                   color: Colors.transparent,
-                        //                   width: 1,
-                        //                 ),
-                        //               ),
-                        //             ),
-                        //           ),
-                        //         ),
-                        //       ],
-                        //     ),
-                        //   ),
-                      ],
+                      ),
+                      SizedBox(height: 20),
+                    ],
+                  ),
+                ),
+
+                // Formulário com Labels Separadas
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Campo de Email
+                    // Label para Email
+                    Text(
+                      'Email',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color:
+                        Theme.of(context).colorScheme.onSecondary,
+                      ),
                     ),
+                    SizedBox(height: 8),
+                    // Campo de Email
+                    TextField(
+                      readOnly: true,
+                      enableInteractiveSelection: false,
+                      controller: TextEditingController(
+                        text: userEmail ?? 'Email não disponível',
+                      ),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor:
+                        Theme.of(context).colorScheme.secondary,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+
+                    SizedBox(height: 20),
+
+                    // Campo de CNPJ (se existir)
+                    if (cnpj != null) ...[
+                      // Label para CNPJ
+                      Text(
+                        'CNPJ',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSecondary,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      // Campo de CNPJ
+                      TextField(
+                        readOnly: true,
+                        enableInteractiveSelection: false,
+                        controller: TextEditingController(
+                            text: cnpj ?? 'CNPJ não disponível'),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor:
+                          Theme.of(context).colorScheme.secondary,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 20),
+
+                      // Label para Final do Contrato
+                      Text(
+                        'Final do Contrato',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color:
+                          Theme.of(context).colorScheme.onSecondary,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      // Campo de Final do Contrato
+                      TextField(
+                        readOnly: true,
+                        enableInteractiveSelection: false,
+                        controller: TextEditingController(
+                            text:
+                            contract ?? 'Contrato não disponível'),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor:
+                          Theme.of(context).colorScheme.secondary,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 20),
+                    ],
+
+                    // Campo de Função (se existir)
+                    if (role != null) ...[
+                      // Label para Função
+                      Text(
+                        'Função',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color:
+                          Theme.of(context).colorScheme.onSecondary,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      // Campo de Função
+                      TextField(
+                        readOnly: true,
+                        enableInteractiveSelection: false,
+                        controller: TextEditingController(
+                            text: role ?? 'Função não disponível'),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor:
+                          Theme.of(context).colorScheme.secondary,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 20),
+                    ],
+
+                    // Adicione mais campos seguindo o mesmo padrão acima
+                  ],
+                ),
+              ],
             ),
           ),
         ),
