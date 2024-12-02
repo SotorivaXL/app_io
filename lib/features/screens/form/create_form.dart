@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:app_io/util/services/firestore_service.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class CreateForm extends StatefulWidget {
   @override
@@ -42,6 +43,9 @@ class _CreateFormState extends State<CreateForm> {
 
   List<FieldData> _fields = [];
   TextEditingController _redirectUrlController = TextEditingController();
+
+  // Novo campo para o nome do formulário
+  TextEditingController _formNameController = TextEditingController();
 
   // Botão
   Color _buttonStartColor = Colors.blue;
@@ -91,6 +95,7 @@ class _CreateFormState extends State<CreateForm> {
       _selectedCampanhaId = null;
       _fields.clear();
       _redirectUrlController.clear(); // Limpar o campo do link
+      _formNameController.clear(); // Limpar o nome do formulário
     });
   }
 
@@ -179,9 +184,32 @@ class _CreateFormState extends State<CreateForm> {
                   // Dropdowns
                   _buildDropdowns(context),
 
-                  // Campo URL de Redirecionamento
+                  // Campo Nome do Formulário
                   Padding(
                     padding: const EdgeInsets.all(20.0),
+                    child: TextFormField(
+                      controller: _formNameController,
+                      decoration: InputDecoration(
+                        hintText: 'Nome do Formulário',
+                        hintStyle: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: Theme.of(context).colorScheme.onSecondary,
+                        ),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 20.0),
+                        filled: true,
+                        fillColor: Theme.of(context).colorScheme.secondary,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  Padding(
+                    padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 10),
                     child: TextFormField(
                       controller: _redirectUrlController,
                       decoration: InputDecoration(
@@ -190,6 +218,7 @@ class _CreateFormState extends State<CreateForm> {
                           fontFamily: 'Poppins',
                           fontSize: 15,
                           fontWeight: FontWeight.w500,
+                          color: Theme.of(context).colorScheme.onSecondary,
                         ),
                         contentPadding: EdgeInsets.symmetric(horizontal: 20.0),
                         filled: true,
@@ -235,7 +264,7 @@ class _CreateFormState extends State<CreateForm> {
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                                 color:
-                                Theme.of(context).colorScheme.onSecondary,
+                                Theme.of(context).colorScheme.outline,
                               ),
                             ),
                           ),
@@ -255,12 +284,13 @@ class _CreateFormState extends State<CreateForm> {
                             ),
                             label: Text(
                               'Limpar Campos',
+                              textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontFamily: 'Poppins',
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                                 color:
-                                Theme.of(context).colorScheme.onSecondary,
+                                Theme.of(context).colorScheme.outline,
                               ),
                             ),
                           ),
@@ -276,6 +306,7 @@ class _CreateFormState extends State<CreateForm> {
       ),
     );
   }
+
 
   Widget _buildDropdowns(BuildContext context) {
     return Column(
@@ -502,7 +533,8 @@ class _CreateFormState extends State<CreateForm> {
                   ),
                   const SizedBox(height: 15),
                   TextFormField(
-                    initialValue: fieldData.borderRadius.toString(),
+                    controller: TextEditingController(
+                        text: fieldData.borderRadius.toString()),
                     decoration: InputDecoration(
                         filled: true,
                         fillColor: Theme.of(context).colorScheme.background,
@@ -517,6 +549,12 @@ class _CreateFormState extends State<CreateForm> {
                           borderRadius: BorderRadius.circular(10),
                           borderSide: BorderSide.none,
                         )),
+                    keyboardType: TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (value) {
+                      setState(() {
+                        fieldData.borderRadius = double.tryParse(value) ?? 8.0;
+                      });
+                    },
                   ),
                   const SizedBox(height: 15),
                   Container(
@@ -727,8 +765,8 @@ class _CreateFormState extends State<CreateForm> {
                     color: Theme.of(context).colorScheme.background,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  padding:
-                  const EdgeInsets.symmetric(vertical: 0.2, horizontal: 6),
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 0.2, horizontal: 6),
                   child: ListTile(
                     title: Text(
                       'Cor de Foco dos Campos',
@@ -1213,10 +1251,11 @@ class _CreateFormState extends State<CreateForm> {
   void _generateHtmlForm() async {
     if (_selectedEmpresaId == null ||
         _selectedCampanhaId == null ||
-        _redirectUrlController.text.isEmpty) {
+        _redirectUrlController.text.isEmpty ||
+        _formNameController.text.isEmpty) {
       showErrorDialog(
           context,
-          'Por favor selecione uma empresa, uma campanha e insira uma URL de redirecionamento!',
+          'Por favor selecione uma empresa, uma campanha, insira o nome do formulário e a URL de redirecionamento!',
           'Atenção');
       return;
     }
@@ -1243,131 +1282,175 @@ class _CreateFormState extends State<CreateForm> {
           String maskScript = '';
           if (fieldData.mask == 'phone') {
             maskScript = '''
-            function $maskFunctionName(input) {
-              var x = input.value.replace(/\\D/g, '');
-              x = x.substring(0, 11);
-              var formatted = x.replace(/(\\d{0,2})(\\d{0,5})(\\d{0,4})/, function(match, p1, p2, p3) {
-                if (p3) {
-                  return '(' + p1 + ') ' + p2 + '-' + p3;
-                } else if (p2) {
-                  return '(' + p1 + ') ' + p2;
-                } else if (p1) {
-                  return '(' + p1;
-                }
-              });
-              input.value = formatted;
+                function applyMask2(input) {
+            var x = input.value.replace(/\D/g, '');
+            x = x.substring(0, 11);
+            
+            if (x === '') {
+              input.value = '';
+              return;
             }
-            ''';
+        
+            var formatted = x.replace(/(\d{0,2})(\d{0,5})(\d{0,4})/, function(match, p1, p2, p3) {
+              if (p3) {
+                return '(' + p1 + ') ' + p2 + '-' + p3;
+              } else if (p2) {
+                return '(' + p1 + ') ' + p2;
+              } else {
+                return '(' + p1;
+              }
+            });
+        
+            input.value = formatted;
+          }
+                ''';
           } else if (fieldData.mask == 'cpf') {
             maskScript = '''
-            function $maskFunctionName(input) {
-              var x = input.value.replace(/\\D/g, '');
-              x = x.substring(0, 11);
-              var formatted = x.replace(/(\\d{0,3})(\\d{0,3})(\\d{0,3})(\\d{0,2})/, function(match, p1, p2, p3, p4) {
-                var result = '';
-                if (p1) result += p1;
-                if (p2) result += '.' + p2;
-                if (p3) result += '.' + p3;
-                if (p4) result += '-' + p4;
-                return result;
-              });
-              input.value = formatted;
-            }
-            ''';
+                function $maskFunctionName(input) {
+                  var x = input.value.replace(/\\D/g, '');
+                  x = x.substring(0, 11);
+                  var formatted = x.replace(/(\\d{0,3})(\\d{0,3})(\\d{0,3})(\\d{0,2})/, function(match, p1, p2, p3, p4) {
+                    var result = '';
+                    if (p1) result += p1;
+                    if (p2) result += '.' + p2;
+                    if (p3) result += '.' + p3;
+                    if (p4) result += '-' + p4;
+                    return result;
+                  });
+                  input.value = formatted;
+                }
+                ''';
           } else if (fieldData.mask == 'cnpj') {
             maskScript = '''
-            function $maskFunctionName(input) {
-              var x = input.value.replace(/\\D/g, '');
-              x = x.substring(0, 14);
-              var formatted = x.replace(/(\\d{0,2})(\\d{0,3})(\\d{0,3})(\\d{0,4})(\\d{0,2})/, function(match, p1, p2, p3, p4, p5) {
-                var result = '';
-                if (p1) result += p1;
-                if (p2) result += '.' + p2;
-                if (p3) result += '.' + p3;
-                if (p4) result += '/' + p4;
-                if (p5) result += '-' + p5;
-                return result;
-              });
-              input.value = formatted;
-            }
-            ''';
+                function $maskFunctionName(input) {
+                  var x = input.value.replace(/\\D/g, '');
+                  x = x.substring(0, 14);
+                  var formatted = x.replace(/(\\d{0,2})(\\d{0,3})(\\d{0,3})(\\d{0,4})(\\d{0,2})/, function(match, p1, p2, p3, p4, p5) {
+                    var result = '';
+                    if (p1) result += p1;
+                    if (p2) result += '.' + p2;
+                    if (p3) result += '.' + p3;
+                    if (p4) result += '/' + p4;
+                    if (p5) result += '-' + p5;
+                    return result;
+                  });
+                  input.value = formatted;
+                }
+                ''';
           } else if (fieldData.mask == 'date') {
             maskScript = '''
-            function $maskFunctionName(input) {
-              var x = input.value.replace(/\\D/g, '');
-              x = x.substring(0, 8);
-              var formatted = x.replace(/(\\d{0,2})(\\d{0,2})(\\d{0,4})/, function(match, p1, p2, p3) {
-                var result = '';
-                if (p1) result += p1;
-                if (p2) result += '/' + p2;
-                if (p3) result += '/' + p3;
-                return result;
-              });
-              input.value = formatted;
-            }
-            ''';
+                function $maskFunctionName(input) {
+                  var x = input.value.replace(/\\D/g, '');
+                  x = x.substring(0, 8);
+                  var formatted = x.replace(/(\\d{0,2})(\\d{0,2})(\\d{0,4})/, function(match, p1, p2, p3) {
+                    var result = '';
+                    if (p1) result += p1;
+                    if (p2) result += '/' + p2;
+                    if (p3) result += '/' + p3;
+                    return result;
+                  });
+                  input.value = formatted;
+                }
+                ''';
           }
           maskScripts += '<script>$maskScript</script>';
         }
 
         String inputField = '''
-        <div style="border-radius: ${fieldData.borderRadius}px; padding: 2px; background: linear-gradient(45deg, ${_colorToHex(fieldData.fieldStartColor)}, ${_colorToHex(fieldData.fieldEndColor)});">
-          <input type="text" id="$fieldName" name="$fieldName" placeholder="${fieldData.hintController.text}" value="" style="border: none; border-image: linear-gradient(45deg, ${_colorToHex(fieldData.fieldStartColor)}, ${_colorToHex(fieldData.fieldEndColor)}) 1; border-radius: ${fieldData.borderRadius}px; font-family: 'Montserrat', sans-serif; font-size: 16px; padding: 8px; margin: 0; width: 100%; box-sizing: border-box; background-color: white; cursor: pointer;" ${fieldData.mask.isNotEmpty ? 'oninput="applyMask${i}(this)"' : ''}>
-        </div>
-        <br>
-        ''';
+            <div style="border-radius: ${fieldData.borderRadius}px; padding: 2px; background: linear-gradient(45deg, ${_colorToHex(fieldData.fieldStartColor)}, ${_colorToHex(fieldData.fieldEndColor)});">
+              <input type="text" id="$fieldName" name="$fieldName" placeholder="${fieldData.hintController.text}" value="" style="border: none; border-image: linear-gradient(45deg, ${_colorToHex(fieldData.fieldStartColor)}, ${_colorToHex(fieldData.fieldEndColor)}) 1; border-radius: ${fieldData.borderRadius}px; font-family: 'Montserrat', sans-serif; font-size: 16px; padding: 8px; margin: 0; width: 100%; box-sizing: border-box; background-color: white; cursor: pointer;" ${fieldData.mask.isNotEmpty ? 'oninput="applyMask${i}(this)"' : ''}>
+            </div>
+            <br>
+            ''';
 
         fieldsHtml += inputField;
       }
 
       String htmlForm = '''
-      <html>
-      <head>
-        <title>Formulário</title>
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400&display=swap');
-          body { font-family: 'Montserrat', sans-serif; font-size: 16px; }
-          input[type="text"] {
-            font-family: 'Montserrat', sans-serif;
-            font-size: 16px;
-            padding: 8px;
-            margin-bottom: 8px;
-            width: 100%;
-            box-sizing: border-box;
-          }
-          input[type="text"]:focus {
-            outline: none;
-            border-color: ${_colorToHex(_inputFocusColor)};
-          }
-          input[type="submit"] {
-            background: linear-gradient(45deg, ${_colorToHex(_buttonStartColor)}, ${_colorToHex(_buttonEndColor)});
-            border: none;
-            border-radius: ${_buttonBorderRadius}px;
-            color: ${_colorToHex(_buttonTextColor)};
-            font-family: 'Montserrat', sans-serif;
-            font-size: 16px;
-            padding: 12px;
-            width: 100%;
-            cursor: pointer;
-            margin-top: 16px;
-          }
-          input[type="submit"]:hover {
-            background-color: ${_colorToHex(_buttonHoverColor)};
-          }
-        </style>
-        $maskScripts
-      </head>
-      <body>
-        <form action="$webhookUrl" method="POST" target="_self">
-          <input type="hidden" name="empresa_id" value="$_selectedEmpresaId">
-          <input type="hidden" name="nome_campanha" value="$_selectedCampanhaId">
-          <input type="hidden" name="redirect_url" value="${_redirectUrlController.text}">
-          $fieldsHtml
-          <input type="submit" value="Enviar Formulário">
-        </form>
-      </body>
-      </html>
-      ''';
+          <html>
+          <head>
+            <title>Formulário</title>
+            <style>
+              @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400&display=swap');
+              body { font-family: 'Montserrat', sans-serif; font-size: 16px; }
+              input[type="text"] {
+                font-family: 'Montserrat', sans-serif;
+                font-size: 16px;
+                padding: 8px;
+                margin-bottom: 8px;
+                width: 100%;
+                box-sizing: border-box;
+              }
+              input[type="text"]:focus {
+                outline: none;
+                border-color: ${_colorToHex(_inputFocusColor)};
+              }
+              input[type="submit"] {
+                background: linear-gradient(45deg, ${_colorToHex(_buttonStartColor)}, ${_colorToHex(_buttonEndColor)});
+                border: none;
+                border-radius: ${_buttonBorderRadius}px;
+                color: ${_colorToHex(_buttonTextColor)};
+                font-family: 'Montserrat', sans-serif;
+                font-size: 16px;
+                padding: 12px;
+                width: 100%;
+                cursor: pointer;
+                margin-top: 16px;
+              }
+              input[type="submit"]:hover {
+                background-color: ${_colorToHex(_buttonHoverColor)};
+              }
+            </style>
+            $maskScripts
+          </head>
+          <body>
+            <form action="$webhookUrl" method="POST" target="_self">
+              <input type="hidden" name="empresa_id" value="$_selectedEmpresaId">
+              <input type="hidden" name="nome_campanha" value="$_selectedCampanhaId">
+              <input type="hidden" name="redirect_url" value="${_redirectUrlController.text}">
+              $fieldsHtml
+              <input type="submit" value="Enviar Formulário">
+            </form>
+          </body>
+          </html>
+          ''';
+
+      // Salvar os dados do formulário no Firestore
+      Map<String, dynamic> formData = {
+        'empresa_id': _selectedEmpresaId,
+        'campanha_id': _selectedCampanhaId,
+        'form_name': _formNameController.text, // Novo campo
+        'redirect_url': _redirectUrlController.text,
+        'html_form': htmlForm,
+        'fields': _fields.map((field) {
+          return {
+            'name': field.nameController.text,
+            'hint': field.hintController.text,
+            'mask': field.mask,
+            'borderColor': _colorToHex(field.borderColor),
+            'borderRadius': field.borderRadius,
+            'fieldStartColor': _colorToHex(field.fieldStartColor),
+            'fieldEndColor': _colorToHex(field.fieldEndColor),
+          };
+        }).toList(),
+        'buttonStartColor': _colorToHex(_buttonStartColor),
+        'buttonEndColor': _colorToHex(_buttonEndColor),
+        'buttonTextColor': _colorToHex(_buttonTextColor),
+        'buttonBorderRadius': _buttonBorderRadius,
+        'buttonHoverColor': _colorToHex(_buttonHoverColor),
+        'inputFocusColor': _colorToHex(_inputFocusColor),
+        'timestamp': FieldValue.serverTimestamp(),
+      };
+
+      // Referência à coleção 'forms' dentro da campanha selecionada
+      CollectionReference formsCollection = FirebaseFirestore.instance
+          .collection('empresas')
+          .doc(_selectedEmpresaId)
+          .collection('campanhas') // Certifique-se de que o nome está correto
+          .doc(_selectedCampanhaId)
+          .collection('forms');
+
+      await formsCollection.add(formData);
 
       Clipboard.setData(ClipboardData(text: htmlForm));
       showErrorDialog(

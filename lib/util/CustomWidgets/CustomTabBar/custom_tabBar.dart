@@ -11,7 +11,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class CustomTabBarPage extends StatefulWidget {
@@ -131,7 +130,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
       hasConfigurarDashAccess = userData['configurarDash'] ?? false;
       hasCriarCampanhaAccess = userData['criarCampanha'] ?? false;
       hasCriarFormAccess = userData['criarForm'] ?? false;
-      hasGerenciarColaboradoresAccess = userData['gerenciarColaboradores'] ?? false;
+      hasGerenciarColaboradoresAccess =
+          userData['gerenciarColaboradores'] ?? false;
       hasGerenciarParceirosAccess = userData['gerenciarParceiros'] ?? false;
 
       // Atualiza o acesso ao Painel Adm com base nas permissões específicas
@@ -190,7 +190,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     setState(() {
       _pages = pages;
       _tabs = tabs;
-      _tabController.dispose();  // Descarta o controlador antigo para evitar inconsistências
+      _tabController
+          .dispose(); // Descarta o controlador antigo para evitar inconsistências
       _tabController = TabController(length: _tabs.length, vsync: this);
 
       _tabController.addListener(() {
@@ -245,8 +246,14 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
 
   void _showNotificationsSidebar(BuildContext context) {
     List<Map<String, String>> notifications = [
-      {'title': 'Exemplo de notificação 1', 'description': 'Descrição da notificação 1'},
-      {'title': 'Exemplo de notificação 2', 'description': 'Descrição da notificação 2'},
+      {
+        'title': 'Exemplo de notificação 1',
+        'description': 'Descrição da notificação 1'
+      },
+      {
+        'title': 'Exemplo de notificação 2',
+        'description': 'Descrição da notificação 2'
+      },
     ];
 
     showGeneralDialog(
@@ -255,7 +262,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
       barrierLabel: '',
       barrierColor: Colors.black54,
       transitionDuration: Duration(milliseconds: 300),
-      pageBuilder: (BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) {
+      pageBuilder: (BuildContext context, Animation<double> animation,
+          Animation<double> secondaryAnimation) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setState) {
             return Align(
@@ -320,25 +328,37 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                                   });
                                 },
                                 child: ListTile(
-                                  contentPadding: EdgeInsets.symmetric(vertical: 2),
-                                  tileColor: Theme.of(context).colorScheme.secondary.withOpacity(0.1),
+                                  contentPadding:
+                                      EdgeInsets.symmetric(vertical: 2),
+                                  tileColor: Theme.of(context)
+                                      .colorScheme
+                                      .secondary
+                                      .withOpacity(0.1),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  leading: Icon(Icons.notifications, color: Theme.of(context).colorScheme.primary),
+                                  leading: Icon(Icons.notifications,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary),
                                   title: Text(
                                     notification['title']!,
                                     style: TextStyle(
                                       fontFamily: 'Poppins',
                                       fontSize: 16,
-                                      color: Theme.of(context).colorScheme.onSecondary,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSecondary,
                                     ),
                                   ),
                                   subtitle: Text(
                                     notification['description']!,
                                     style: TextStyle(
                                       fontSize: 14,
-                                      color: Theme.of(context).colorScheme.onSecondary.withOpacity(0.6),
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSecondary
+                                          .withOpacity(0.6),
                                     ),
                                   ),
                                   onTap: () {},
@@ -378,12 +398,16 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     String? birthday;
 
     // Busca na coleção `users`
-    final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final userDoc =
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
     if (userDoc.exists) {
       birthday = userDoc.data()?['birth'];
     } else {
       // Busca na coleção `empresas` caso não esteja em `users`
-      final empresaDoc = await FirebaseFirestore.instance.collection('empresas').doc(uid).get();
+      final empresaDoc = await FirebaseFirestore.instance
+          .collection('empresas')
+          .doc(uid)
+          .get();
       if (empresaDoc.exists) {
         birthday = empresaDoc.data()?['founded'];
       }
@@ -399,7 +423,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
 
         if (birthDay == today.day && birthMonth == today.month) {
           final prefs = await SharedPreferences.getInstance();
-          final key = 'birthday_shown_$uid${today.toIso8601String()}'; // Chave única baseada no UID e data
+          final key =
+              'birthday_shown_$uid${today.toIso8601String()}'; // Chave única baseada no UID e data
 
           // Verifica se a chave foi salva hoje
           final shownToday = prefs.getBool(key) ?? false;
@@ -462,30 +487,15 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                           color: Theme.of(context).colorScheme.onSecondary,
                         ),
                       ),
-                      AnimatedSwitcher(
-                        duration: Duration(milliseconds: 300),
-                        child: Text(
-                          _getTitle(),
-                          key: ValueKey<String>(_getTitle()),
-                          style: TextStyle(
-                            fontFamily: 'BrandingSF',
-                            fontWeight: FontWeight.w700,
-                            fontSize: 28,
-                            color: Theme.of(context).colorScheme.surfaceVariant,
-                          ),
+                      Text(
+                        _getTitle(),
+                        key: ValueKey<String>(_getTitle()),
+                        style: TextStyle(
+                          fontFamily: 'BrandingSF',
+                          fontWeight: FontWeight.w700,
+                          fontSize: 30,
+                          color: Theme.of(context).colorScheme.surfaceVariant,
                         ),
-                        transitionBuilder: (Widget child, Animation<double> animation) {
-                          final fadeInAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(animation);
-                          final slideAnimation = Tween<Offset>(begin: Offset(-1, 0), end: Offset.zero).animate(animation);
-
-                          return SlideTransition(
-                            position: slideAnimation,
-                            child: FadeTransition(
-                              opacity: fadeInAnimation,
-                              child: child,
-                            ),
-                          );
-                        },
                       ),
                     ],
                   ),
@@ -504,7 +514,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                         top: 6,
                         child: CircleAvatar(
                           radius: 8,
-                          backgroundColor: Theme.of(context).colorScheme.tertiary,
+                          backgroundColor:
+                              Theme.of(context).colorScheme.tertiary,
                           child: Text(
                             '3',
                             style: TextStyle(color: Colors.white, fontSize: 10),

@@ -82,7 +82,6 @@ class _LeadsPageState extends State<LeadsPage> {
     });
   }
 
-
   Future<void> _getUserData() async {
     final user = FirebaseAuth.instance.currentUser;
 
@@ -194,7 +193,7 @@ class _LeadsPageState extends State<LeadsPage> {
             const curve = Curves.easeInOut;
 
             var tween =
-                Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+            Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
             var offsetAnimation = animation.drive(tween);
 
             return SlideTransition(
@@ -219,6 +218,7 @@ class _LeadsPageState extends State<LeadsPage> {
         return CustomTabBarPage();
     }
   }
+
 
   void _showLeadDetails(BuildContext context, Map<String, dynamic> leadData, Function(String) onStatusChanged) {
     // Cria uma cópia dos dados para evitar modificações diretas
@@ -276,7 +276,7 @@ class _LeadsPageState extends State<LeadsPage> {
                             fontFamily: 'Poppins',
                             fontWeight: FontWeight.w700,
                             fontSize: 20,
-                            color: Theme.of(context).colorScheme.onSecondary,
+                            color: Theme.of(context).colorScheme.onBackground,
                             overflow: TextOverflow.ellipsis,
                           ),
                           maxLines: 1,
@@ -530,42 +530,15 @@ class _LeadsPageState extends State<LeadsPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
-      return Shimmer.fromColors(
-        baseColor: Theme.of(context).colorScheme.onSecondaryContainer,
-        highlightColor: Theme.of(context).colorScheme.onTertiaryContainer,
-        child: Flexible(
-          child: ListView.builder(
-            physics: NeverScrollableScrollPhysics(),
-            itemCount: 6, // Número de placeholders
-            itemBuilder: (context, index) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 16.0),
-                child: Container(
-                  height: 100.0,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.tertiary,
-                    borderRadius: BorderRadius.circular(10.0),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      );
-    }
-
-    if (empresaId == null) {
-      return Center(child: Text('Erro: Empresa não encontrada.'));
-    }
-
     return ConnectivityBanner(
       child: Scaffold(
         body: SafeArea(
           top: true,
-          child: isLoading || !areLeadsLoaded
+          child: isLoading
               ? _buildShimmerEffect()
-              : _buildCampanhasStream(empresaId!),
+              : (empresaId == null
+              ? Center(child: Text('Erro: Empresa não encontrada.'))
+              : _buildCampanhasStream(empresaId!)),
         ),
       ),
     );
@@ -792,11 +765,13 @@ class _LeadsPageState extends State<LeadsPage> {
       baseColor: Theme.of(context).colorScheme.onSecondaryContainer,
       highlightColor: Theme.of(context).colorScheme.onTertiaryContainer,
       child: ListView.builder(
+        shrinkWrap: true, // Adicione esta linha
         physics: NeverScrollableScrollPhysics(),
         itemCount: 6, // Número de placeholders
         itemBuilder: (context, index) {
           return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 16.0),
+            padding:
+            const EdgeInsets.symmetric(vertical: 10.0, horizontal: 16.0),
             child: Container(
               height: 100.0,
               decoration: BoxDecoration(

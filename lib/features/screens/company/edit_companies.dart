@@ -987,9 +987,12 @@ class _EditCompaniesState extends State<EditCompanies> {
                         return Text('Erro ao carregar dados');
                       }
 
-                      if (snapshot.hasData && snapshot.data != null) {
-                        bool canChangePassword =
-                            snapshot.data!.get('alterarSenha') ?? false;
+                      if (snapshot.hasData &&
+                          snapshot.data != null &&
+                          snapshot.data!.exists) {
+                        final data = snapshot.data!.data() as Map<String, dynamic>?;
+
+                        bool canChangePassword = data?['alterarSenha'] ?? false;
 
                         if (canChangePassword) {
                           return Align(
@@ -1035,8 +1038,7 @@ class _EditCompaniesState extends State<EditCompanies> {
                           );
                         }
                       }
-
-                      return SizedBox.shrink(); // Não exibe nada se não tiver permissão.
+                      return SizedBox.shrink(); // Não exibe nada se não tiver permissão ou se o documento não existir.
                     },
                   )
                 ],
