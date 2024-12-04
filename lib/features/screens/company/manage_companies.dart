@@ -17,7 +17,7 @@ class ManageCompanies extends StatefulWidget {
 
 class _ManageCompaniesState extends State<ManageCompanies> {
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
-      _userDocSubscription;
+  _userDocSubscription;
   bool hasGerenciarParceirosAccess = false;
   bool isLoading = true;
   bool _hasShownPermissionRevokedDialog = false;
@@ -130,7 +130,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.background,
                   borderRadius:
-                      BorderRadius.vertical(top: Radius.circular(20.0)),
+                  BorderRadius.vertical(top: Radius.circular(20.0)),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -162,7 +162,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).colorScheme.primary,
                         padding:
-                            EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                        EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20.0),
                         ),
@@ -193,7 +193,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
       }
     } else {
       _hasShownPermissionRevokedDialog =
-          false; // Reseta a flag se a permissão voltar
+      false; // Reseta a flag se a permissão voltar
     }
   }
 
@@ -215,7 +215,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
           const curve = Curves.easeInOut; // Animação suave
 
           final tween =
-              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
           final offsetAnimation = animation.drive(tween);
 
           return SlideTransition(
@@ -231,7 +231,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
   Future<void> deleteCompany(String companyId) async {
     try {
       HttpsCallable callable =
-          FirebaseFunctions.instance.httpsCallable('deleteCompany');
+      FirebaseFunctions.instance.httpsCallable('deleteCompany');
       final result = await callable.call(<String, dynamic>{
         'companyId': companyId,
       });
@@ -301,7 +301,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Theme.of(context).colorScheme.primary,
                       padding:
-                          EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                      EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20.0),
                       ),
@@ -323,7 +323,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red,
                       padding:
-                          EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                      EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20.0),
                       ),
@@ -544,11 +544,11 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                                       founded: company['founded'],
                                       countArtsValue: company['countArtsValue'],
                                       countVideosValue:
-                                          company['countVideosValue'],
+                                      company['countVideosValue'],
                                       dashboard: company['dashboard'],
                                       leads: company['leads'],
                                       gerenciarColaboradores:
-                                          company['gerenciarColaboradores'],
+                                      company['gerenciarColaboradores'],
                                       configurarDash: company['configurarDash'],
                                       criarCampanha: company['criarCampanha'],
                                       criarForm: company['criarForm'],
