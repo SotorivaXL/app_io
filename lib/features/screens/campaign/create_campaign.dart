@@ -261,7 +261,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                 prefixIcon: Icon(
                                   Icons.text_fields,
                                   color: Theme.of(context).colorScheme.tertiary,
-                                  size: 25,
+                                  size: 20,
                                 ),
                               ),
                               textInputAction: TextInputAction.next,
@@ -307,7 +307,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                 prefixIcon: Icon(
                                   Icons.text_fields,
                                   color: Theme.of(context).colorScheme.tertiary,
-                                  size: 25,
+                                  size: 20,
                                 ),
                               ),
                               textInputAction: TextInputAction.next,
@@ -353,7 +353,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                 prefixIcon: Icon(
                                   Icons.text_fields,
                                   color: Theme.of(context).colorScheme.tertiary,
-                                  size: 25,
+                                  size: 20,
                                 ),
                               ),
                               textInputAction: TextInputAction.next,
@@ -487,7 +487,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                   prefixIcon: Icon(
                                     Icons.calendar_today,
                                     color: Theme.of(context).colorScheme.tertiary,
-                                    size: 25,
+                                    size: 20,
                                   ),
                                 ),
                                 readOnly: true,
@@ -546,7 +546,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                   prefixIcon: Icon(
                                     Icons.calendar_today,
                                     color: Theme.of(context).colorScheme.tertiary,
-                                    size: 25,
+                                    size: 20,
                                   ),
                                 ),
                                 readOnly: true,

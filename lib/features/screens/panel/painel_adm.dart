@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:app_io/auth/providers/auth_provider.dart';
-import 'package:app_io/features/screens/campaign/create_campaign.dart';
+import 'package:app_io/features/screens/campaign/manage_campaigns.dart';
 import 'package:app_io/features/screens/collaborator/manage_collaborators.dart';
 import 'package:app_io/features/screens/company/manage_companies.dart';
 import 'package:app_io/features/screens/configurations/dashboard_configurations.dart';
-import 'package:app_io/features/screens/form/create_form.dart';
+import 'package:app_io/features/screens/form/manage_forms.dart';
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';
 import 'package:app_io/util/services/firestore_service.dart';
@@ -22,12 +22,12 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   bool hasGerenciarParceirosAccess = false;
   bool hasGerenciarColaboradoresAccess = false;
   bool hasConfigurarDashAccess = false;
-  bool hasCriarFormAccess = false;
-  bool hasCriarCampanhaAccess = false;
+  bool hasCriarFormAccess = false; // Atualizado
+  bool hasCriarCampanhaAccess = false; // Atualizado
   bool isLoading = true;
 
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userDocSubscription;
-  bool _hasShownPermissionRevokedDialog = false; // Flag to control modal display
+  bool _hasShownPermissionRevokedDialog = false; // Flag para controlar a exibição do modal
 
   @override
   void initState() {
@@ -45,7 +45,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
 
     if (user != null) {
       try {
-        // Check if the user document exists in 'empresas' collection
+        // Verifica se o documento do usuário existe na coleção 'empresas'
         DocumentSnapshot<Map<String, dynamic>> userDoc = await FirebaseFirestore.instance
             .collection('empresas')
             .doc(user.uid)
@@ -54,7 +54,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         if (userDoc.exists) {
           _listenToUserDocument('empresas', user.uid);
         } else {
-          // If not in 'empresas', check 'users' collection
+          // Se não estiver em 'empresas', verifica na coleção 'users'
           userDoc = await FirebaseFirestore.instance
               .collection('users')
               .doc(user.uid)
@@ -63,20 +63,20 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           if (userDoc.exists) {
             _listenToUserDocument('users', user.uid);
           } else {
-            print("User document not found in 'empresas' or 'users' collections.");
+            print("Documento do usuário não encontrado nas coleções 'empresas' ou 'users'.");
             setState(() {
               isLoading = false;
             });
           }
         }
       } catch (e) {
-        print("Error retrieving user permissions: $e");
+        print("Erro ao recuperar as permissões do usuário: $e");
         setState(() {
           isLoading = false;
         });
       }
     } else {
-      print("User is not authenticated.");
+      print("Usuário não está autenticado.");
       setState(() {
         isLoading = false;
       });
@@ -92,7 +92,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       if (userDoc.exists) {
         _updatePermissions(userDoc);
       } else {
-        print("User document not found in collection '$collectionName'.");
+        print("Documento do usuário não encontrado na coleção '$collectionName'.");
       }
     });
   }
@@ -106,12 +106,12 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       hasGerenciarParceirosAccess = userData?['gerenciarParceiros'] ?? false;
       hasGerenciarColaboradoresAccess = userData?['gerenciarColaboradores'] ?? false;
       hasConfigurarDashAccess = userData?['configurarDash'] ?? false;
-      hasCriarFormAccess = userData?['criarForm'] ?? false;
-      hasCriarCampanhaAccess = userData?['criarCampanha'] ?? false;
+      hasCriarFormAccess = userData?['criarForm'] ?? false; // Atualizado
+      hasCriarCampanhaAccess = userData?['criarCampanha'] ?? false; // Atualizado
       isLoading = false;
     });
 
-    // Check if all permissions are false
+    // Verifica se todas as permissões estão falsas
     if (!hasGerenciarParceirosAccess &&
         !hasGerenciarColaboradoresAccess &&
         !hasConfigurarDashAccess &&
@@ -161,7 +161,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                     SizedBox(height: 24.0),
                     ElevatedButton(
                       onPressed: () {
-                        Navigator.of(context).pop(); // Close the BottomSheet
+                        Navigator.of(context).pop(); // Fechar o BottomSheet
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).colorScheme.primary,
@@ -185,7 +185,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
             },
           );
 
-          // After the modal is dismissed, redirect the user
+          // Após o modal ser fechado, redireciona o usuário
           if (mounted) {
             Navigator.pushReplacement(
               context,
@@ -195,7 +195,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         });
       }
     } else {
-      _hasShownPermissionRevokedDialog = false; // Reset the flag if permissions are restored
+      _hasShownPermissionRevokedDialog = false; // Reseta a flag se as permissões forem restauradas
     }
   }
 
@@ -235,7 +235,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         !hasConfigurarDashAccess &&
         !hasCriarFormAccess &&
         !hasCriarCampanhaAccess) {
-      // Optionally, you can return an empty screen or a message
+      // Opcionalmente, você pode retornar uma tela vazia ou uma mensagem
       return ConnectivityBanner(
         child: Scaffold(
           body: Container(),
@@ -256,224 +256,54 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                     scrollDirection: Axis.vertical,
                     children: [
                       if (hasGerenciarParceirosAccess)
-                        Align(
-                          alignment: AlignmentDirectional(0, 0),
-                          child: Padding(
-                            padding: EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
-                            child: InkWell(
-                              onTap: () async {
-                                _navigateWithFade(context, ManageCompanies());
-                              },
-                              child: ListTile(
-                                title: Text(
-                                  'Gerenciar Parceiros',
-                                  textAlign: TextAlign.start,
-                                  style: TextStyle(
-                                    fontFamily: 'BrandingSF',
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 22,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  'Gerenciar empresas parceiras',
-                                  textAlign: TextAlign.start,
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primaryContainer,
-                                  ),
-                                ),
-                                trailing: Icon(
-                                  Icons.arrow_forward_ios,
-                                  color: Theme.of(context).colorScheme.onBackground,
-                                  size: 20,
-                                ),
-                                dense: false,
-                              ),
-                            ),
-                          ),
+                        _buildCardOption(
+                          context,
+                          title: 'Gerenciar Parceiros',
+                          subtitle: 'Gerenciar empresas parceiras',
+                          icon: Icons.business,
+                          onTap: () async {
+                            _navigateWithFade(context, ManageCompanies());
+                          },
                         ),
                       if (hasGerenciarColaboradoresAccess)
-                        Align(
-                          alignment: AlignmentDirectional(0, 0),
-                          child: Padding(
-                            padding: EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
-                            child: InkWell(
-                              onTap: () async {
-                                _navigateWithFade(context, ManageCollaborators());
-                              },
-                              child: ListTile(
-                                title: Text(
-                                  'Gerenciar Colaboradores',
-                                  textAlign: TextAlign.start,
-                                  style: TextStyle(
-                                    fontFamily: 'BrandingSF',
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  'Gerenciar colaboradores da empresa',
-                                  textAlign: TextAlign.start,
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primaryContainer,
-                                  ),
-                                ),
-                                trailing: Icon(
-                                  Icons.arrow_forward_ios,
-                                  color: Theme.of(context).colorScheme.onBackground,
-                                  size: 20,
-                                ),
-                                dense: false,
-                              ),
-                            ),
-                          ),
+                        _buildCardOption(
+                          context,
+                          title: 'Gerenciar Colaboradores',
+                          subtitle: 'Gerenciar colaboradores da empresa',
+                          icon: Icons.group,
+                          onTap: () async {
+                            _navigateWithFade(context, ManageCollaborators());
+                          },
                         ),
                       if (hasCriarFormAccess)
-                        Align(
-                          alignment: AlignmentDirectional(0, 0),
-                          child: Padding(
-                            padding: EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
-                            child: InkWell(
-                              onTap: () async {
-                                _navigateWithFade(context, CreateForm());
-                              },
-                              child: ListTile(
-                                title: Text(
-                                  'Criar Formulário',
-                                  textAlign: TextAlign.start,
-                                  style: TextStyle(
-                                    fontFamily: 'BrandingSF',
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  'Criar um formulário personalizado para web',
-                                  textAlign: TextAlign.start,
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primaryContainer,
-                                  ),
-                                ),
-                                trailing: Icon(
-                                  Icons.arrow_forward_ios,
-                                  color: Theme.of(context).colorScheme.onBackground,
-                                  size: 20,
-                                ),
-                                dense: false,
-                              ),
-                            ),
-                          ),
+                        _buildCardOption(
+                          context,
+                          title: 'Gerenciar Formulários',
+                          subtitle: 'Gerenciar formulários personalizados',
+                          icon: Icons.article,
+                          onTap: () async {
+                            _navigateWithFade(context, ManageForms()); // Navega para a nova página
+                          },
                         ),
                       if (hasCriarCampanhaAccess)
-                        Align(
-                          alignment: AlignmentDirectional(0, 0),
-                          child: Padding(
-                            padding: EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
-                            child: InkWell(
-                              onTap: () async {
-                                _navigateWithFade(context, CreateCampaignPage(empresaId: 'empresaId'));
-                              },
-                              child: ListTile(
-                                title: Text(
-                                  'Criar Campanha',
-                                  textAlign: TextAlign.start,
-                                  style: TextStyle(
-                                    fontFamily: 'BrandingSF',
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  'Criar uma campanha para a empresa',
-                                  textAlign: TextAlign.start,
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primaryContainer,
-                                  ),
-                                ),
-                                trailing: Icon(
-                                  Icons.arrow_forward_ios,
-                                  color: Theme.of(context).colorScheme.onBackground,
-                                  size: 20,
-                                ),
-                                dense: false,
-                              ),
-                            ),
-                          ),
+                        _buildCardOption(
+                          context,
+                          title: 'Gerenciar Campanhas',
+                          subtitle: 'Gerenciar campanhas da empresa',
+                          icon: Icons.campaign,
+                          onTap: () async {
+                            _navigateWithFade(context, ManageCampaigns()); // Navega para a nova página
+                          },
                         ),
                       if (hasConfigurarDashAccess)
-                        Align(
-                          alignment: AlignmentDirectional(0, 0),
-                          child: Padding(
-                            padding: EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
-                            child: InkWell(
-                              onTap: () async {
-                                _navigateWithFade(context, DashboardConfigurations());
-                              },
-                              child: ListTile(
-                                title: Text(
-                                  'Configurações de Dashboard',
-                                  textAlign: TextAlign.start,
-                                  style: TextStyle(
-                                    fontFamily: 'BrandingSF',
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  'Configurações de BMs, anuncios e campanhas',
-                                  textAlign: TextAlign.start,
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primaryContainer,
-                                  ),
-                                ),
-                                trailing: Icon(
-                                  Icons.arrow_forward_ios,
-                                  color: Theme.of(context).colorScheme.onBackground,
-                                  size: 20,
-                                ),
-                                dense: false,
-                              ),
-                            ),
-                          ),
+                        _buildCardOption(
+                          context,
+                          title: 'Configurações de Dashboard',
+                          subtitle: 'Configurações de BMs, anúncios e campanhas',
+                          icon: Icons.dashboard_customize,
+                          onTap: () async {
+                            _navigateWithFade(context, DashboardConfigurations());
+                          },
                         ),
                     ],
                   ),
@@ -518,5 +348,54 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         ),
       );
     }
+  }
+
+  Widget _buildCardOption(BuildContext context,
+      {required String title,
+        required String subtitle,
+        required IconData icon,
+        required VoidCallback onTap}) {
+    return Card(
+      color: Theme.of(context).colorScheme.secondary, // Cor secundária
+      margin: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12.0),
+      ),
+      child: ListTile(
+        leading: Icon(
+          icon,
+          color: Theme.of(context).colorScheme.onSecondary,
+          size: 30,
+        ),
+        title: Text(
+          title,
+          textAlign: TextAlign.start,
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 19,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0,
+            color: Theme.of(context).colorScheme.onSecondary,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          textAlign: TextAlign.start,
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontWeight: FontWeight.w500,
+            fontSize: 12,
+            letterSpacing: 0,
+            color: Theme.of(context).colorScheme.primaryContainer,
+          ),
+        ),
+        trailing: Icon(
+          Icons.arrow_forward_ios,
+          color: Theme.of(context).colorScheme.onBackground,
+          size: 20,
+        ),
+        onTap: onTap,
+      ),
+    );
   }
 }

@@ -326,6 +326,7 @@ exports.createUserAndCompany = functions.https.onCall(async (data, context) => {
                 copiarTelefones: accessRights.copiarTelefones || false,
                 criarCampanha: accessRights.criarCampanha || false,
                 criarForm: accessRights.criarForm || false,
+                alterarSenha: accessRights.alterarSenha || false,
                 contract: contract || '',
                 countArtsValue: countArtsValue || 0,
                 countVideosValue: countVideosValue || 0,

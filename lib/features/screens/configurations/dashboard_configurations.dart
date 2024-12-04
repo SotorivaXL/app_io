@@ -447,7 +447,7 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                       _isLoading
                           ? CircularProgressIndicator()
                           : IconButton(
-                        icon: Icon(Icons.save_alt_rounded,
+                        icon: Icon(Icons.save_as_sharp,
                             color:
                             Theme.of(context).colorScheme.onBackground,
                             size: 30),

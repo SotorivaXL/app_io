@@ -11,7 +11,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class CustomTabBarPage extends StatefulWidget {
@@ -21,13 +20,10 @@ class CustomTabBarPage extends StatefulWidget {
 
 class _CustomTabBarPageState extends State<CustomTabBarPage>
     with TickerProviderStateMixin {
-  late TabController _tabController;
   late PageController _pageController;
-  ScrollController _scrollController = ScrollController();
   double _scrollOffset = 0.0;
 
   List<Widget> _pages = [];
-  List<Tab> _tabs = [];
   int _currentIndex = 0;
 
   bool hasLeadsAccess = false;
@@ -39,20 +35,13 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   bool hasCriarCampanhaAccess = false;
   bool hasAdmPanelAccess = true;
 
+  @override
   void initState() {
     super.initState();
     _pageController = PageController();
-    _tabController = TabController(length: 0, vsync: this);
     _checkBirthday();
-
-    _scrollController.addListener(() {
-      setState(() {
-        _scrollOffset = _scrollController.offset;
-      });
-    });
-
     _listenToPermissionsChanges();
-    _showTutorialIfFirstTime(); // Chama o tutorial na primeira vez
+    _showTutorialIfFirstTime();
   }
 
   Future<void> _showTutorialIfFirstTime() async {
@@ -60,22 +49,22 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     bool tutorialShown = prefs.getBool('tutorial_shown') ?? false;
 
     if (!tutorialShown) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          // Usuário não pode fechar o popup clicando fora
-          builder: (BuildContext context) {
-            return TutorialPopup(
-              onComplete: () async {
-                // Marcar o tutorial como concluído
-                await prefs.setBool('tutorial_shown', true);
-                Navigator.of(context).pop(); // Fecha o popup
-              },
-            );
-          },
-        );
-      });
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext context) {
+              return TutorialPopup(
+                onComplete: () async {
+                  await prefs.setBool('tutorial_shown', true);
+                  Navigator.of(context).pop();
+                },
+              );
+            },
+          );
+        },
+      );
     }
   }
 
@@ -113,7 +102,6 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   }
 
   void updateAdmPanelAccess() {
-    // Verifica se todas as permissões específicas do Painel Adm são falsas
     hasAdmPanelAccess = hasGerenciarParceirosAccess ||
         hasGerenciarColaboradoresAccess ||
         hasConfigurarDashAccess ||
@@ -125,100 +113,80 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     var userData = doc.data() as Map<String, dynamic>;
     print('Dados do usuário: $userData');
 
-    setState(() {
-      hasLeadsAccess = userData['leads'] ?? false;
-      hasDashboardAccess = userData['dashboard'] ?? false;
-      hasConfigurarDashAccess = userData['configurarDash'] ?? false;
-      hasCriarCampanhaAccess = userData['criarCampanha'] ?? false;
-      hasCriarFormAccess = userData['criarForm'] ?? false;
-      hasGerenciarColaboradoresAccess = userData['gerenciarColaboradores'] ?? false;
-      hasGerenciarParceirosAccess = userData['gerenciarParceiros'] ?? false;
+    // Atualize todas as permissões primeiro
+    bool newHasLeadsAccess = userData['leads'] ?? false;
+    bool newHasDashboardAccess = userData['dashboard'] ?? false;
+    bool newHasConfigurarDashAccess = userData['configurarDash'] ?? false;
+    bool newHasCriarCampanhaAccess = userData['criarCampanha'] ?? false;
+    bool newHasCriarFormAccess = userData['criarForm'] ?? false;
+    bool newHasGerenciarColaboradoresAccess =
+        userData['gerenciarColaboradores'] ?? false;
+    bool newHasGerenciarParceirosAccess =
+        userData['gerenciarParceiros'] ?? false;
 
-      // Atualiza o acesso ao Painel Adm com base nas permissões específicas
-      updateAdmPanelAccess();
+    // Atualiza o acesso ao Painel Adm com base nas permissões específicas
+    bool newHasAdmPanelAccess = newHasGerenciarParceirosAccess ||
+        newHasGerenciarColaboradoresAccess ||
+        newHasConfigurarDashAccess ||
+        newHasCriarFormAccess ||
+        newHasCriarCampanhaAccess;
 
-      // Atualiza as páginas e abas com base nas permissões atualizadas
-      _updatePagesAndTabs();
-    });
-  }
+    // Construa a lista de páginas com base nas novas permissões
+    List<Widget> newPages = [];
 
-  void _updatePagesAndTabs() {
-    List<Widget> pages = [];
-    List<Tab> tabs = [];
-
-    // Adiciona as páginas e abas dinamicamente na ordem correta
-    if (hasDashboardAccess) {
-      pages.add(DashboardPage());
-      tabs.add(
-        Tab(
-          icon: Icon(Icons.dashboard),
-          text: 'Dashboard',
-        ),
-      );
+    if (newHasDashboardAccess) {
+      newPages.add(DashboardPage());
     }
 
-    if (hasLeadsAccess) {
-      pages.add(LeadsPage());
-      tabs.add(
-        Tab(
-          icon: Icon(Icons.supervisor_account),
-          text: 'Leads',
-        ),
-      );
+    if (newHasLeadsAccess) {
+      newPages.add(LeadsPage());
     }
 
-    if (hasAdmPanelAccess) {
-      pages.add(AdminPanelPage());
-      tabs.add(
-        Tab(
-          icon: Icon(Icons.admin_panel_settings),
-          text: 'Painel Adm',
-        ),
-      );
+    if (newHasAdmPanelAccess) {
+      newPages.add(AdminPanelPage());
     }
 
     // Configurações sempre será a última aba
-    pages.add(SettingsPage());
-    tabs.add(
-      Tab(
-        icon: Icon(Icons.settings),
-        text: 'Config.',
-      ),
-    );
+    newPages.add(SettingsPage());
 
-    // Atualiza as listas e recria o controlador do TabController
+    // Atualize as listas
     setState(() {
-      _pages = pages;
-      _tabs = tabs;
-      _tabController.dispose();  // Descarta o controlador antigo para evitar inconsistências
-      _tabController = TabController(length: _tabs.length, vsync: this);
+      hasLeadsAccess = newHasLeadsAccess;
+      hasDashboardAccess = newHasDashboardAccess;
+      hasConfigurarDashAccess = newHasConfigurarDashAccess;
+      hasCriarCampanhaAccess = newHasCriarCampanhaAccess;
+      hasCriarFormAccess = newHasCriarFormAccess;
+      hasGerenciarColaboradoresAccess = newHasGerenciarColaboradoresAccess;
+      hasGerenciarParceirosAccess = newHasGerenciarParceirosAccess;
+      hasAdmPanelAccess = newHasAdmPanelAccess;
 
-      _tabController.addListener(() {
-        if (_tabController.indexIsChanging) {
-          setState(() {
-            _currentIndex = _tabController.index;
-            _pageController.jumpToPage(_currentIndex);
-          });
-        }
-      });
+      _pages = newPages;
+
+      // Atualize o _currentIndex se necessário
+      if (_currentIndex >= _pages.length) {
+        _currentIndex = _pages.length - 1;
+        _pageController.jumpToPage(_currentIndex);
+      }
     });
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     _pageController.dispose();
-    _scrollController.dispose();
     super.dispose();
   }
 
   String _getTitle() {
     // Define o título com base na aba atual e nas permissões
-    if (_currentIndex < _tabs.length) {
-      if (_tabs[_currentIndex].text == 'Painel Adm') {
+    if (_currentIndex < _pages.length) {
+      if (_pages[_currentIndex] is AdminPanelPage) {
         return 'Painel Administrativo';
-      } else {
-        return _tabs[_currentIndex].text!;
+      } else if (_pages[_currentIndex] is DashboardPage) {
+        return 'Dashboard';
+      } else if (_pages[_currentIndex] is LeadsPage) {
+        return 'Leads';
+      } else if (_pages[_currentIndex] is SettingsPage) {
+        return 'Configurações';
       }
     }
     return 'IO Connect';
@@ -226,18 +194,11 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
 
   String _getPrefix() {
     // Define o prefixo com base na aba atual
-    if (_currentIndex < _tabs.length) {
-      switch (_tabs[_currentIndex].text) {
-        case 'Dashboard':
-          return "Bem-vindo(a) ao";
-        case 'Leads':
-          return "Bem-vindo(a) aos";
-        case 'Painel Adm':
-          return "Bem-vindo(a) ao";
-        case 'Configurações':
-          return "Bem-vindo(a) às";
-        default:
-          return "Bem-vindo(a) ao";
+    if (_currentIndex < _pages.length) {
+      if (_pages[_currentIndex] is SettingsPage) {
+        return "Bem-vindo(a) às";
+      } else {
+        return "Bem-vindo(a) ao";
       }
     }
     return "Bem-vindo(a) ao";
@@ -245,8 +206,14 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
 
   void _showNotificationsSidebar(BuildContext context) {
     List<Map<String, String>> notifications = [
-      {'title': 'Exemplo de notificação 1', 'description': 'Descrição da notificação 1'},
-      {'title': 'Exemplo de notificação 2', 'description': 'Descrição da notificação 2'},
+      {
+        'title': 'Exemplo de notificação 1',
+        'description': 'Descrição da notificação 1'
+      },
+      {
+        'title': 'Exemplo de notificação 2',
+        'description': 'Descrição da notificação 2'
+      },
     ];
 
     showGeneralDialog(
@@ -255,7 +222,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
       barrierLabel: '',
       barrierColor: Colors.black54,
       transitionDuration: Duration(milliseconds: 300),
-      pageBuilder: (BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) {
+      pageBuilder: (BuildContext context, Animation<double> animation,
+          Animation<double> secondaryAnimation) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setState) {
             return Align(
@@ -320,25 +288,37 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                                   });
                                 },
                                 child: ListTile(
-                                  contentPadding: EdgeInsets.symmetric(vertical: 2),
-                                  tileColor: Theme.of(context).colorScheme.secondary.withOpacity(0.1),
+                                  contentPadding:
+                                      EdgeInsets.symmetric(vertical: 2),
+                                  tileColor: Theme.of(context)
+                                      .colorScheme
+                                      .secondary
+                                      .withOpacity(0.1),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  leading: Icon(Icons.notifications, color: Theme.of(context).colorScheme.primary),
+                                  leading: Icon(Icons.notifications,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary),
                                   title: Text(
                                     notification['title']!,
                                     style: TextStyle(
                                       fontFamily: 'Poppins',
                                       fontSize: 16,
-                                      color: Theme.of(context).colorScheme.onSecondary,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSecondary,
                                     ),
                                   ),
                                   subtitle: Text(
                                     notification['description']!,
                                     style: TextStyle(
                                       fontSize: 14,
-                                      color: Theme.of(context).colorScheme.onSecondary.withOpacity(0.6),
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSecondary
+                                          .withOpacity(0.6),
                                     ),
                                   ),
                                   onTap: () {},
@@ -377,13 +357,17 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     final uid = user.uid;
     String? birthday;
 
-    // Busca na coleção `users`
-    final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    // Busca na coleção users
+    final userDoc =
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
     if (userDoc.exists) {
       birthday = userDoc.data()?['birth'];
     } else {
-      // Busca na coleção `empresas` caso não esteja em `users`
-      final empresaDoc = await FirebaseFirestore.instance.collection('empresas').doc(uid).get();
+      // Busca na coleção empresas caso não esteja em users
+      final empresaDoc = await FirebaseFirestore.instance
+          .collection('empresas')
+          .doc(uid)
+          .get();
       if (empresaDoc.exists) {
         birthday = empresaDoc.data()?['founded'];
       }
@@ -399,7 +383,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
 
         if (birthDay == today.day && birthMonth == today.month) {
           final prefs = await SharedPreferences.getInstance();
-          final key = 'birthday_shown_$uid${today.toIso8601String()}'; // Chave única baseada no UID e data
+          final key =
+              'birthday_shown_$uid${today.toIso8601String()}'; // Chave única baseada no UID e data
 
           // Verifica se a chave foi salva hoje
           final shownToday = prefs.getBool(key) ?? false;
@@ -427,8 +412,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
 
   @override
   Widget build(BuildContext context) {
+    // Ajuste do tamanho da AppBar e BottomNavigationBar com base no scrollOffset
     double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
-    // Ajuste do tabBarHeight baseado no sistema operacional
     double tabBarHeight = Platform.isIOS
         ? (111 - (_scrollOffset / 2)).clamp(0.0, 111).ceilToDouble()
         : (79 - (_scrollOffset / 2)).clamp(0.0, 79).ceilToDouble();
@@ -462,30 +447,15 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                           color: Theme.of(context).colorScheme.onSecondary,
                         ),
                       ),
-                      AnimatedSwitcher(
-                        duration: Duration(milliseconds: 300),
-                        child: Text(
-                          _getTitle(),
-                          key: ValueKey<String>(_getTitle()),
-                          style: TextStyle(
-                            fontFamily: 'BrandingSF',
-                            fontWeight: FontWeight.w700,
-                            fontSize: 28,
-                            color: Theme.of(context).colorScheme.surfaceVariant,
-                          ),
+                      Text(
+                        _getTitle(),
+                        key: ValueKey<String>(_getTitle()),
+                        style: TextStyle(
+                          fontFamily: 'BrandingSF',
+                          fontWeight: FontWeight.w700,
+                          fontSize: 30,
+                          color: Theme.of(context).colorScheme.surfaceVariant,
                         ),
-                        transitionBuilder: (Widget child, Animation<double> animation) {
-                          final fadeInAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(animation);
-                          final slideAnimation = Tween<Offset>(begin: Offset(-1, 0), end: Offset.zero).animate(animation);
-
-                          return SlideTransition(
-                            position: slideAnimation,
-                            child: FadeTransition(
-                              opacity: fadeInAnimation,
-                              child: child,
-                            ),
-                          );
-                        },
                       ),
                     ],
                   ),
@@ -504,7 +474,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                         top: 6,
                         child: CircleAvatar(
                           radius: 8,
-                          backgroundColor: Theme.of(context).colorScheme.tertiary,
+                          backgroundColor:
+                              Theme.of(context).colorScheme.tertiary,
                           child: Text(
                             '3',
                             style: TextStyle(color: Colors.white, fontSize: 10),
@@ -525,19 +496,22 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
         body: NotificationListener<ScrollNotification>(
           onNotification: (ScrollNotification scrollInfo) {
             if (scrollInfo.metrics.axis == Axis.vertical) {
-              setState(() {
-                _scrollOffset = scrollInfo.metrics.pixels;
-              });
+              if (mounted) {
+                setState(() {
+                  _scrollOffset = scrollInfo.metrics.pixels;
+                });
+              }
             }
             return true;
           },
           child: PageView(
             controller: _pageController,
             onPageChanged: (index) {
-              setState(() {
-                _currentIndex = index;
-                _tabController.index = index;
-              });
+              if (mounted) {
+                setState(() {
+                  _currentIndex = index;
+                });
+              }
             },
             physics: pageViewPhysics,
             children: _pages,
@@ -556,45 +530,71 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
               iconSize: 25,
               curve: Curves.easeIn,
               onItemSelected: (index) {
-                setState(() {
-                  _currentIndex = index;
-                });
-                _pageController.jumpToPage(index);
+                if (mounted) {
+                  setState(() {
+                    _currentIndex = index;
+                    _pageController.jumpToPage(index);
+                  });
+                }
               },
-              items: <BottomNavyBarItem>[
-                BottomNavyBarItem(
-                  icon: Icon(Icons.dashboard),
-                  title: Text('Dashboard'),
-                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
-                  activeColor: Theme.of(context).colorScheme.tertiary,
-                  textAlign: TextAlign.center,
-                ),
-                BottomNavyBarItem(
-                  icon: Icon(Icons.people),
-                  title: Text('Leads'),
-                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
-                  activeColor: Theme.of(context).colorScheme.tertiary,
-                  textAlign: TextAlign.center,
-                ),
-                BottomNavyBarItem(
-                  icon: Icon(Icons.admin_panel_settings),
-                  title: Text('Painel Adm'),
-                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
-                  activeColor: Theme.of(context).colorScheme.tertiary,
-                  textAlign: TextAlign.center,
-                ),
-                BottomNavyBarItem(
-                  icon: Icon(Icons.settings),
-                  title: Text('Config.'),
-                  inactiveColor: Theme.of(context).colorScheme.onSecondary,
-                  activeColor: Theme.of(context).colorScheme.tertiary,
-                  textAlign: TextAlign.center,
-                ),
-              ],
+              items: _buildBottomNavyBarItems(),
             ),
           ),
         ),
       ),
     );
+  }
+
+  List<BottomNavyBarItem> _buildBottomNavyBarItems() {
+    List<BottomNavyBarItem> items = [];
+
+    if (hasDashboardAccess) {
+      items.add(
+        BottomNavyBarItem(
+          icon: Icon(Icons.dashboard),
+          title: Text('Dashboard'),
+          inactiveColor: Theme.of(context).colorScheme.onSecondary,
+          activeColor: Theme.of(context).colorScheme.tertiary,
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    if (hasLeadsAccess) {
+      items.add(
+        BottomNavyBarItem(
+          icon: Icon(Icons.people),
+          title: Text('Leads'),
+          inactiveColor: Theme.of(context).colorScheme.onSecondary,
+          activeColor: Theme.of(context).colorScheme.tertiary,
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    if (hasAdmPanelAccess) {
+      items.add(
+        BottomNavyBarItem(
+          icon: Icon(Icons.admin_panel_settings),
+          title: Text('Painel Adm'),
+          inactiveColor: Theme.of(context).colorScheme.onSecondary,
+          activeColor: Theme.of(context).colorScheme.tertiary,
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    // Configurações sempre será a última aba
+    items.add(
+      BottomNavyBarItem(
+        icon: Icon(Icons.settings),
+        title: Text('Config.'),
+        inactiveColor: Theme.of(context).colorScheme.onSecondary,
+        activeColor: Theme.of(context).colorScheme.tertiary,
+        textAlign: TextAlign.center,
+      ),
+    );
+
+    return items;
   }
 }
