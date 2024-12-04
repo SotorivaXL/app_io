@@ -29,6 +29,7 @@ class _LeadsPageState extends State<LeadsPage> {
   int totalLeads = 0; // Inicialmente zero
   bool areLeadsLoaded = false;
   List<Map<String, dynamic>> leadsData = [];
+  String _searchQuery = ''; // Variável de pesquisa
 
   final ScrollController _scrollController = ScrollController();
 
@@ -70,7 +71,6 @@ class _LeadsPageState extends State<LeadsPage> {
 
       // Atualizar o total de leads, se necessário
       await _updateTotalLeads();
-
     } catch (e) {
       print('Erro ao deletar o lead: $e');
     }
@@ -141,7 +141,7 @@ class _LeadsPageState extends State<LeadsPage> {
       } catch (e) {
         showErrorDialog(context, 'Erro ao carregar os dados: $e', 'Erro');
       } finally {
-        // Aguarde pelo menos 5 segundos antes de remover o carregamento
+        // Aguarde pelo menos 1 segundo antes de remover o carregamento
         Future.delayed(Duration(seconds: 1), () {
           setState(() {
             isLoading = false;
@@ -165,7 +165,7 @@ class _LeadsPageState extends State<LeadsPage> {
         .get();
 
     List<Stream<List<Map<String, dynamic>>>> leadStreams =
-        campaignsSnapshot.docs.map((campaignDoc) {
+    campaignsSnapshot.docs.map((campaignDoc) {
       return campaignDoc.reference
           .collection('leads')
           .snapshots()
@@ -201,11 +201,13 @@ class _LeadsPageState extends State<LeadsPage> {
     print('Exibindo detalhes do lead: ${leadData['leadId']}');
 
     // Cria uma cópia completa dos dados para restauração posterior
-    final Map<String, dynamic> originalLeadData = Map<String, dynamic>.from(leadData);
+    final Map<String, dynamic> originalLeadData =
+    Map<String, dynamic>.from(leadData);
 
     // Variáveis para exibição
     String? formattedDate;
-    if (originalLeadData['timestamp'] != null && originalLeadData['timestamp'] is Timestamp) {
+    if (originalLeadData['timestamp'] != null &&
+        originalLeadData['timestamp'] is Timestamp) {
       final timestamp = originalLeadData['timestamp'] as Timestamp;
       final dateTime = timestamp.toDate();
       formattedDate =
@@ -256,8 +258,7 @@ class _LeadsPageState extends State<LeadsPage> {
                             fontFamily: 'Poppins',
                             fontWeight: FontWeight.w700,
                             fontSize: 20,
-                            color:
-                            Theme.of(context).colorScheme.onBackground,
+                            color: Theme.of(context).colorScheme.onBackground,
                             overflow: TextOverflow.ellipsis,
                           ),
                           maxLines: 1,
@@ -268,8 +269,7 @@ class _LeadsPageState extends State<LeadsPage> {
                             style: TextStyle(
                               fontFamily: 'Poppins',
                               fontSize: 12,
-                              color:
-                              Theme.of(context).colorScheme.onSecondary,
+                              color: Theme.of(context).colorScheme.onSecondary,
                               overflow: TextOverflow.ellipsis,
                             ),
                             maxLines: 1,
@@ -306,8 +306,7 @@ class _LeadsPageState extends State<LeadsPage> {
                             label: Text(
                               status,
                               style: TextStyle(
-                                color:
-                                Theme.of(context).colorScheme.outline,
+                                color: Theme.of(context).colorScheme.outline,
                                 fontFamily: 'Poppins',
                                 fontSize: 15,
                                 fontWeight: FontWeight.w500,
@@ -350,7 +349,8 @@ class _LeadsPageState extends State<LeadsPage> {
               actions: [
                 ElevatedButton(
                   onPressed: () {
-                    print('Botão "Deletar Lead" pressionado para o lead: $leadId');
+                    print(
+                        'Botão "Deletar Lead" pressionado para o lead: $leadId');
                     showDialog(
                       context: context,
                       builder: (BuildContext dialogContext) {
@@ -358,28 +358,36 @@ class _LeadsPageState extends State<LeadsPage> {
                           title: Text('Confirmar Deleção'),
                           content: Text(
                             'Tem certeza de que deseja deletar este lead?',
-                            style: TextStyle(fontFamily: 'Poppins', fontSize: 16),
+                            style:
+                            TextStyle(fontFamily: 'Poppins', fontSize: 16),
                           ),
                           actions: [
                             TextButton(
                               onPressed: () {
-                                print('Deleção cancelada para o lead: $leadId');
-                                Navigator.pop(dialogContext); // Fecha o popup de confirmação
+                                print(
+                                    'Deleção cancelada para o lead: $leadId');
+                                Navigator.pop(
+                                    dialogContext); // Fecha o popup de confirmação
                               },
                               child: Text(
                                 'Cancelar',
                                 style: TextStyle(
                                   fontFamily: 'Poppins',
-                                  color: Theme.of(context).colorScheme.onSecondary,
+                                  color:
+                                  Theme.of(context).colorScheme.onSecondary,
                                 ),
                               ),
                             ),
                             ElevatedButton(
                               onPressed: () {
-                                print('Usuário confirmou deleção para o lead: $leadId');
-                                Navigator.pop(dialogContext); // Fecha o popup de confirmação
-                                Navigator.pop(context); // Fecha o popup de detalhes
-                                _deleteLead(context, empresaId, campaignId, leadId, originalLeadData);
+                                print(
+                                    'Usuário confirmou deleção para o lead: $leadId');
+                                Navigator.pop(
+                                    dialogContext); // Fecha o popup de confirmação
+                                Navigator.pop(
+                                    context); // Fecha o popup de detalhes
+                                _deleteLead(context, empresaId, campaignId,
+                                    leadId, originalLeadData);
                               },
                               child: Text(
                                 'Deletar',
@@ -390,7 +398,8 @@ class _LeadsPageState extends State<LeadsPage> {
                                 ),
                               ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Theme.of(context).colorScheme.error,
+                                backgroundColor:
+                                Theme.of(context).colorScheme.error,
                               ),
                             ),
                           ],
@@ -466,62 +475,20 @@ class _LeadsPageState extends State<LeadsPage> {
     );
   }
 
+
   @override
   Widget build(BuildContext context) {
     return ConnectivityBanner(
       child: Scaffold(
-        body: Stack(
-          children: [
-            SafeArea(
-              top: true,
-              child: isLoading
-                  ? _buildShimmerEffect()
-                  : (empresaId == null
-                      ? Center(child: Text('Erro: Empresa não encontrada.'))
-                      : _buildCampanhasStream(empresaId!)),
-            ),
-            Positioned(
-              bottom: 16.0,
-              right: 16.0,
-              child: Card(
-                elevation: 4.0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.0),
-                ),
-                color: Theme.of(context)
-                    .colorScheme
-                    .primary, // Escolha uma cor apropriada
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Total de Leads',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        totalLeads.toString(), // Variável que será atualizada
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+        body: isLoading
+            ? CustomScrollView(
+          slivers: [
+            _buildShimmerEffect(),
           ],
-        ),
+        )
+            : (empresaId == null
+            ? Center(child: Text('Erro: Empresa não encontrada.'))
+            : _buildCampanhasStream(empresaId!)),
       ),
     );
   }
@@ -550,18 +517,18 @@ class _LeadsPageState extends State<LeadsPage> {
           if (selectedStatus == 'Aguardando') {
             // Contar leads com status 'Aguardando'
             QuerySnapshot leadsSnapshotAguardando =
-                await leadsRef.where('status', isEqualTo: 'Aguardando').get();
+            await leadsRef.where('status', isEqualTo: 'Aguardando').get();
 
             // Contar leads sem o campo 'status'
             QuerySnapshot leadsSnapshotSemStatus =
-                await leadsRef.where('status', isEqualTo: null).get();
+            await leadsRef.where('status', isEqualTo: null).get();
 
             leadsCount += leadsSnapshotAguardando.docs.length +
                 leadsSnapshotSemStatus.docs.length;
           } else {
             // Contar leads com status igual ao selecionado
             QuerySnapshot leadsSnapshot =
-                await leadsRef.where('status', isEqualTo: selectedStatus).get();
+            await leadsRef.where('status', isEqualTo: selectedStatus).get();
 
             leadsCount += leadsSnapshot.docs.length;
           }
@@ -624,7 +591,11 @@ class _LeadsPageState extends State<LeadsPage> {
 
         if (!snapshot.hasData ||
             snapshot.connectionState == ConnectionState.waiting) {
-          return _buildShimmerEffect(); // Exibe o Shimmer enquanto carrega
+          return CustomScrollView(
+            slivers: [
+              _buildShimmerEffect(),
+            ],
+          );
         }
 
         final campanhas = snapshot.data?.docs ?? [];
@@ -644,7 +615,8 @@ class _LeadsPageState extends State<LeadsPage> {
               pinned: false,
               floating: true,
               automaticallyImplyLeading: false,
-              expandedHeight: 70,
+              expandedHeight:
+              130, // Aumentado para acomodar o campo de pesquisa
               backgroundColor: Theme.of(context).colorScheme.background,
               surfaceTintColor: Colors.transparent,
               elevation: 0,
@@ -652,65 +624,158 @@ class _LeadsPageState extends State<LeadsPage> {
                 background: Container(
                   color: Theme.of(context).colorScheme.background,
                   padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
+                      // Campo de pesquisa
+                      SearchBar(
+                        onChanged: (value) {
+                          setState(() {
+                            _searchQuery = value.toLowerCase();
+                          });
+                        },
+                      ),
+                      SizedBox(height: 8),
+                      // Ícones de filtro e campanha
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          PopupMenuButton<String>(
-                            color: Theme.of(context).colorScheme.secondary,
-                            icon: Icon(Icons.campaign, size: 30),
-                            offset: Offset(0, 40),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                            onSelected: (value) async {
-                              setState(() {
-                                isLoading = true; // Ativa o Shimmer
-                                selectedCampaignId =
-                                    value == 'Todas' ? null : value;
-                                selectedCampaignName = value == 'Todas'
-                                    ? 'Todas'
-                                    : campanhas.firstWhere((campanha) =>
-                                        campanha.id == value)['nome_campanha'];
-                                leadsData.clear(); // Limpa os leads visíveis
-                              });
-
-                              if (selectedCampaignId != null) {
-                                await _loadCampaignLeads(
-                                    empresaId, selectedCampaignId!);
-                              } else {
-                                await _loadLeads(
-                                    empresaId); // Carrega todos os leads
-                              }
-
-                              await _updateTotalLeads(); // Atualiza totalLeads com base nos filtros atuais
-
-                              setState(() {
-                                isLoading = false; // Desativa o Shimmer
-                              });
-                            },
-                            itemBuilder: (context) {
-                              return [
-                                PopupMenuItem<String>(
-                                  value: 'Todas',
-                                  child: Text(
-                                    'Todas',
-                                    style: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSecondary,
-                                    ),
-                                  ),
+                          Row(
+                            children: [
+                              PopupMenuButton<String>(
+                                color: Theme.of(context).colorScheme.secondary,
+                                icon: Icon(Icons.campaign, size: 30),
+                                offset: Offset(0, 40),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(15),
                                 ),
-                                ...campanhas.map((campanha) {
+                                onSelected: (value) async {
+                                  setState(() {
+                                    isLoading = true; // Ativa o Shimmer
+                                    selectedCampaignId =
+                                    value == 'Todas' ? null : value;
+                                    selectedCampaignName = value == 'Todas'
+                                        ? 'Todas'
+                                        : campanhas.firstWhere((campanha) =>
+                                    campanha.id == value)['nome_campanha'];
+                                    leadsData.clear(); // Limpa os leads visíveis
+                                  });
+
+                                  if (selectedCampaignId != null) {
+                                    await _loadCampaignLeads(
+                                        empresaId, selectedCampaignId!);
+                                  } else {
+                                    await _loadLeads(
+                                        empresaId); // Carrega todos os leads
+                                  }
+
+                                  await _updateTotalLeads(); // Atualiza totalLeads com base nos filtros atuais
+
+                                  setState(() {
+                                    isLoading = false; // Desativa o Shimmer
+                                  });
+                                },
+                                itemBuilder: (context) {
+                                  return [
+                                    PopupMenuItem<String>(
+                                      value: 'Todas',
+                                      child: Text(
+                                        'Todas',
+                                        style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                    ...campanhas.map((campanha) {
+                                      return PopupMenuItem<String>(
+                                        value: campanha.id,
+                                        child: Text(
+                                          campanha['nome_campanha'],
+                                          style: TextStyle(
+                                            fontFamily: 'Poppins',
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSecondary,
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ];
+                                },
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                (selectedCampaignName == null ||
+                                    selectedCampaignName == 'Todas')
+                                    ? ''
+                                    : selectedCampaignName!,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color:
+                                  Theme.of(context).colorScheme.onSecondary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                                softWrap: false,
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              Text(
+                                (selectedStatus == null ||
+                                    selectedStatus == 'Sem Filtros')
+                                    ? ''
+                                    : selectedStatus!,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color:
+                                  Theme.of(context).colorScheme.onSecondary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                                softWrap: false,
+                              ),
+                              SizedBox(width: 4),
+                              PopupMenuButton<String>(
+                                color: Theme.of(context).colorScheme.secondary,
+                                icon: Icon(Icons.filter_list, size: 30),
+                                offset: Offset(0, 40),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                                onSelected: (value) async {
+                                  setState(() {
+                                    selectedStatus = value;
+                                    isLoading = true; // Ativa o Shimmer
+                                  });
+
+                                  await _updateTotalLeads(); // Atualiza totalLeads com base nos filtros atuais
+
+                                  setState(() {
+                                    isLoading = false; // Desativa o Shimmer
+                                  });
+                                },
+                                itemBuilder: (context) => [
+                                  'Sem Filtros',
+                                  'Aguardando',
+                                  'Atendendo',
+                                  'Venda',
+                                  'Recusado'
+                                ].map((status) {
                                   return PopupMenuItem<String>(
-                                    value: campanha.id,
+                                    value: status,
                                     child: Text(
-                                      campanha['nome_campanha'],
+                                      status,
                                       style: TextStyle(
                                         fontFamily: 'Poppins',
                                         fontSize: 12,
@@ -722,84 +787,8 @@ class _LeadsPageState extends State<LeadsPage> {
                                     ),
                                   );
                                 }).toList(),
-                              ];
-                            },
-                          ),
-                          SizedBox(width: 4),
-                          Text(
-                            (selectedCampaignName == null ||
-                                    selectedCampaignName == 'Todas')
-                                ? ''
-                                : selectedCampaignName!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: Theme.of(context).colorScheme.onSecondary,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                            softWrap: false,
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          Text(
-                            (selectedStatus == null ||
-                                    selectedStatus == 'Sem Filtros')
-                                ? ''
-                                : selectedStatus!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: Theme.of(context).colorScheme.onSecondary,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                            softWrap: false,
-                          ),
-                          SizedBox(width: 4),
-                          PopupMenuButton<String>(
-                            color: Theme.of(context).colorScheme.secondary,
-                            icon: Icon(Icons.filter_list, size: 30),
-                            offset: Offset(0, 40),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                            onSelected: (value) async {
-                              setState(() {
-                                selectedStatus = value;
-                                isLoading = true; // Ativa o Shimmer
-                              });
-
-                              await _updateTotalLeads(); // Atualiza totalLeads com base nos filtros atuais
-
-                              setState(() {
-                                isLoading = false; // Desativa o Shimmer
-                              });
-                            },
-                            itemBuilder: (context) => [
-                              'Sem Filtros',
-                              'Aguardando',
-                              'Atendendo',
-                              'Venda',
-                              'Recusado'
-                            ].map((status) {
-                              return PopupMenuItem<String>(
-                                value: status,
-                                child: Text(
-                                  status,
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary,
-                                  ),
-                                ),
-                              );
-                            }).toList(),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -808,12 +797,55 @@ class _LeadsPageState extends State<LeadsPage> {
                 ),
               ),
             ),
-            SliverList(
-              delegate: SliverChildListDelegate([
-                selectedCampaignId != null
-                    ? _buildLeadsStream(empresaId, selectedCampaignId!)
-                    : _buildAllLeadsView(empresaId),
-              ]),
+            selectedCampaignId != null
+                ? _buildLeadsStream(empresaId, selectedCampaignId!)
+                : _buildAllLeadsView(empresaId),
+            // Card com o total de leads
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 100,
+                child: Align(
+                  alignment: Alignment.bottomRight,
+                  child: Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Card(
+                      elevation: 4.0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                      ),
+                      color: Theme.of(context).colorScheme.primary,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Total de Leads',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.outline,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              totalLeads
+                                  .toString(), // Variável que será atualizada
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.outline,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ],
         );
@@ -822,26 +854,26 @@ class _LeadsPageState extends State<LeadsPage> {
   }
 
   Widget _buildShimmerEffect() {
-    return Shimmer.fromColors(
-      baseColor: Theme.of(context).colorScheme.onSecondaryContainer,
-      highlightColor: Theme.of(context).colorScheme.onTertiaryContainer,
-      child: ListView.builder(
-        shrinkWrap: true, // Adicione esta linha
-        physics: NeverScrollableScrollPhysics(),
-        itemCount: 6, // Número de placeholders
-        itemBuilder: (context, index) {
-          return Padding(
-            padding:
-                const EdgeInsets.symmetric(vertical: 10.0, horizontal: 16.0),
-            child: Container(
-              height: 100.0,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.tertiary,
-                borderRadius: BorderRadius.circular(10.0),
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+            (context, index) {
+          return Shimmer.fromColors(
+            baseColor: Theme.of(context).colorScheme.onSecondaryContainer,
+            highlightColor: Theme.of(context).colorScheme.onTertiaryContainer,
+            child: Padding(
+              padding:
+              const EdgeInsets.symmetric(vertical: 10.0, horizontal: 16.0),
+              child: Container(
+                height: 100.0,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.tertiary,
+                  borderRadius: BorderRadius.circular(10.0),
+                ),
               ),
             ),
           );
         },
+        childCount: 6, // Número de placeholders
       ),
     );
   }
@@ -858,8 +890,9 @@ class _LeadsPageState extends State<LeadsPage> {
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(
-              child: Text('Erro ao carregar os leads: ${snapshot.error}'));
+          return SliverToBoxAdapter(
+              child:
+              Center(child: Text('Erro ao carregar os leads: ${snapshot.error}')));
         }
 
         if (!snapshot.hasData ||
@@ -870,52 +903,74 @@ class _LeadsPageState extends State<LeadsPage> {
         final leads = snapshot.data?.docs ?? [];
 
         if (leads.isEmpty) {
-          return Center(
-            child: Text(
-              'Nenhum lead disponível',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+          return SliverToBoxAdapter(
+            child: Center(
+              child: Text(
+                'Nenhum lead disponível',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
             ),
           );
         }
 
-        // Filtrar leads com base no status
+        // Filtrar leads com base no status e na pesquisa
         final filteredLeads = leads.where((lead) {
           final data = lead.data() as Map<String, dynamic>;
-          final status =
-              data.containsKey('status') ? data['status'] : 'Aguardando';
+          final status = data['status'] ?? 'Aguardando';
+          final nome = data['nome']?.toLowerCase() ?? '';
+
           return (selectedStatus == null ||
               selectedStatus == 'Sem Filtros' ||
-              status == selectedStatus);
+              status == selectedStatus) &&
+              nome.contains(_searchQuery);
         }).toList();
 
         if (filteredLeads.isEmpty) {
-          return Center(
-            child: Text(
-              'Nenhum lead disponível para os filtros selecionados',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+          return SliverToBoxAdapter(
+            child: Center(
+              child: Text(
+                'Nenhum lead encontrado para a pesquisa atual',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
             ),
           );
         }
 
-        return ListView.builder(
-          shrinkWrap: true,
-          physics: NeverScrollableScrollPhysics(),
-          itemCount: filteredLeads.length,
-          itemBuilder: (context, index) {
-            final lead = filteredLeads[index];
-            final leadData = Map<String, dynamic>.from(lead.data() as Map);
-            leadData['leadId'] = lead.id;
-            leadData['empresaId'] = empresaId;
-            leadData['campaignId'] = campaignId;
-            leadData['status'] =
-                leadData['status'] ?? 'Aguardando'; // Define status padrão
+        return SliverList(
+          delegate: SliverChildBuilderDelegate(
+                (context, index) {
+              final lead = filteredLeads[index];
+              final leadData = Map<String, dynamic>.from(lead.data() as Map);
+              leadData['leadId'] = lead.id;
+              leadData['empresaId'] = empresaId;
+              leadData['campaignId'] = campaignId;
+              leadData['status'] =
+                  leadData['status'] ?? 'Aguardando'; // Define status padrão
 
-            return LeadCard(
-              leadData: leadData,
-              onTap: (data) => _showLeadDetails(
-                context,
-                data,
-                (newStatus) async {
+              return LeadCard(
+                leadData: leadData,
+                onTap: (data) => _showLeadDetails(
+                  context,
+                  data,
+                      (newStatus) async {
+                    setState(() {
+                      leadData['status'] = newStatus;
+                    });
+
+                    // Atualizar o status no Firestore
+                    await FirebaseFirestore.instance
+                        .collection('empresas')
+                        .doc(empresaId)
+                        .collection('campanhas')
+                        .doc(campaignId)
+                        .collection('leads')
+                        .doc(lead.id)
+                        .update({'status': newStatus});
+
+                    await _updateTotalLeads(); // Atualiza o total após a alteração
+                  },
+                ),
+                onStatusChanged: (newStatus) async {
                   setState(() {
                     leadData['status'] = newStatus;
                   });
@@ -932,27 +987,11 @@ class _LeadsPageState extends State<LeadsPage> {
 
                   await _updateTotalLeads(); // Atualiza o total após a alteração
                 },
-              ),
-              onStatusChanged: (newStatus) async {
-                setState(() {
-                  leadData['status'] = newStatus;
-                });
-
-                // Atualizar o status no Firestore
-                await FirebaseFirestore.instance
-                    .collection('empresas')
-                    .doc(empresaId)
-                    .collection('campanhas')
-                    .doc(campaignId)
-                    .collection('leads')
-                    .doc(lead.id)
-                    .update({'status': newStatus});
-
-                await _updateTotalLeads(); // Atualiza o total após a alteração
-              },
-              statusColor: _getStatusColor(leadData['status'] ?? 'Aguardando'),
-            );
-          },
+                statusColor: _getStatusColor(leadData['status'] ?? 'Aguardando'),
+              );
+            },
+            childCount: filteredLeads.length,
+          ),
         );
       },
     );
@@ -967,16 +1006,20 @@ class _LeadsPageState extends State<LeadsPage> {
         }
 
         if (snapshot.hasError) {
-          return Center(
-            child: Text('Erro ao carregar os leads: ${snapshot.error}'),
+          return SliverToBoxAdapter(
+            child: Center(
+              child: Text('Erro ao carregar os leads: ${snapshot.error}'),
+            ),
           );
         }
 
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return Center(
-            child: Text(
-              'Nenhum lead disponível',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+          return SliverToBoxAdapter(
+            child: Center(
+              child: Text(
+                'Nenhum lead disponível',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
             ),
           );
         }
@@ -984,32 +1027,36 @@ class _LeadsPageState extends State<LeadsPage> {
         final allLeads = snapshot.data!;
         final filteredLeads = allLeads.where((leadData) {
           final data = leadData as Map<String, dynamic>;
-          final status =
-              data.containsKey('status') ? data['status'] : 'Aguardando';
+          final status = data['status'] ?? 'Aguardando';
+          final nome = data['nome']?.toLowerCase() ?? '';
+
           return (selectedStatus == null ||
-                  selectedStatus == 'Sem Filtros' ||
-                  status == selectedStatus) &&
+              selectedStatus == 'Sem Filtros' ||
+              status == selectedStatus) &&
               (selectedCampaignId == null ||
-                  leadData['campaignId'] == selectedCampaignId);
+                  leadData['campaignId'] == selectedCampaignId) &&
+              nome.contains(_searchQuery);
         }).toList();
 
         if (filteredLeads.isEmpty) {
-          return Center(
-            child: Text(
-              'Nenhum lead disponível para os filtros selecionados',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+          return SliverToBoxAdapter(
+            child: Center(
+              child: Text(
+                'Nenhum lead encontrado para a pesquisa atual',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
             ),
           );
         }
 
-        return ListView.builder(
-          shrinkWrap: true,
-          physics: ClampingScrollPhysics(),
-          itemCount: filteredLeads.length,
-          itemBuilder: (context, index) {
-            final leadData = filteredLeads[index];
-            return _buildLeadItem(leadData);
-          },
+        return SliverList(
+          delegate: SliverChildBuilderDelegate(
+                (context, index) {
+              final leadData = filteredLeads[index];
+              return _buildLeadItem(leadData);
+            },
+            childCount: filteredLeads.length,
+          ),
         );
       },
     );
@@ -1017,7 +1064,7 @@ class _LeadsPageState extends State<LeadsPage> {
 
   Widget _buildLeadItem(Map<String, dynamic> leadData) {
     final data = leadData as Map<String, dynamic>;
-    final status = data.containsKey('status') ? data['status'] : 'Aguardando';
+    final status = data['status'] ?? 'Aguardando';
     final timestamp = leadData['timestamp'] ?? Timestamp.now();
     final nome = leadData['nome'] ?? 'Nome não disponível';
 
@@ -1031,7 +1078,7 @@ class _LeadsPageState extends State<LeadsPage> {
       onTap: (data) => _showLeadDetails(
         context,
         data,
-        (newStatus) {
+            (newStatus) {
           setState(() {
             leadData['status'] = newStatus;
           });
@@ -1067,12 +1114,12 @@ class _LeadsPageState extends State<LeadsPage> {
   }
 
   void _showStatusSelectionDialog(
-    BuildContext context,
-    String leadId,
-    String empresaId,
-    String campaignId,
-    Function(String) onStatusChanged,
-  ) {
+      BuildContext context,
+      String leadId,
+      String empresaId,
+      String campaignId,
+      Function(String) onStatusChanged,
+      ) {
     final statusOptions = ['Aguardando', 'Atendendo', 'Venda', 'Recusado'];
 
     showDialog(
