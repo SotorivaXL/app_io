@@ -1,6 +1,28 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
+// Definição da classe TutorialStep
+class TutorialStep {
+  final String title;
+  final String image;
+  final String? description;
+  final double? imageWidth;
+  final double? imageHeight;
+
+  TutorialStep({
+    required this.title,
+    required this.image,
+    this.description,
+    this.imageWidth,
+    this.imageHeight,
+  });
+
+  @override
+  String toString() {
+    return 'TutorialStep(title: $title, image: $image, description: $description, imageWidth: $imageWidth, imageHeight: $imageHeight)';
+  }
+}
+
 class TutorialPopup extends StatefulWidget {
   final VoidCallback onComplete;
 
@@ -14,7 +36,7 @@ class _TutorialPopupState extends State<TutorialPopup> {
   int currentStep = 0;
 
   // Tornar tutorialSteps nullable
-  List<Map<String, String>>? tutorialSteps;
+  List<TutorialStep>? tutorialSteps;
 
   @override
   void initState() {
@@ -30,38 +52,49 @@ class _TutorialPopupState extends State<TutorialPopup> {
     final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
 
     tutorialSteps = [
-      {
-        "title": "Bem-vindo ao",
-        "image": isDarkTheme
+      TutorialStep(
+        title: "Bem-vindo ao",
+        image: isDarkTheme
             ? "assets/images/icons/logoDark.png"
             : "assets/images/icons/logoLight.png",
-      },
-      {
-        "title": "Filtrando Leads por Campanha",
-        "image": "assets/images/tutotial/Filtros.jpg",
-      },
-      {
-        "title": "Filtrando Leads por Status",
-        "image": "assets/images/tutotial/Filtros.jpg",
-      },
-      {
-        "title": "Atualize o Status do Lead com Facilidade",
-        "image": "assets/images/tutotial/Status.jpg",
-      },
-      {
-        "title": "Veja Todas as Informações do Lead",
-        "image": "assets/images/tutotial/Detalhes.jpg",
-      },
-      {
-        "title": "Converse com Seus Leads no WhatsApp",
-        "image": "assets/images/tutotial/WhatsApp.jpg",
-      },
+        description: "Explore os recursos incríveis da nossa plataforma!",
+        imageWidth: 220, // Tamanho específico para esta imagem
+        imageHeight: 80,
+      ),
+      TutorialStep(
+        title: "Filtrando Leads por Campanha!",
+        image: "assets/images/tutorial/Filtros.jpg",
+        imageWidth: 500, // Tamanho específico para esta imagem
+        imageHeight: 200,
+      ),
+      TutorialStep(
+        title: "Filtrando Leads por Status!",
+        image: "assets/images/tutorial/Filtros.jpg",
+        imageWidth: 500, // Tamanho específico para esta imagem
+        imageHeight: 200,
+      ),
+      TutorialStep(
+        title: "Atualize o Status do Lead com praticidade e rapidez!",
+        image: "assets/images/tutorial/Status.jpg",
+        imageWidth: 500, // Tamanho específico para esta imagem
+        imageHeight: 200,
+      ),
+      TutorialStep(
+        title: "Veja Todas as Informações do Lead!",
+        image: "assets/images/tutorial/Detalhes.jpg",
+        imageWidth: 500, // Tamanho específico para esta imagem
+        imageHeight: 200,
+      ),
+      TutorialStep(
+        title: "Converse com Seus Leads no WhatsApp!",
+        image: "assets/images/tutorial/WhatsApp.jpg",
+        imageWidth: 500, // Tamanho específico para esta imagem
+        imageHeight: 200,
+      ),
     ];
-  }
 
-  @override
-  void dispose() {
-    super.dispose();
+    // Depuração: Imprimir todas as etapas para verificar se estão corretas
+    print('Tutorial Steps: $tutorialSteps');
   }
 
   void _nextStep() {
@@ -97,52 +130,56 @@ class _TutorialPopupState extends State<TutorialPopup> {
 
     final step = tutorialSteps![currentStep];
 
+    // Depuração: Imprimir a etapa atual para verificar os dados
+    print('Current Step: $step');
+
     return Dialog(
       backgroundColor: Theme.of(context).colorScheme.background,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(40.0),
+        padding: const EdgeInsets.all(35.0),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Cabeçalho com Título e Botão "Pular Tutorial"
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      step['title']!,
-                      style: TextStyle(
-                        fontFamily: 'Branding SF',
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        color: Theme.of(context).colorScheme.onSecondary,
-                      ),
-                    ),
+              // Cabeçalho com Título Centralizado
+              Center(
+                child: Text(
+                  step.title,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Theme.of(context).colorScheme.onSecondary,
                   ),
-                ],
+                ),
               ),
-              const SizedBox(height: 20),
+              // Imagem do passo com tamanho específico
               Image.asset(
-                step['image']!,
-                scale: 2,
+                step.image,
+                width: step.imageWidth, // Usa o tamanho definido ou um padrão
+                height: step.imageHeight,
+                fit: BoxFit.contain, // Ajusta a imagem dentro do espaço
                 errorBuilder: (context, error, stackTrace) {
                   return const Icon(Icons.error, size: 50, color: Colors.red);
                 },
               ),
-              const SizedBox(height: 40),
-              Text(
-                step['description']!,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
+              // Descrição apenas para a primeira página
+              const SizedBox(height: 10),
+              if (step.description != null)
+                Text(
+                  step.description!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
+              if (step.description != null)
+                const SizedBox(height: 25),
               // Botões "Próximo/Concluir" e "Pular Tutorial"
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -156,7 +193,7 @@ class _TutorialPopupState extends State<TutorialPopup> {
                         fontFamily: 'Poppins',
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
-                        color: Theme.of(context).colorScheme.primary,
+                        color: Theme.of(context).colorScheme.onSecondary,
                       ),
                     ),
                   ),
@@ -165,7 +202,7 @@ class _TutorialPopupState extends State<TutorialPopup> {
                     onPressed: _nextStep,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                      foregroundColor: Theme.of(context).colorScheme.outline,
                     ),
                     child: Text(
                       currentStep < tutorialSteps!.length - 1

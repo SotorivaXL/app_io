@@ -252,7 +252,7 @@ class _EditCompaniesState extends State<EditCompanies> {
                         _isLoading
                             ? CircularProgressIndicator()
                             : IconButton(
-                          icon: Icon(Icons.save_alt_rounded,
+                          icon: Icon(Icons.save_as_sharp,
                               color: Theme.of(context)
                                   .colorScheme
                                   .onBackground,
@@ -354,7 +354,7 @@ class _EditCompaniesState extends State<EditCompanies> {
                                     Icons.corporate_fare,
                                     color:
                                     Theme.of(context).colorScheme.tertiary,
-                                    size: 25,
+                                    size: 20,
                                   ),
                                 ),
                                 style: TextStyle(
@@ -413,7 +413,7 @@ class _EditCompaniesState extends State<EditCompanies> {
                                     Icons.mail,
                                     color:
                                     Theme.of(context).colorScheme.tertiary,
-                                    size: 25,
+                                    size: 20,
                                   ),
                                 ),
                                 style: TextStyle(
@@ -472,7 +472,7 @@ class _EditCompaniesState extends State<EditCompanies> {
                                     Icons.import_contacts,
                                     color:
                                     Theme.of(context).colorScheme.tertiary,
-                                    size: 25,
+                                    size: 20,
                                   ),
                                 ),
                                 style: TextStyle(
@@ -533,7 +533,7 @@ class _EditCompaniesState extends State<EditCompanies> {
                                     Icons.contact_emergency_sharp,
                                     color:
                                     Theme.of(context).colorScheme.tertiary,
-                                    size: 25,
+                                    size: 20,
                                   ),
                                 ),
                                 style: TextStyle(
@@ -584,7 +584,7 @@ class _EditCompaniesState extends State<EditCompanies> {
                                     color: Theme.of(context)
                                         .colorScheme
                                         .tertiary,
-                                    size: 25,
+                                    size: 20,
                                   ),
                                 ),
                                 style: TextStyle(
@@ -1007,7 +1007,7 @@ class _EditCompaniesState extends State<EditCompanies> {
                                 icon: Icon(
                                   Icons.settings_backup_restore_rounded,
                                   color: Theme.of(context).colorScheme.outline,
-                                  size: 25,
+                                  size: 20,
                                 ),
                                 label: Text(
                                   'Alterar senha',

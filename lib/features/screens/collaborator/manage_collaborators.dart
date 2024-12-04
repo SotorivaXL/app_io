@@ -409,7 +409,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Colaboradores',
+                              'Gerenciar Colaboradores',
                               style: TextStyle(
                                 fontFamily: 'Poppins',
                                 fontSize: 26,

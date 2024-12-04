@@ -337,6 +337,11 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                                         borderRadius: BorderRadius.circular(10),
                                         borderSide: BorderSide.none,
                                       ),
+                                      prefixIcon: Icon(
+                                        Icons.person,
+                                        color: Theme.of(context).colorScheme.tertiary,
+                                        size: 20,
+                                      )
                                     ),
                                     style: TextStyle(
                                       fontFamily: 'Poppins',
@@ -407,6 +412,11 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                                         borderRadius: BorderRadius.circular(10),
                                         borderSide: BorderSide.none,
                                       ),
+                                      prefixIcon: Icon(
+                                        Icons.mail,
+                                        color: Theme.of(context).colorScheme.tertiary,
+                                        size: 20,
+                                      )
                                     ),
                                     style: TextStyle(
                                       fontFamily: 'Poppins',
@@ -470,6 +480,11 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(10),
                                         borderSide: BorderSide.none,
+                                      ),
+                                      prefixIcon: Icon(
+                                        Icons.business_center,
+                                        color: Theme.of(context).colorScheme.tertiary,
+                                        size: 20,
                                       ),
                                     ),
                                     style: TextStyle(
@@ -540,6 +555,11 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(10),
                                         borderSide: BorderSide.none,
+                                      ),
+                                      prefixIcon: Icon(
+                                        Icons.calendar_month,
+                                        color: Theme.of(context).colorScheme.tertiary,
+                                        size: 20,
                                       ),
                                     ),
                                     style: TextStyle(

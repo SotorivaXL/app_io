@@ -66,7 +66,7 @@ class _CreateFormState extends State<CreateForm> {
   Future<void> _loadEmpresas() async {
     try {
       List<Map<String, dynamic>> empresas =
-      await _firestoreService.getEmpresas();
+          await _firestoreService.getEmpresas();
       setState(() {
         _empresas = empresas;
       });
@@ -78,11 +78,11 @@ class _CreateFormState extends State<CreateForm> {
   Future<void> _loadCampanhas(String empresaId) async {
     try {
       List<Map<String, dynamic>> campanhas =
-      await _firestoreService.getCampanhas(empresaId);
+          await _firestoreService.getCampanhas(empresaId);
       setState(() {
         _campanhas = campanhas;
         _selectedCampanhaId =
-        null; // Resetar a campanha selecionada quando a empresa é alterada
+            null; // Resetar a campanha selecionada quando a empresa é alterada
       });
     } catch (e) {
       showErrorDialog(context, 'Erro ao carregar campanha', 'Erro');
@@ -133,7 +133,7 @@ class _CreateFormState extends State<CreateForm> {
                               Icon(
                                 Icons.arrow_back_ios_new,
                                 color:
-                                Theme.of(context).colorScheme.onBackground,
+                                    Theme.of(context).colorScheme.onBackground,
                                 size: 20,
                               ),
                               const SizedBox(width: 4),
@@ -143,7 +143,7 @@ class _CreateFormState extends State<CreateForm> {
                                   fontFamily: 'Poppins',
                                   fontSize: 16,
                                   color:
-                                  Theme.of(context).colorScheme.onSecondary,
+                                      Theme.of(context).colorScheme.onSecondary,
                                 ),
                               ),
                             ],
@@ -242,17 +242,16 @@ class _CreateFormState extends State<CreateForm> {
                   Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Row(
-                      mainAxisAlignment:
-                      MainAxisAlignment.spaceBetween, // Espaça uniformemente os botões
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      // Espaça uniformemente os botões
                       children: [
                         Expanded(
                           child: ElevatedButton(
                             onPressed: _generateHtmlForm,
                             style: ElevatedButton.styleFrom(
-                              padding:
-                              const EdgeInsets.symmetric(vertical: 15),
+                              padding: const EdgeInsets.symmetric(vertical: 15),
                               backgroundColor:
-                              Theme.of(context).colorScheme.primary,
+                                  Theme.of(context).colorScheme.primary,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(25),
                               ),
@@ -263,21 +262,20 @@ class _CreateFormState extends State<CreateForm> {
                                 fontFamily: 'Poppins',
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color:
-                                Theme.of(context).colorScheme.outline,
+                                color: Theme.of(context).colorScheme.outline,
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 10), // Espaçamento entre os botões
+                        const SizedBox(width: 10),
+                        // Espaçamento entre os botões
                         Expanded(
                           child: ElevatedButton.icon(
                             onPressed: _clearForm,
                             style: ElevatedButton.styleFrom(
-                              padding:
-                              const EdgeInsets.symmetric(vertical: 15),
+                              padding: const EdgeInsets.symmetric(vertical: 15),
                               backgroundColor:
-                              Theme.of(context).colorScheme.primary,
+                                  Theme.of(context).colorScheme.primary,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(25),
                               ),
@@ -289,8 +287,7 @@ class _CreateFormState extends State<CreateForm> {
                                 fontFamily: 'Poppins',
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color:
-                                Theme.of(context).colorScheme.outline,
+                                color: Theme.of(context).colorScheme.outline,
                               ),
                             ),
                           ),
@@ -306,7 +303,6 @@ class _CreateFormState extends State<CreateForm> {
       ),
     );
   }
-
 
   Widget _buildDropdowns(BuildContext context) {
     return Column(
@@ -348,7 +344,7 @@ class _CreateFormState extends State<CreateForm> {
                       filled: true,
                       fillColor: Theme.of(context).colorScheme.secondary,
                       contentPadding:
-                      EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                          EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
                       border: UnderlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: BorderSide.none,
@@ -406,7 +402,7 @@ class _CreateFormState extends State<CreateForm> {
                       filled: true,
                       fillColor: Theme.of(context).colorScheme.secondary,
                       contentPadding:
-                      EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                          EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
                       border: UnderlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: BorderSide.none,
@@ -499,6 +495,7 @@ class _CreateFormState extends State<CreateForm> {
                       {'label': 'CPF', 'value': 'cpf'},
                       {'label': 'CNPJ', 'value': 'cnpj'},
                       {'label': 'Data', 'value': 'date'},
+                      {'label': 'Email', 'value': 'email'}, // Nova opção adicionada aqui
                     ].map((maskOption) {
                       return DropdownMenuItem<String>(
                         value: maskOption['value'],
@@ -549,7 +546,8 @@ class _CreateFormState extends State<CreateForm> {
                           borderRadius: BorderRadius.circular(10),
                           borderSide: BorderSide.none,
                         )),
-                    keyboardType: TextInputType.numberWithOptions(decimal: true),
+                    keyboardType:
+                        TextInputType.numberWithOptions(decimal: true),
                     onChanged: (value) {
                       setState(() {
                         fieldData.borderRadius = double.tryParse(value) ?? 8.0;
@@ -562,8 +560,8 @@ class _CreateFormState extends State<CreateForm> {
                       color: Theme.of(context).colorScheme.background,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    padding:
-                    const EdgeInsets.symmetric(vertical: 0.2, horizontal: 6),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 0.2, horizontal: 6),
                     child: ListTile(
                       title: Text(
                         'Gradiente do Campo',
@@ -575,7 +573,7 @@ class _CreateFormState extends State<CreateForm> {
                       ),
                       trailing: Row(
                         mainAxisSize:
-                        MainAxisSize.min, // Ajusta o tamanho mínimo do Row
+                            MainAxisSize.min, // Ajusta o tamanho mínimo do Row
                         children: [
                           GestureDetector(
                             onTap: () => _pickFieldStartColor(index),
@@ -610,8 +608,8 @@ class _CreateFormState extends State<CreateForm> {
                       color: Theme.of(context).colorScheme.background,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 1, horizontal: 25),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 1, horizontal: 25),
                     child: IconButton(
                       icon: Icon(Icons.delete,
                           color: Theme.of(context).colorScheme.error),
@@ -659,7 +657,7 @@ class _CreateFormState extends State<CreateForm> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   padding:
-                  const EdgeInsets.symmetric(vertical: 0.2, horizontal: 6),
+                      const EdgeInsets.symmetric(vertical: 0.2, horizontal: 6),
                   child: ListTile(
                     title: Text(
                       'Gradiente do Botão',
@@ -706,7 +704,7 @@ class _CreateFormState extends State<CreateForm> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   padding:
-                  const EdgeInsets.symmetric(vertical: 0.2, horizontal: 6),
+                      const EdgeInsets.symmetric(vertical: 0.2, horizontal: 6),
                   child: ListTile(
                     title: Text(
                       'Cor do Texto do Botão',
@@ -736,7 +734,7 @@ class _CreateFormState extends State<CreateForm> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   padding:
-                  const EdgeInsets.symmetric(vertical: 0.2, horizontal: 6),
+                      const EdgeInsets.symmetric(vertical: 0.2, horizontal: 6),
                   child: ListTile(
                     title: Text(
                       'Cor de Hover do Botão',
@@ -765,8 +763,8 @@ class _CreateFormState extends State<CreateForm> {
                     color: Theme.of(context).colorScheme.background,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 0.2, horizontal: 6),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 0.2, horizontal: 6),
                   child: ListTile(
                     title: Text(
                       'Cor de Foco dos Campos',
@@ -799,7 +797,7 @@ class _CreateFormState extends State<CreateForm> {
                       vertical: 4.0, horizontal: 4.5),
                   child: TextField(
                     keyboardType:
-                    TextInputType.numberWithOptions(decimal: true),
+                        TextInputType.numberWithOptions(decimal: true),
                     maxLength: 2,
                     decoration: InputDecoration(
                       filled: true,
@@ -1277,91 +1275,107 @@ class _CreateFormState extends State<CreateForm> {
             ? fieldData.nameController.text
             : 'campo_${i + 1}';
 
+        // Determinar o tipo de input
+        String inputType = 'text';
+        if (fieldData.mask == 'email') {
+          inputType = 'email';
+        }
+
         if (fieldData.mask.isNotEmpty) {
           String maskFunctionName = 'applyMask${i}';
           String maskScript = '';
           if (fieldData.mask == 'phone') {
             maskScript = '''
-                function applyMask2(input) {
-            var x = input.value.replace(/\D/g, '');
-            x = x.substring(0, 11);
-            
-            if (x === '') {
-              input.value = '';
-              return;
+        function $maskFunctionName(input) {
+          var x = input.value.replace(/\\D/g, '');
+          x = x.substring(0, 11);
+          var formatted = '';
+          if (x.length > 0) {
+            if (x.length <= 2) {
+              formatted = '(' + x;
+            } else if (x.length <= 7) {
+              formatted = '(' + x.substring(0,2) + ') ' + x.substring(2);
+            } else {
+              formatted = '(' + x.substring(0,2) + ') ' + x.substring(2,7) + '-' + x.substring(7);
             }
-        
-            var formatted = x.replace(/(\d{0,2})(\d{0,5})(\d{0,4})/, function(match, p1, p2, p3) {
-              if (p3) {
-                return '(' + p1 + ') ' + p2 + '-' + p3;
-              } else if (p2) {
-                return '(' + p1 + ') ' + p2;
-              } else {
-                return '(' + p1;
-              }
-            });
-        
-            input.value = formatted;
           }
-                ''';
+          input.value = formatted;
+        }
+        ''';
           } else if (fieldData.mask == 'cpf') {
             maskScript = '''
-                function $maskFunctionName(input) {
-                  var x = input.value.replace(/\\D/g, '');
-                  x = x.substring(0, 11);
-                  var formatted = x.replace(/(\\d{0,3})(\\d{0,3})(\\d{0,3})(\\d{0,2})/, function(match, p1, p2, p3, p4) {
-                    var result = '';
-                    if (p1) result += p1;
-                    if (p2) result += '.' + p2;
-                    if (p3) result += '.' + p3;
-                    if (p4) result += '-' + p4;
-                    return result;
-                  });
-                  input.value = formatted;
-                }
-                ''';
+        function $maskFunctionName(input) {
+          var x = input.value.replace(/\\D/g, '');
+          x = x.substring(0, 11);
+          var formatted = '';
+          if (x.length > 0) {
+            if (x.length <= 3) {
+              formatted = x;
+            } else if (x.length <= 6) {
+              formatted = x.substring(0,3) + '.' + x.substring(3);
+            } else if (x.length <= 9) {
+              formatted = x.substring(0,3) + '.' + x.substring(3,6) + '.' + x.substring(6);
+            } else {
+              formatted = x.substring(0,3) + '.' + x.substring(3,6) + '.' + x.substring(6,9) + '-' + x.substring(9);
+            }
+          }
+          input.value = formatted;
+        }
+        ''';
           } else if (fieldData.mask == 'cnpj') {
             maskScript = '''
-                function $maskFunctionName(input) {
-                  var x = input.value.replace(/\\D/g, '');
-                  x = x.substring(0, 14);
-                  var formatted = x.replace(/(\\d{0,2})(\\d{0,3})(\\d{0,3})(\\d{0,4})(\\d{0,2})/, function(match, p1, p2, p3, p4, p5) {
-                    var result = '';
-                    if (p1) result += p1;
-                    if (p2) result += '.' + p2;
-                    if (p3) result += '.' + p3;
-                    if (p4) result += '/' + p4;
-                    if (p5) result += '-' + p5;
-                    return result;
-                  });
-                  input.value = formatted;
-                }
-                ''';
+        function $maskFunctionName(input) {
+          var x = input.value.replace(/\\D/g, '');
+          x = x.substring(0, 14);
+          var formatted = '';
+          if (x.length > 0) {
+            if (x.length <= 2) {
+              formatted = x;
+            } else if (x.length <= 5) {
+              formatted = x.substring(0,2) + '.' + x.substring(2);
+            } else if (x.length <= 8) {
+              formatted = x.substring(0,2) + '.' + x.substring(2,5) + '.' + x.substring(5);
+            } else if (x.length <= 12) {
+              formatted = x.substring(0,2) + '.' + x.substring(2,5) + '.' + x.substring(5,8) + '/' + x.substring(8);
+            } else {
+              formatted = x.substring(0,2) + '.' + x.substring(2,5) + '.' + x.substring(5,8) + '/' + x.substring(8,12) + '-' + x.substring(12);
+            }
+          }
+          input.value = formatted;
+        }
+        ''';
           } else if (fieldData.mask == 'date') {
             maskScript = '''
-                function $maskFunctionName(input) {
-                  var x = input.value.replace(/\\D/g, '');
-                  x = x.substring(0, 8);
-                  var formatted = x.replace(/(\\d{0,2})(\\d{0,2})(\\d{0,4})/, function(match, p1, p2, p3) {
-                    var result = '';
-                    if (p1) result += p1;
-                    if (p2) result += '/' + p2;
-                    if (p3) result += '/' + p3;
-                    return result;
-                  });
-                  input.value = formatted;
-                }
-                ''';
+        function $maskFunctionName(input) {
+          var x = input.value.replace(/\\D/g, '');
+          x = x.substring(0, 8);
+          var formatted = '';
+          if (x.length > 0) {
+            if (x.length <= 2) {
+              formatted = x;
+            } else if (x.length <= 4) {
+              formatted = x.substring(0,2) + '/' + x.substring(2);
+            } else {
+              formatted = x.substring(0,2) + '/' + x.substring(2,4) + '/' + x.substring(4);
+            }
+          }
+          input.value = formatted;
+        }
+        ''';
           }
           maskScripts += '<script>$maskScript</script>';
         }
 
+        // Adicionar o atributo 'required' para tornar o campo obrigatório
+        String requiredAttribute = 'required';
+
+        // Gerar o campo de input
         String inputField = '''
-            <div style="border-radius: ${fieldData.borderRadius}px; padding: 2px; background: linear-gradient(45deg, ${_colorToHex(fieldData.fieldStartColor)}, ${_colorToHex(fieldData.fieldEndColor)});">
-              <input type="text" id="$fieldName" name="$fieldName" placeholder="${fieldData.hintController.text}" value="" style="border: none; border-image: linear-gradient(45deg, ${_colorToHex(fieldData.fieldStartColor)}, ${_colorToHex(fieldData.fieldEndColor)}) 1; border-radius: ${fieldData.borderRadius}px; font-family: 'Montserrat', sans-serif; font-size: 16px; padding: 8px; margin: 0; width: 100%; box-sizing: border-box; background-color: white; cursor: pointer;" ${fieldData.mask.isNotEmpty ? 'oninput="applyMask${i}(this)"' : ''}>
-            </div>
-            <br>
-            ''';
+      <div style="border-radius: ${fieldData.borderRadius}px; padding: 2px; background: linear-gradient(45deg, ${_colorToHex(fieldData.fieldStartColor)}, ${_colorToHex(fieldData.fieldEndColor)});">
+        <input type="$inputType" id="$fieldName" name="$fieldName" placeholder="${fieldData.hintController.text}" value="" style="border: none; border-image: linear-gradient(45deg, ${_colorToHex(fieldData.fieldStartColor)}, ${_colorToHex(fieldData.fieldEndColor)}) 1; border-radius: ${fieldData.borderRadius}px; font-family: 'Montserrat', sans-serif; font-size: 16px; padding: 8px; margin: 0; width: 100%; box-sizing: border-box; background-color: white; cursor: pointer;" ${fieldData.mask.isNotEmpty && fieldData.mask != 'email' ? 'oninput="applyMask${i}(this)"' : ''} $requiredAttribute>
+      </div>
+      <br>
+      ''';
 
         fieldsHtml += inputField;
       }

@@ -59,10 +59,10 @@ flutter:
     -  'assets/animations/confetti.json'
     - 'assets/animations/balloons.json'
     - 'assets/animations/congratulations.gif'
-    -  'assets/images/tutotial/Detalhes.jpg'
-    - 'assets/images/tutotial/Filtros.jpg'
-    - 'assets/images/tutotial/Status.jpg'
-    - 'assets/images/tutotial/WhatsApp.jpg'
+    -  'assets/images/tutorial/Detalhes.jpg'
+    - 'assets/images/tutorial/Filtros.jpg'
+    - 'assets/images/tutorial/Status.jpg'
+    - 'assets/images/tutorial/WhatsApp.jpg'
 
   uses-material-design: true
 

@@ -17,6 +17,7 @@ class _AddCompanyState extends State<AddCompany> {
   late AddCompanyModel _model;
   String? userId;
   bool _isLoading = false;
+  double _scrollOffset = 0.0;
 
   // Inicializa o mapa para armazenar os direitos de acesso
   Map<String, bool> accessRights = {
@@ -96,37 +97,87 @@ class _AddCompanyState extends State<AddCompany> {
 
   @override
   Widget build(BuildContext context) {
+    double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
     return ConnectivityBanner(
       child: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         child: Scaffold(
           backgroundColor: Theme.of(context).colorScheme.background,
           appBar: AppBar(
-            backgroundColor: Theme.of(context).colorScheme.secondary,
+            toolbarHeight: appBarHeight,
             automaticallyImplyLeading: false,
-            leading: IconButton(
-              icon: Icon(
-                Icons.arrow_back_ios_new,
-                color: Theme.of(context).colorScheme.outline,
-                size: 24,
-              ),
-              onPressed: () {
-                Navigator.pop(context);
-              },
-            ),
-            title: Text(
-              'Adicionar Parceiro',
-              style: TextStyle(
-                fontFamily: 'BrandingSF',
-                fontSize: 26,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0,
-                color: Theme.of(context).colorScheme.outline,
+            flexibleSpace: SafeArea(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Botão de voltar e título
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.pop(context);
+                          },
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.arrow_back_ios_new,
+                                color:
+                                Theme.of(context).colorScheme.onBackground,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Voltar',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 16,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Adicionar Parceiro',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 26,
+                            fontWeight: FontWeight.w700,
+                            color: Theme.of(context).colorScheme.onSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Stack na direita
+                    Stack(
+                      children: [
+                        _isLoading
+                            ? CircularProgressIndicator()
+                            : IconButton(
+                          icon: Icon(Icons.save_as_sharp,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onBackground,
+                              size: 30),
+                          onPressed: _isLoading ? null : _addCompany,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
             surfaceTintColor: Colors.transparent,
-            centerTitle: true,
-            elevation: 2,
+            backgroundColor: Theme.of(context).colorScheme.secondary,
           ),
           body: SafeArea(
             child: Container(
@@ -189,7 +240,7 @@ class _AddCompanyState extends State<AddCompany> {
                                     prefixIcon: Icon(
                                       Icons.corporate_fare,
                                       color: Theme.of(context).colorScheme.tertiary,
-                                      size: 25,
+                                      size: 20,
                                     ),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(10),
@@ -248,7 +299,7 @@ class _AddCompanyState extends State<AddCompany> {
                                     prefixIcon: Icon(
                                       Icons.mail,
                                       color: Theme.of(context).colorScheme.tertiary,
-                                      size: 25,
+                                      size: 20,
                                     ),
                                   ),
                                   style: TextStyle(
@@ -301,7 +352,7 @@ class _AddCompanyState extends State<AddCompany> {
                                     prefixIcon: Icon(
                                       Icons.import_contacts,
                                       color: Theme.of(context).colorScheme.tertiary,
-                                      size: 25,
+                                      size: 20,
                                     ),
                                   ),
                                   style: TextStyle(
@@ -355,7 +406,7 @@ class _AddCompanyState extends State<AddCompany> {
                                     prefixIcon: Icon(
                                       Icons.contact_emergency_sharp,
                                       color: Theme.of(context).colorScheme.tertiary,
-                                      size: 25,
+                                      size: 20,
                                     ),
                                   ),
                                   style: TextStyle(
@@ -503,7 +554,7 @@ class _AddCompanyState extends State<AddCompany> {
                                         prefixIcon: Icon(
                                           Icons.calendar_month,
                                           color: Theme.of(context).colorScheme.tertiary,
-                                          size: 25,
+                                          size: 20,
                                         ),
                                       ),
                                       style: TextStyle(
@@ -556,7 +607,7 @@ class _AddCompanyState extends State<AddCompany> {
                                     prefixIcon: Icon(
                                       Icons.lock,
                                       color: Theme.of(context).colorScheme.tertiary,
-                                      size: 25,
+                                      size: 20,
                                     ),
                                     suffixIcon: InkWell(
                                       onTap: () => setState(
@@ -568,7 +619,7 @@ class _AddCompanyState extends State<AddCompany> {
                                             ? Icons.visibility_off_outlined
                                             : Icons.visibility_outlined,
                                         color: Theme.of(context).colorScheme.tertiary,
-                                        size: 25,
+                                        size: 20,
                                       ),
                                     ),
                                   ),
@@ -621,7 +672,7 @@ class _AddCompanyState extends State<AddCompany> {
                                     prefixIcon: Icon(
                                       Icons.lock,
                                       color: Theme.of(context).colorScheme.tertiary,
-                                      size: 25,
+                                      size: 20,
                                     ),
                                     suffixIcon: InkWell(
                                       onTap: () => setState(
@@ -634,7 +685,7 @@ class _AddCompanyState extends State<AddCompany> {
                                             ? Icons.visibility_off_outlined
                                             : Icons.visibility_outlined,
                                         color: Theme.of(context).colorScheme.tertiary,
-                                        size: 25,
+                                        size: 20,
                                       ),
                                     ),
                                   ),

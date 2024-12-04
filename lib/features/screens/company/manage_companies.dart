@@ -504,7 +504,6 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                       return Card(
                         elevation: 4,
                         color: Theme.of(context).colorScheme.secondary,
-                        shadowColor: Theme.of(context).shadowColor,
                         margin: EdgeInsets.only(left: 10, right: 10, top: 20),
                         child: ListTile(
                           title: Text(

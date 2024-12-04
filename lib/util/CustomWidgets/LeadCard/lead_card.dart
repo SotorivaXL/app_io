@@ -284,134 +284,138 @@ class _LeadCardState extends State<LeadCard> with SingleTickerProviderStateMixin
           child: Card(
             elevation: 4,
             color: Colors.transparent,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(25),
-                color: Theme.of(context).colorScheme.secondary,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(17),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Status do Lead
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 12),
-                      child: GestureDetector(
-                        onTap: () => _showStatusSelectionDialog(
-                          context,
-                          widget.leadData['leadId'] ?? '',
-                          widget.leadData['empresaId'] ?? '',
-                          widget.leadData['campaignId'] ?? '',
-                          widget.onStatusChanged,
-                        ),
-                        child: Chip(
-                          label: Text(
-                            widget.leadData['status'] ?? 'Aguardando',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.outline,
-                              fontFamily: 'Poppins',
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
+            child: Stack( // Usando Stack para posicionar o botão de deletar
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(25),
+                    color: Theme.of(context).colorScheme.secondary,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(17),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Status do Lead
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 12),
+                          child: GestureDetector(
+                            onTap: () => _showStatusSelectionDialog(
+                              context,
+                              widget.leadData['leadId'] ?? '',
+                              widget.leadData['empresaId'] ?? '',
+                              widget.leadData['campaignId'] ?? '',
+                              widget.onStatusChanged,
                             ),
-                          ),
-                          backgroundColor: _statusColor,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(25),
-                            side: BorderSide(
-                              color: _statusColor,
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Data de Entrada
-                    if (formattedDate.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 1, horizontal: 12),
-                        child: Text(
-                          formattedDate,
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                            color: Theme.of(context).colorScheme.onSecondary,
-                          ),
-                        ),
-                      ),
-                    // Nome do Lead
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 1, horizontal: 12),
-                      child: Text(
-                        widget.leadData['nome'] ?? 'Nome não disponível',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 24,
-                          fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.onSecondary,
-                        ),
-                      ),
-                    ),
-                    // Informações do WhatsApp
-                    if (widget.leadData.containsKey('whatsapp') &&
-                        widget.leadData['whatsapp'] != null)
-                      Padding(
-                        padding: EdgeInsets.zero,
-                        child: Row(
-                          children: [
-                            IconButton(
-                              icon: FaIcon(
-                                FontAwesomeIcons.whatsapp,
-                                color: Theme.of(context).colorScheme.onBackground,
-                                size: 25,
-                              ),
-                              onPressed: () {
-                                final phoneNumber = widget.leadData['whatsapp'] as String?;
-                                if (phoneNumber != null) {
-                                  _openWhatsAppWithMessage(
-                                    phoneNumber,
-                                    widget.leadData['empresaId'] ?? '',
-                                    widget.leadData['campaignId'] ?? '',
-                                    widget.leadData['leadId'] ?? '',
-                                  );
-                                } else {
-                                  showErrorDialog(context, 'Número de telefone inválido.', 'Erro');
-                                }
-                              },
-                            ),
-                            GestureDetector(
-                              onTap: () {
-                                final phoneNumber = widget.leadData['whatsapp'] as String?;
-                                if (phoneNumber != null) {
-                                  _openWhatsAppWithMessage(
-                                    phoneNumber,
-                                    widget.leadData['empresaId'] ?? '',
-                                    widget.leadData['campaignId'] ?? '',
-                                    widget.leadData['leadId'] ?? '',
-                                  );
-                                } else {
-                                  showErrorDialog(context, 'Número de telefone inválido.', 'Erro');
-                                }
-                              },
-                              child: Text(
-                                widget.leadData['whatsapp'] ?? '',
+                            child: Chip(
+                              label: Text(
+                                widget.leadData['status'] ?? 'Aguardando',
                                 style: TextStyle(
+                                  color: Theme.of(context).colorScheme.outline,
                                   fontFamily: 'Poppins',
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                  color: Theme.of(context).colorScheme.onSecondary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              backgroundColor: _statusColor,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(25),
+                                side: BorderSide(
+                                  color: _statusColor,
+                                  width: 2,
                                 ),
                               ),
                             ),
-                          ],
+                          ),
                         ),
-                      ),
-                  ],
+                        // Data de Entrada
+                        if (formattedDate.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 1, horizontal: 12),
+                            child: Text(
+                              formattedDate,
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: Theme.of(context).colorScheme.onSecondary,
+                              ),
+                            ),
+                          ),
+                        // Nome do Lead
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 1, horizontal: 12),
+                          child: Text(
+                            widget.leadData['nome'] ?? 'Nome não disponível',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 24,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                        ),
+                        // Informações do WhatsApp
+                        if (widget.leadData.containsKey('whatsapp') &&
+                            widget.leadData['whatsapp'] != null)
+                          Padding(
+                            padding: EdgeInsets.zero,
+                            child: Row(
+                              children: [
+                                IconButton(
+                                  icon: FaIcon(
+                                    FontAwesomeIcons.whatsapp,
+                                    color: Theme.of(context).colorScheme.onBackground,
+                                    size: 25,
+                                  ),
+                                  onPressed: () {
+                                    final phoneNumber = widget.leadData['whatsapp'] as String?;
+                                    if (phoneNumber != null) {
+                                      _openWhatsAppWithMessage(
+                                        phoneNumber,
+                                        widget.leadData['empresaId'] ?? '',
+                                        widget.leadData['campaignId'] ?? '',
+                                        widget.leadData['leadId'] ?? '',
+                                      );
+                                    } else {
+                                      showErrorDialog(context, 'Número de telefone inválido.', 'Erro');
+                                    }
+                                  },
+                                ),
+                                GestureDetector(
+                                  onTap: () {
+                                    final phoneNumber = widget.leadData['whatsapp'] as String?;
+                                    if (phoneNumber != null) {
+                                      _openWhatsAppWithMessage(
+                                        phoneNumber,
+                                        widget.leadData['empresaId'] ?? '',
+                                        widget.leadData['campaignId'] ?? '',
+                                        widget.leadData['leadId'] ?? '',
+                                      );
+                                    } else {
+                                      showErrorDialog(context, 'Número de telefone inválido.', 'Erro');
+                                    }
+                                  },
+                                  child: Text(
+                                    widget.leadData['whatsapp'] ?? '',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                      color: Theme.of(context).colorScheme.onSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ),
