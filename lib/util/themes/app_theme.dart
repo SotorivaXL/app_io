@@ -1,9 +1,9 @@
-
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const Color constantBlack = Color(0xFF000000);  // Cor preta constante
-  static const Color constantGreen = Color(0xFF00FF00);  // Cor verde constante para todos os temas
+  static const Color constantBlack = Color(0xFF000000); // Cor preta constante
+  static const Color constantGreen =
+      Color(0xFF00FF00); // Cor verde constante para todos os temas
   static const Color constantShadow = Color(0x00000066);
 
   static final lightTheme = ThemeData(
@@ -14,10 +14,10 @@ class AppTheme {
       secondary: Color(0xFFFFFFFF),
       tertiary: Color(0xFF933FFC),
       background: Color(0xFFf5f8fe),
-      surface: Color(0xFF6B00E3),
+      surface: Color(0xFFFFFFFF),
       surfaceVariant: Color(0xFF000000),
       onPrimary: Color(0xFFFFFFFF),
-      onSecondary: Color(0xFF595959),
+      onSecondary: Color(0xFF000000),
       onBackground: Color(0xFF18191A),
       onSurface: Color(0xFFFFFFFF),
       error: Color(0xFFDD000A),
@@ -31,11 +31,16 @@ class AppTheme {
       scrim: Color(0xFF18191a),
       onSecondaryContainer: Color(0xFFFFFFFF),
       onPrimaryContainer: Color(0xFFf5f8fe),
-      onTertiaryContainer: Color(0xFFF0F0F3),
+      onTertiaryContainer: Color(0xFFF8F8F8),
       onTertiary: constantGreen,
     ),
     textTheme: const TextTheme(
-      bodyLarge: TextStyle(color: Color(0xFF000000)),
+      bodyLarge: TextStyle(
+        fontFamily: 'Poppins',
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFF000000),
+      ),
       bodyMedium: TextStyle(color: Color(0xFF000000)),
       headlineLarge: TextStyle(color: Color(0xFF000000)),
       headlineMedium: TextStyle(color: Color(0xFF000000)),
@@ -46,7 +51,6 @@ class AppTheme {
       labelLarge: TextStyle(color: Color(0xFFFFFFFF)),
       labelSmall: TextStyle(color: Color(0xFF000000)),
     ),
-    cardColor: const Color(0xFFf5f8fe),
     shadowColor: constantBlack,
   );
 
@@ -73,13 +77,18 @@ class AppTheme {
       tertiaryContainer: Color(0xFF2F2E32),
       shadow: Color(0x20000000),
       scrim: Color(0xFF18191a),
-      onSecondaryContainer: Color(0xFF0F0F0F),
+      onSecondaryContainer: Color(0xFF252423),
       onPrimaryContainer: Color(0xFFf5f8fe),
-      onTertiaryContainer: Color(0xFF2E2E2E),
+      onTertiaryContainer: Color(0xFF2B2B2E),
       onTertiary: constantGreen,
     ),
     textTheme: const TextTheme(
-      bodyLarge: TextStyle(color: Color(0xFFFFFFFF)),
+      bodyLarge: TextStyle(
+        fontFamily: 'Poppins',
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFFFFFFFF),
+      ),
       bodyMedium: TextStyle(color: Color(0xFFFFFFFF)),
       headlineLarge: TextStyle(color: Color(0xFFFFFFFF)),
       headlineMedium: TextStyle(color: Color(0xFFFFFFFF)),
@@ -90,7 +99,6 @@ class AppTheme {
       labelLarge: TextStyle(color: Color(0xFF000000)),
       labelSmall: TextStyle(color: Color(0xFFFFFFFF)),
     ),
-    cardColor: const Color(0xFF252423),
     shadowColor: constantBlack,
   );
 }

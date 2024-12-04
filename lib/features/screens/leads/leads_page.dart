@@ -1,5 +1,4 @@
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
-import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';
 import 'package:app_io/util/CustomWidgets/LeadCard/lead_card.dart';
 import 'package:app_io/util/utils.dart';
 import 'package:async/async.dart';
@@ -8,13 +7,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:app_io/features/screens/dasboard/dashboard_page.dart';
-import 'package:app_io/features/screens/panel/painel_adm.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 class LeadsPage extends StatefulWidget {
   @override
@@ -32,7 +26,7 @@ class _LeadsPageState extends State<LeadsPage> {
   List<Map<String, dynamic>> allLeads = [];
   String? empresaId;
   bool isLoading = true;
-
+  int totalLeads = 0; // Inicialmente zero
   bool areLeadsLoaded = false;
   List<Map<String, dynamic>> leadsData = [];
 
@@ -54,6 +48,32 @@ class _LeadsPageState extends State<LeadsPage> {
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _deleteLead(BuildContext context, String empresaId,
+      String campaignId, String leadId, Map<String, dynamic> leadData) async {
+    print('Iniciando deleção do lead: $leadId');
+
+    try {
+      print('Confirmado deletar lead: $leadId');
+      // Deletar o lead do Firestore
+      await FirebaseFirestore.instance
+          .collection('empresas')
+          .doc(empresaId)
+          .collection('campanhas')
+          .doc(campaignId)
+          .collection('leads')
+          .doc(leadId)
+          .delete();
+
+      print('Lead deletado com sucesso: $leadId');
+
+      // Atualizar o total de leads, se necessário
+      await _updateTotalLeads();
+
+    } catch (e) {
+      print('Erro ao deletar o lead: $e');
+    }
   }
 
   void _scrollListener() {
@@ -80,8 +100,9 @@ class _LeadsPageState extends State<LeadsPage> {
       leadsData = allLeads;
       areLeadsLoaded = true;
     });
-  }
 
+    await _updateTotalLeads(); // Atualiza totalLeads com base nos filtros atuais
+  }
 
   Future<void> _getUserData() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -121,7 +142,7 @@ class _LeadsPageState extends State<LeadsPage> {
         showErrorDialog(context, 'Erro ao carregar os dados: $e', 'Erro');
       } finally {
         // Aguarde pelo menos 5 segundos antes de remover o carregamento
-        Future.delayed(Duration(seconds: 5), () {
+        Future.delayed(Duration(seconds: 1), () {
           setState(() {
             isLoading = false;
           });
@@ -135,7 +156,8 @@ class _LeadsPageState extends State<LeadsPage> {
     }
   }
 
-  Stream<List<Map<String, dynamic>>> _getAllLeadsStream(String empresaId) async* {
+  Stream<List<Map<String, dynamic>>> _getAllLeadsStream(
+      String empresaId) async* {
     final campaignsSnapshot = await FirebaseFirestore.instance
         .collection('empresas')
         .doc(empresaId)
@@ -143,7 +165,7 @@ class _LeadsPageState extends State<LeadsPage> {
         .get();
 
     List<Stream<List<Map<String, dynamic>>>> leadStreams =
-    campaignsSnapshot.docs.map((campaignDoc) {
+        campaignsSnapshot.docs.map((campaignDoc) {
       return campaignDoc.reference
           .collection('leads')
           .snapshots()
@@ -174,73 +196,30 @@ class _LeadsPageState extends State<LeadsPage> {
     });
   }
 
-  void _navigateTo(BuildContext context, String routeName) {
-    final isAdminPanel = routeName == '/admin';
+  void _showLeadDetails(BuildContext context, Map<String, dynamic> leadData,
+      Function(String) onStatusChanged) {
+    print('Exibindo detalhes do lead: ${leadData['leadId']}');
 
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            _getPageByRouteName(routeName),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          if (isAdminPanel) {
-            return FadeTransition(
-              opacity: animation,
-              child: child,
-            );
-          } else {
-            const begin = Offset(1.0, 0.0);
-            const end = Offset.zero;
-            const curve = Curves.easeInOut;
+    // Cria uma cópia completa dos dados para restauração posterior
+    final Map<String, dynamic> originalLeadData = Map<String, dynamic>.from(leadData);
 
-            var tween =
-                Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-            var offsetAnimation = animation.drive(tween);
-
-            return SlideTransition(
-              position: offsetAnimation,
-              child: child,
-            );
-          }
-        },
-      ),
-    );
-  }
-
-  Widget _getPageByRouteName(String routeName) {
-    switch (routeName) {
-      case '/dashboard':
-        return DashboardPage();
-      case '/leads':
-        return LeadsPage();
-      case '/admin':
-        return AdminPanelPage();
-      default:
-        return CustomTabBarPage();
-    }
-  }
-
-  void _showLeadDetails(BuildContext context, Map<String, dynamic> leadData, Function(String) onStatusChanged) {
-    // Cria uma cópia dos dados para evitar modificações diretas
-    leadData = Map<String, dynamic>.from(leadData);
-
+    // Variáveis para exibição
     String? formattedDate;
-    if (leadData['timestamp'] != null && leadData['timestamp'] is Timestamp) {
-      final timestamp = leadData['timestamp'] as Timestamp;
+    if (originalLeadData['timestamp'] != null && originalLeadData['timestamp'] is Timestamp) {
+      final timestamp = originalLeadData['timestamp'] as Timestamp;
       final dateTime = timestamp.toDate();
       formattedDate =
       'Entrou em ${DateFormat('dd/MM/yyyy').format(dateTime)} às ${DateFormat('HH:mm').format(dateTime)}';
-      leadData.remove('timestamp');
     }
 
-    final String? nome = leadData.remove('nome');
-    final String? email = leadData.remove('email');
-    final String? whatsapp = leadData.remove('whatsapp');
-    String status = leadData['status'] ?? 'Aguardando';
+    final String? nome = originalLeadData['nome'];
+    final String? email = originalLeadData['email'];
+    final String? whatsapp = originalLeadData['whatsapp'];
+    String status = originalLeadData['status'] ?? 'Aguardando';
 
-    final String? leadId = leadData['leadId'];
-    final String? empresaId = leadData['empresaId'];
-    final String? campaignId = leadData['campaignId'];
+    final String? leadId = originalLeadData['leadId'];
+    final String? empresaId = originalLeadData['empresaId'];
+    final String? campaignId = originalLeadData['campaignId'];
 
     if (leadId == null || empresaId == null || campaignId == null) {
       showErrorDialog(
@@ -266,7 +245,8 @@ class _LeadsPageState extends State<LeadsPage> {
               title: Stack(
                 children: [
                   Padding(
-                    padding: const EdgeInsets.only(top: 16.0, left: 16.0, right: 48.0),
+                    padding: const EdgeInsets.only(
+                        top: 20.0, left: 20.0, right: 20.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -276,7 +256,8 @@ class _LeadsPageState extends State<LeadsPage> {
                             fontFamily: 'Poppins',
                             fontWeight: FontWeight.w700,
                             fontSize: 20,
-                            color: Theme.of(context).colorScheme.onSecondary,
+                            color:
+                            Theme.of(context).colorScheme.onBackground,
                             overflow: TextOverflow.ellipsis,
                           ),
                           maxLines: 1,
@@ -287,7 +268,8 @@ class _LeadsPageState extends State<LeadsPage> {
                             style: TextStyle(
                               fontFamily: 'Poppins',
                               fontSize: 12,
-                              color: Theme.of(context).colorScheme.onSecondary,
+                              color:
+                              Theme.of(context).colorScheme.onSecondary,
                               overflow: TextOverflow.ellipsis,
                             ),
                             maxLines: 1,
@@ -309,10 +291,13 @@ class _LeadsPageState extends State<LeadsPage> {
                                     .collection('leads')
                                     .doc(leadId)
                                     .update({'status': newStatus}).then((_) {
-                                  Navigator.of(context).pop(); // Fecha o popup automaticamente
-                                  onStatusChanged(newStatus); // Atualiza o card sem recarregar
+                                  Navigator.of(context)
+                                      .pop(); // Fecha o popup automaticamente
+                                  onStatusChanged(
+                                      newStatus); // Atualiza o card sem recarregar
                                 }).catchError((e) {
-                                  showErrorDialog(context, 'Erro ao atualizar status: $e', 'Erro');
+                                  showErrorDialog(context,
+                                      'Erro ao atualizar status: $e', 'Erro');
                                 });
                               },
                             );
@@ -321,9 +306,10 @@ class _LeadsPageState extends State<LeadsPage> {
                             label: Text(
                               status,
                               style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSecondary,
+                                color:
+                                Theme.of(context).colorScheme.outline,
                                 fontFamily: 'Poppins',
-                                fontSize: 12,
+                                fontSize: 15,
                                 fontWeight: FontWeight.w500,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -342,31 +328,104 @@ class _LeadsPageState extends State<LeadsPage> {
                       ],
                     ),
                   ),
-                  Positioned(
-                    right: 8,
-                    top: 8,
-                    child: IconButton(
-                      icon: Icon(Icons.close, color: Colors.red),
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
-                    ),
-                  ),
                 ],
               ),
               content: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (nome != null)
-                      _buildDetailRow('Nome', nome, context, maxLines: 1),
-                    if (email != null)
-                      _buildDetailRow('E-mail', email, context, maxLines: 1),
-                    if (whatsapp != null)
-                      _buildDetailRow('WhatsApp', whatsapp, context, maxLines: 1),
-                  ],
+                child: Padding(
+                  padding: EdgeInsetsDirectional.only(start: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (nome != null)
+                        _buildDetailRow('Nome', nome, context, maxLines: 1),
+                      if (email != null)
+                        _buildDetailRow('E-mail', email, context, maxLines: 1),
+                      if (whatsapp != null)
+                        _buildDetailRow('WhatsApp', whatsapp, context,
+                            maxLines: 1),
+                    ],
+                  ),
                 ),
               ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () {
+                    print('Botão "Deletar Lead" pressionado para o lead: $leadId');
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext dialogContext) {
+                        return AlertDialog(
+                          title: Text('Confirmar Deleção'),
+                          content: Text(
+                            'Tem certeza de que deseja deletar este lead?',
+                            style: TextStyle(fontFamily: 'Poppins', fontSize: 16),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () {
+                                print('Deleção cancelada para o lead: $leadId');
+                                Navigator.pop(dialogContext); // Fecha o popup de confirmação
+                              },
+                              child: Text(
+                                'Cancelar',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  color: Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                            ),
+                            ElevatedButton(
+                              onPressed: () {
+                                print('Usuário confirmou deleção para o lead: $leadId');
+                                Navigator.pop(dialogContext); // Fecha o popup de confirmação
+                                Navigator.pop(context); // Fecha o popup de detalhes
+                                _deleteLead(context, empresaId, campaignId, leadId, originalLeadData);
+                              },
+                              child: Text(
+                                'Deletar',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).colorScheme.onError,
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                  child: Text(
+                    'Deletar Lead',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    print('Botão "Fechar" pressionado para o lead: $leadId');
+                    Navigator.pop(context);
+                  },
+                  child: Text(
+                    'Fechar',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                ),
+              ],
             );
           },
         );
@@ -407,168 +466,122 @@ class _LeadsPageState extends State<LeadsPage> {
     );
   }
 
-  String _capitalize(String text) {
-    if (text.isEmpty) return text;
-    return text[0].toUpperCase() + text.substring(1);
-  }
-
-  Future<void> _openWhatsAppWithMessage(String phoneNumber, String empresaId,
-      String campaignId, String leadId) async {
-    try {
-      // Busca a mensagem padrão da campanha
-      final campaignDoc = await FirebaseFirestore.instance
-          .collection('empresas')
-          .doc(empresaId)
-          .collection('campanhas')
-          .doc(campaignId)
-          .get();
-
-      if (!campaignDoc.exists) {
-        showErrorDialog(context, 'Campanha não encontrada.', 'Erro');
-        return;
-      }
-
-      // Obtém a mensagem padrão da campanha
-      String message = campaignDoc.data()?['mensagem_padrao'] ?? '';
-
-      // Busca o lead pelo ID correto
-      print('Buscando lead com ID: $leadId');
-      final leadDoc = await FirebaseFirestore.instance
-          .collection('empresas')
-          .doc(empresaId)
-          .collection('campanhas')
-          .doc(campaignId)
-          .collection('leads')
-          .doc(leadId) // Certifique-se de passar o leadId aqui
-          .get();
-
-      if (!leadDoc.exists) {
-        showErrorDialog(context, 'Lead não encontrado.', 'Erro');
-        return;
-      }
-
-      // Processa o nome do cliente (primeiro nome e nome completo)
-      String? nomeClienteCompleto = leadDoc.data()?['nome'];
-      String? nomeCliente = nomeClienteCompleto?.split(' ')?.first;
-
-      // Dados do usuário logado
-      final user = FirebaseAuth.instance.currentUser;
-      String? userName;
-      String? empresaName;
-
-      if (user != null) {
-        // Verifica se o usuário está na coleção 'users'
-        final userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
-        if (userDoc.exists) {
-          userName = userDoc.data()?['name']?.split(' ')?.first;
-
-          // Busca o nome da empresa associada ao usuário (caso 'createdBy' esteja definido)
-          final createdBy = userDoc.data()?['createdBy'];
-          if (createdBy != null) {
-            final empresaDoc = await FirebaseFirestore.instance
-                .collection('empresas')
-                .doc(createdBy)
-                .get();
-            empresaName = empresaDoc.data()?['NomeEmpresa'];
-          }
-        } else {
-          // Caso o usuário esteja na coleção 'empresas'
-          final empresaDoc = await FirebaseFirestore.instance
-              .collection('empresas')
-              .doc(user.uid)
-              .get();
-          if (empresaDoc.exists) {
-            userName = empresaDoc.data()?['NomeEmpresa']?.split(' ')?.first;
-            empresaName = empresaDoc.data()?['NomeEmpresa'];
-          }
-        }
-      }
-
-      // Substitui as variáveis na mensagem
-      message = message
-          .replaceAll('{nome_cliente}', nomeCliente ?? '')
-          .replaceAll('{nome_cliente_completo}', nomeClienteCompleto ?? '')
-          .replaceAll('{nome_usuario}', userName ?? '')
-          .replaceAll('{nome_empresa}', empresaName ?? '');
-
-      // Limpa o número de telefone
-      final cleanedPhone = phoneNumber.replaceAll(RegExp(r'\D'), '');
-
-      if (cleanedPhone.length >= 10) {
-        // URL para abrir o WhatsApp com a mensagem
-        final url = kIsWeb
-            ? 'https://wa.me/$cleanedPhone?text=${Uri.encodeComponent(message)}'
-            : 'whatsapp://send?phone=$cleanedPhone&text=${Uri.encodeComponent(message)}';
-
-        if (await canLaunch(url)) {
-          await launch(url);
-        } else {
-          showErrorDialog(
-            context,
-            'Não foi possível abrir o WhatsApp. Verifique se o WhatsApp está instalado ou tente novamente mais tarde!',
-            'Atenção',
-          );
-        }
-      } else {
-        showErrorDialog(
-          context,
-          'Número de telefone inválido.',
-          'Atenção',
-        );
-      }
-    } catch (e) {
-      showErrorDialog(
-        context,
-        'Erro ao abrir o WhatsApp: $e',
-        'Erro',
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
-      return Shimmer.fromColors(
-        baseColor: Theme.of(context).colorScheme.onSecondaryContainer,
-        highlightColor: Theme.of(context).colorScheme.onTertiaryContainer,
-        child: Flexible(
-          child: ListView.builder(
-            physics: NeverScrollableScrollPhysics(),
-            itemCount: 6, // Número de placeholders
-            itemBuilder: (context, index) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 16.0),
-                child: Container(
-                  height: 100.0,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.tertiary,
-                    borderRadius: BorderRadius.circular(10.0),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      );
-    }
-
-    if (empresaId == null) {
-      return Center(child: Text('Erro: Empresa não encontrada.'));
-    }
-
     return ConnectivityBanner(
       child: Scaffold(
-        body: SafeArea(
-          top: true,
-          child: isLoading || !areLeadsLoaded
-              ? _buildShimmerEffect()
-              : _buildCampanhasStream(empresaId!),
+        body: Stack(
+          children: [
+            SafeArea(
+              top: true,
+              child: isLoading
+                  ? _buildShimmerEffect()
+                  : (empresaId == null
+                      ? Center(child: Text('Erro: Empresa não encontrada.'))
+                      : _buildCampanhasStream(empresaId!)),
+            ),
+            Positioned(
+              bottom: 16.0,
+              right: 16.0,
+              child: Card(
+                elevation: 4.0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.0),
+                ),
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary, // Escolha uma cor apropriada
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Total de Leads',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        totalLeads.toString(), // Variável que será atualizada
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  Future<void> _updateTotalLeads() async {
+    try {
+      int leadsCount = 0;
+
+      // Referência à coleção de campanhas
+      CollectionReference campanhasRef = FirebaseFirestore.instance
+          .collection('empresas')
+          .doc(empresaId)
+          .collection('campanhas');
+
+      QuerySnapshot campanhasSnapshot = await campanhasRef.get();
+
+      for (var campanha in campanhasSnapshot.docs) {
+        // Se uma campanha específica estiver selecionada, ignore as outras
+        if (selectedCampaignId != null && campanha.id != selectedCampaignId) {
+          continue;
+        }
+
+        CollectionReference leadsRef = campanha.reference.collection('leads');
+
+        if (selectedStatus != null && selectedStatus != 'Sem Filtros') {
+          if (selectedStatus == 'Aguardando') {
+            // Contar leads com status 'Aguardando'
+            QuerySnapshot leadsSnapshotAguardando =
+                await leadsRef.where('status', isEqualTo: 'Aguardando').get();
+
+            // Contar leads sem o campo 'status'
+            QuerySnapshot leadsSnapshotSemStatus =
+                await leadsRef.where('status', isEqualTo: null).get();
+
+            leadsCount += leadsSnapshotAguardando.docs.length +
+                leadsSnapshotSemStatus.docs.length;
+          } else {
+            // Contar leads com status igual ao selecionado
+            QuerySnapshot leadsSnapshot =
+                await leadsRef.where('status', isEqualTo: selectedStatus).get();
+
+            leadsCount += leadsSnapshot.docs.length;
+          }
+        } else {
+          // Sem filtro de status: contar todos os leads
+          QuerySnapshot leadsSnapshot = await leadsRef.get();
+          leadsCount += leadsSnapshot.docs.length;
+        }
+      }
+
+      setState(() {
+        totalLeads = leadsCount;
+      });
+    } catch (e) {
+      print('Erro ao atualizar total de leads: $e');
+      // Opcional: Exibir uma mensagem de erro para o usuário
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao atualizar total de leads: $e')),
+      );
+    }
   }
 
   Future<void> _loadCampaignLeads(String empresaId, String campaignId) async {
@@ -591,6 +604,8 @@ class _LeadsPageState extends State<LeadsPage> {
       }).toList();
       areLeadsLoaded = true;
     });
+
+    await _updateTotalLeads(); // Atualiza totalLeads com base nos filtros atuais
   }
 
   Widget _buildCampanhasStream(String empresaId) {
@@ -607,7 +622,8 @@ class _LeadsPageState extends State<LeadsPage> {
           );
         }
 
-        if (!snapshot.hasData || snapshot.connectionState == ConnectionState.waiting) {
+        if (!snapshot.hasData ||
+            snapshot.connectionState == ConnectionState.waiting) {
           return _buildShimmerEffect(); // Exibe o Shimmer enquanto carrega
         }
 
@@ -651,19 +667,24 @@ class _LeadsPageState extends State<LeadsPage> {
                             onSelected: (value) async {
                               setState(() {
                                 isLoading = true; // Ativa o Shimmer
-                                selectedCampaignId = value == 'Todas' ? null : value;
+                                selectedCampaignId =
+                                    value == 'Todas' ? null : value;
                                 selectedCampaignName = value == 'Todas'
                                     ? 'Todas'
                                     : campanhas.firstWhere((campanha) =>
-                                campanha.id == value)['nome_campanha'];
+                                        campanha.id == value)['nome_campanha'];
                                 leadsData.clear(); // Limpa os leads visíveis
                               });
 
                               if (selectedCampaignId != null) {
-                                await _loadCampaignLeads(empresaId, selectedCampaignId!);
+                                await _loadCampaignLeads(
+                                    empresaId, selectedCampaignId!);
                               } else {
-                                await _loadLeads(empresaId); // Carrega todos os leads
+                                await _loadLeads(
+                                    empresaId); // Carrega todos os leads
                               }
+
+                              await _updateTotalLeads(); // Atualiza totalLeads com base nos filtros atuais
 
                               setState(() {
                                 isLoading = false; // Desativa o Shimmer
@@ -679,7 +700,9 @@ class _LeadsPageState extends State<LeadsPage> {
                                       fontFamily: 'Poppins',
                                       fontSize: 12,
                                       fontWeight: FontWeight.w500,
-                                      color: Theme.of(context).colorScheme.onSecondary,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSecondary,
                                     ),
                                   ),
                                 ),
@@ -692,7 +715,9 @@ class _LeadsPageState extends State<LeadsPage> {
                                         fontFamily: 'Poppins',
                                         fontSize: 12,
                                         fontWeight: FontWeight.w500,
-                                        color: Theme.of(context).colorScheme.onSecondary,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSecondary,
                                       ),
                                     ),
                                   );
@@ -703,7 +728,7 @@ class _LeadsPageState extends State<LeadsPage> {
                           SizedBox(width: 4),
                           Text(
                             (selectedCampaignName == null ||
-                                selectedCampaignName == 'Todas')
+                                    selectedCampaignName == 'Todas')
                                 ? ''
                                 : selectedCampaignName!,
                             style: TextStyle(
@@ -721,7 +746,7 @@ class _LeadsPageState extends State<LeadsPage> {
                         children: [
                           Text(
                             (selectedStatus == null ||
-                                selectedStatus == 'Sem Filtros')
+                                    selectedStatus == 'Sem Filtros')
                                 ? ''
                                 : selectedStatus!,
                             style: TextStyle(
@@ -741,9 +766,16 @@ class _LeadsPageState extends State<LeadsPage> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(15),
                             ),
-                            onSelected: (value) {
+                            onSelected: (value) async {
                               setState(() {
                                 selectedStatus = value;
+                                isLoading = true; // Ativa o Shimmer
+                              });
+
+                              await _updateTotalLeads(); // Atualiza totalLeads com base nos filtros atuais
+
+                              setState(() {
+                                isLoading = false; // Desativa o Shimmer
                               });
                             },
                             itemBuilder: (context) => [
@@ -761,7 +793,9 @@ class _LeadsPageState extends State<LeadsPage> {
                                     fontFamily: 'Poppins',
                                     fontSize: 12,
                                     fontWeight: FontWeight.w500,
-                                    color: Theme.of(context).colorScheme.onSecondary,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
                                   ),
                                 ),
                               );
@@ -792,11 +826,13 @@ class _LeadsPageState extends State<LeadsPage> {
       baseColor: Theme.of(context).colorScheme.onSecondaryContainer,
       highlightColor: Theme.of(context).colorScheme.onTertiaryContainer,
       child: ListView.builder(
+        shrinkWrap: true, // Adicione esta linha
         physics: NeverScrollableScrollPhysics(),
         itemCount: 6, // Número de placeholders
         itemBuilder: (context, index) {
           return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 16.0),
+            padding:
+                const EdgeInsets.symmetric(vertical: 10.0, horizontal: 16.0),
             child: Container(
               height: 100.0,
               decoration: BoxDecoration(
@@ -822,10 +858,12 @@ class _LeadsPageState extends State<LeadsPage> {
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(child: Text('Erro ao carregar os leads: ${snapshot.error}'));
+          return Center(
+              child: Text('Erro ao carregar os leads: ${snapshot.error}'));
         }
 
-        if (!snapshot.hasData || snapshot.connectionState == ConnectionState.waiting) {
+        if (!snapshot.hasData ||
+            snapshot.connectionState == ConnectionState.waiting) {
           return _buildShimmerEffect(); // Exibe o Shimmer durante o carregamento
         }
 
@@ -840,28 +878,68 @@ class _LeadsPageState extends State<LeadsPage> {
           );
         }
 
+        // Filtrar leads com base no status
+        final filteredLeads = leads.where((lead) {
+          final data = lead.data() as Map<String, dynamic>;
+          final status =
+              data.containsKey('status') ? data['status'] : 'Aguardando';
+          return (selectedStatus == null ||
+              selectedStatus == 'Sem Filtros' ||
+              status == selectedStatus);
+        }).toList();
+
+        if (filteredLeads.isEmpty) {
+          return Center(
+            child: Text(
+              'Nenhum lead disponível para os filtros selecionados',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+          );
+        }
+
         return ListView.builder(
           shrinkWrap: true,
           physics: NeverScrollableScrollPhysics(),
-          itemCount: leads.length,
+          itemCount: filteredLeads.length,
           itemBuilder: (context, index) {
-            final lead = leads[index];
+            final lead = filteredLeads[index];
             final leadData = Map<String, dynamic>.from(lead.data() as Map);
             leadData['leadId'] = lead.id;
             leadData['empresaId'] = empresaId;
             leadData['campaignId'] = campaignId;
+            leadData['status'] =
+                leadData['status'] ?? 'Aguardando'; // Define status padrão
 
             return LeadCard(
               leadData: leadData,
               onTap: (data) => _showLeadDetails(
                 context,
                 data,
-                    (newStatus) {
-                  leadData['status'] = newStatus; // Atualiza localmente
+                (newStatus) async {
+                  setState(() {
+                    leadData['status'] = newStatus;
+                  });
+
+                  // Atualizar o status no Firestore
+                  await FirebaseFirestore.instance
+                      .collection('empresas')
+                      .doc(empresaId)
+                      .collection('campanhas')
+                      .doc(campaignId)
+                      .collection('leads')
+                      .doc(lead.id)
+                      .update({'status': newStatus});
+
+                  await _updateTotalLeads(); // Atualiza o total após a alteração
                 },
               ),
-              onStatusChanged: (newStatus) {
-                FirebaseFirestore.instance
+              onStatusChanged: (newStatus) async {
+                setState(() {
+                  leadData['status'] = newStatus;
+                });
+
+                // Atualizar o status no Firestore
+                await FirebaseFirestore.instance
                     .collection('empresas')
                     .doc(empresaId)
                     .collection('campanhas')
@@ -869,6 +947,8 @@ class _LeadsPageState extends State<LeadsPage> {
                     .collection('leads')
                     .doc(lead.id)
                     .update({'status': newStatus});
+
+                await _updateTotalLeads(); // Atualiza o total após a alteração
               },
               statusColor: _getStatusColor(leadData['status'] ?? 'Aguardando'),
             );
@@ -903,10 +983,14 @@ class _LeadsPageState extends State<LeadsPage> {
 
         final allLeads = snapshot.data!;
         final filteredLeads = allLeads.where((leadData) {
-          final status = leadData['status'] ?? 'Aguardando';
-          return selectedStatus == null ||
-              selectedStatus == 'Sem Filtros' ||
-              status == selectedStatus;
+          final data = leadData as Map<String, dynamic>;
+          final status =
+              data.containsKey('status') ? data['status'] : 'Aguardando';
+          return (selectedStatus == null ||
+                  selectedStatus == 'Sem Filtros' ||
+                  status == selectedStatus) &&
+              (selectedCampaignId == null ||
+                  leadData['campaignId'] == selectedCampaignId);
         }).toList();
 
         if (filteredLeads.isEmpty) {
@@ -932,7 +1016,8 @@ class _LeadsPageState extends State<LeadsPage> {
   }
 
   Widget _buildLeadItem(Map<String, dynamic> leadData) {
-    final status = leadData['status'] ?? 'Aguardando';
+    final data = leadData as Map<String, dynamic>;
+    final status = data.containsKey('status') ? data['status'] : 'Aguardando';
     final timestamp = leadData['timestamp'] ?? Timestamp.now();
     final nome = leadData['nome'] ?? 'Nome não disponível';
 
@@ -946,7 +1031,7 @@ class _LeadsPageState extends State<LeadsPage> {
       onTap: (data) => _showLeadDetails(
         context,
         data,
-            (newStatus) {
+        (newStatus) {
           setState(() {
             leadData['status'] = newStatus;
           });
@@ -982,12 +1067,12 @@ class _LeadsPageState extends State<LeadsPage> {
   }
 
   void _showStatusSelectionDialog(
-      BuildContext context,
-      String leadId,
-      String empresaId,
-      String campaignId,
-      Function(String) onStatusChanged,
-      ) {
+    BuildContext context,
+    String leadId,
+    String empresaId,
+    String campaignId,
+    Function(String) onStatusChanged,
+  ) {
     final statusOptions = ['Aguardando', 'Atendendo', 'Venda', 'Recusado'];
 
     showDialog(

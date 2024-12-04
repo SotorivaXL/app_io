@@ -230,7 +230,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                         _isLoading
                             ? CircularProgressIndicator()
                             : IconButton(
-                          icon: Icon(Icons.save_alt_rounded,
+                          icon: Icon(Icons.save_as_sharp,
                               color: Theme.of(context)
                                   .colorScheme
                                   .onBackground,
@@ -303,184 +303,62 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                             alignment: AlignmentDirectional(0, 0),
                             child: Padding(
                               padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
-                              child: TextFormField(
-                                controller: _nameController,
-                                autofocus: true,
-                                obscureText: false,
-                                decoration: InputDecoration(
-                                  hintText: 'Digite o nome do colaborador',
-                                  hintStyle: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
-                                  ),
-                                  filled: true,
-                                  fillColor: Theme.of(context).colorScheme.secondary,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  prefixIcon: Icon(
-                                    Icons.person,
-                                    color: Theme.of(context).colorScheme.tertiary,
-                                    size: 25,
-                                  ),
-                                ),
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0,
-                                  color: Theme.of(context).colorScheme.onSecondary,
-                                ),
-                                textAlign: TextAlign.start,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.max,
-                      children: [
-                        Expanded(
-                          child: Align(
-                            alignment: AlignmentDirectional(0, 0),
-                            child: Padding(
-                              padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
-                              child: TextFormField(
-                                controller: _emailController,
-                                autofocus: true,
-                                obscureText: false,
-                                enabled: false,
-                                decoration: InputDecoration(
-                                  hintText: 'Digite o email do colaborador',
-                                  hintStyle: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
-                                  ),
-                                  filled: true,
-                                  fillColor: Theme.of(context).colorScheme.secondary,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  prefixIcon: Icon(
-                                    Icons.mail,
-                                    color: Theme.of(context).colorScheme.tertiary,
-                                    size: 25,
-                                  ),
-                                ),
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0,
-                                  color: Theme.of(context).colorScheme.onSecondary,
-                                ),
-                                textAlign: TextAlign.start,
-                                keyboardType: TextInputType.emailAddress,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.max,
-                      children: [
-                        Expanded(
-                          child: Align(
-                            alignment: AlignmentDirectional(0, 0),
-                            child: Padding(
-                              padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
-                              child: TextFormField(
-                                controller: _roleController,
-                                autofocus: true,
-                                obscureText: false,
-                                decoration: InputDecoration(
-                                  hintText: 'Digite o cargo do colaborador',
-                                  hintStyle: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
-                                  ),
-                                  filled: true,
-                                  fillColor: Theme.of(context).colorScheme.secondary,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  prefixIcon: Icon(
-                                    Icons.business_center,
-                                    color: Theme.of(context).colorScheme.tertiary,
-                                    size: 25,
-                                  ),
-                                ),
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0,
-                                  color: Theme.of(context).colorScheme.onSecondary,
-                                ),
-                                textAlign: TextAlign.start,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.max,
-                      children: [
-                        Expanded(
-                          child: Align(
-                            alignment: AlignmentDirectional(0, 0),
-                            child: Padding(
-                              padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
-                              child: TextFormField(
-                                controller: _birthController,
-                                autofocus: true,
-                                obscureText: false,
-                                enabled: false,
-                                decoration: InputDecoration(
-                                  filled: true,
-                                  fillColor: Theme.of(context).colorScheme.secondary,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: BorderSide.none,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Label para Nome do Colaborador
+                                  Text(
+                                    'Nome do Colaborador',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(context).colorScheme.onSecondary,
                                     ),
-                                  prefixIcon: Icon(
-                                    Icons.calendar_month,
-                                    color: Theme.of(context).colorScheme.tertiary,
-                                    size: 25,
                                   ),
-                                ),
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0,
-                                  color: Theme.of(context).colorScheme.onSecondary,
-                                ),
-                                textAlign: TextAlign.start,
+                                  SizedBox(height: 8), // Espaçamento entre a label e o campo
+                                  // Campo de Entrada para Nome do Colaborador
+                                  TextFormField(
+                                    controller: _nameController,
+                                    autofocus: true,
+                                    obscureText: false,
+                                    decoration: InputDecoration(
+                                      hintText: 'Digite o nome do colaborador',
+                                      hintStyle: TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 12,
+                                        letterSpacing: 0,
+                                        color: Theme.of(context).colorScheme.onSecondary,
+                                      ),
+                                      filled: true,
+                                      fillColor: Theme.of(context).colorScheme.secondary,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      prefixIcon: Icon(
+                                        Icons.person,
+                                        color: Theme.of(context).colorScheme.tertiary,
+                                        size: 20,
+                                      )
+                                    ),
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: 0,
+                                      color: Theme.of(context).colorScheme.onSecondary,
+                                    ),
+                                    textAlign: TextAlign.start,
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Por favor, insira o nome do colaborador';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -488,6 +366,222 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                       ],
                     ),
                   ),
+
+                  Padding(
+                    padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.max,
+                      children: [
+                        Expanded(
+                          child: Align(
+                            alignment: AlignmentDirectional(0, 0),
+                            child: Padding(
+                              padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Label para Email do Colaborador
+                                  Text(
+                                    'Email do Colaborador',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(context).colorScheme.onSecondary,
+                                    ),
+                                  ),
+                                  SizedBox(height: 8), // Espaçamento entre a label e o campo
+                                  // Campo de Entrada para Email do Colaborador
+                                  TextFormField(
+                                    controller: _emailController,
+                                    autofocus: true,
+                                    obscureText: false,
+                                    enabled: false,
+                                    decoration: InputDecoration(
+                                      hintText: 'Digite o email do colaborador',
+                                      hintStyle: TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 12,
+                                        letterSpacing: 0,
+                                        color: Theme.of(context).colorScheme.onSecondary,
+                                      ),
+                                      filled: true,
+                                      fillColor: Theme.of(context).colorScheme.secondary,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      prefixIcon: Icon(
+                                        Icons.mail,
+                                        color: Theme.of(context).colorScheme.tertiary,
+                                        size: 20,
+                                      )
+                                    ),
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: 0,
+                                      color: Theme.of(context).colorScheme.onSecondary,
+                                    ),
+                                    textAlign: TextAlign.start,
+                                    keyboardType: TextInputType.emailAddress,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  Padding(
+                    padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.max,
+                      children: [
+                        Expanded(
+                          child: Align(
+                            alignment: AlignmentDirectional(0, 0),
+                            child: Padding(
+                              padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Label para Cargo do Colaborador
+                                  Text(
+                                    'Cargo do Colaborador',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(context).colorScheme.onSecondary,
+                                    ),
+                                  ),
+                                  SizedBox(height: 8), // Espaçamento entre a label e o campo
+                                  // Campo de Entrada para Cargo do Colaborador
+                                  TextFormField(
+                                    controller: _roleController,
+                                    autofocus: true,
+                                    obscureText: false,
+                                    decoration: InputDecoration(
+                                      hintText: 'Digite o cargo do colaborador',
+                                      hintStyle: TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 12,
+                                        letterSpacing: 0,
+                                        color: Theme.of(context).colorScheme.onSecondary,
+                                      ),
+                                      filled: true,
+                                      fillColor: Theme.of(context).colorScheme.secondary,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      prefixIcon: Icon(
+                                        Icons.business_center,
+                                        color: Theme.of(context).colorScheme.tertiary,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: 0,
+                                      color: Theme.of(context).colorScheme.onSecondary,
+                                    ),
+                                    textAlign: TextAlign.start,
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Por favor, insira o cargo do colaborador';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  Padding(
+                    padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.max,
+                      children: [
+                        Expanded(
+                          child: Align(
+                            alignment: AlignmentDirectional(0, 0),
+                            child: Padding(
+                              padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Label para Data de Nascimento
+                                  Text(
+                                    'Data de Nascimento',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(context).colorScheme.onSecondary,
+                                    ),
+                                  ),
+                                  SizedBox(height: 8), // Espaçamento entre a label e o campo
+                                  // Campo de Entrada para Data de Nascimento
+                                  TextFormField(
+                                    controller: _birthController,
+                                    autofocus: true,
+                                    obscureText: false,
+                                    enabled: false,
+                                    decoration: InputDecoration(
+                                      hintText: 'Selecione a data de nascimento',
+                                      hintStyle: TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 12,
+                                        letterSpacing: 0,
+                                        color: Theme.of(context).colorScheme.onSecondary,
+                                      ),
+                                      filled: true,
+                                      fillColor: Theme.of(context).colorScheme.secondary,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      prefixIcon: Icon(
+                                        Icons.calendar_month,
+                                        color: Theme.of(context).colorScheme.tertiary,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: 0,
+                                      color: Theme.of(context).colorScheme.onSecondary,
+                                    ),
+                                    textAlign: TextAlign.start,
+                                    // Caso queira permitir a seleção da data de nascimento, descomente a linha abaixo e ajuste conforme necessário
+                                    // onTap: () => _selectDate(context, false),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                   Padding(
                     padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
                     child: Row(

@@ -502,8 +502,8 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                       final contract = company['contract'];
 
                       return Card(
-                        color: Theme.of(context).cardColor,
-                        shadowColor: Theme.of(context).shadowColor,
+                        elevation: 4,
+                        color: Theme.of(context).colorScheme.secondary,
                         margin: EdgeInsets.only(left: 10, right: 10, top: 20),
                         child: ListTile(
                           title: Text(

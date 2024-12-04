@@ -16,7 +16,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
   late AddCollaboratorsModel _model;
   String? userId;
   bool _isLoading = false;
-
+  double _scrollOffset = 0.0;
   // Inicializa o mapa para armazenar os direitos de acesso
   Map<String, bool> accessRights = {
     'dashboard': false,
@@ -103,36 +103,85 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
 
   @override
   Widget build(BuildContext context) {
+    double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
     return ConnectivityBanner(
       child: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         child: Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.background,
           appBar: AppBar(
-            backgroundColor: Theme.of(context).colorScheme.secondary,
+            toolbarHeight: appBarHeight,
             automaticallyImplyLeading: false,
-            leading: IconButton(
-              icon: Icon(
-                Icons.arrow_back_ios_new,
-                color: Theme.of(context).colorScheme.outline,
-                size: 24,
-              ),
-              onPressed: () {
-                Navigator.pop(context);
-              },
-            ),
-            title: Text(
-              'Adicionar Colaborador',
-              style: TextStyle(
-                fontFamily: 'BrandingSF',
-                fontSize: 26,
-                fontWeight: FontWeight.w900,
-                color: Theme.of(context).colorScheme.outline,
+            flexibleSpace: SafeArea(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Botão de voltar e título
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.pop(context);
+                          },
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.arrow_back_ios_new,
+                                color:
+                                Theme.of(context).colorScheme.onBackground,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Voltar',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 16,
+                                  color:
+                                  Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Adicionar Colaborador',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 26,
+                            fontWeight: FontWeight.w700,
+                            color: Theme.of(context).colorScheme.onSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Stack na direita
+                    Stack(
+                      children: [
+                        _isLoading
+                            ? CircularProgressIndicator()
+                            : IconButton(
+                          icon: Icon(
+                              Icons.save_as_sharp,
+                              color: Theme.of(context).colorScheme.onBackground,
+                              size: 30
+                          ),
+                          onPressed: _isLoading ? null : _addCollaborator,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
             surfaceTintColor: Colors.transparent,
-            centerTitle: true,
-            elevation: 2,
+            backgroundColor: Theme.of(context).colorScheme.secondary,
           ),
           body: SafeArea(
             top: true,
@@ -198,7 +247,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                     hintStyle: TextStyle(
                                       fontFamily: 'Poppins',
                                       fontWeight: FontWeight.w500,
-                                      fontSize: 12,
+                                      fontSize: 14,
                                       letterSpacing: 0,
                                       color:
                                       Theme.of(context).colorScheme.onSecondary,
@@ -212,7 +261,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                     prefixIcon: Icon(
                                       Icons.person,
                                       color: Theme.of(context).colorScheme.tertiary,
-                                      size: 25,
+                                      size: 20,
                                     ),
                                   ),
                                   style: TextStyle(
@@ -253,7 +302,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                     hintStyle: TextStyle(
                                       fontFamily: 'Poppins',
                                       fontWeight: FontWeight.w500,
-                                      fontSize: 12,
+                                      fontSize: 14,
                                       letterSpacing: 0,
                                       color:
                                       Theme.of(context).colorScheme.onSecondary,
@@ -267,7 +316,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                     prefixIcon: Icon(
                                       Icons.mail,
                                       color: Theme.of(context).colorScheme.tertiary,
-                                      size: 25,
+                                      size: 20,
                                     ),
                                   ),
                                   style: TextStyle(
@@ -309,7 +358,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                     hintStyle: TextStyle(
                                       fontFamily: 'Poppins',
                                       fontWeight: FontWeight.w500,
-                                      fontSize: 12,
+                                      fontSize: 14,
                                       letterSpacing: 0,
                                       color:
                                       Theme.of(context).colorScheme.onSecondary,
@@ -323,7 +372,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                     prefixIcon: Icon(
                                       Icons.business_center,
                                       color: Theme.of(context).colorScheme.tertiary,
-                                      size: 25,
+                                      size: 20,
                                     ),
                                   ),
                                   style: TextStyle(
@@ -458,7 +507,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                         hintStyle: TextStyle(
                                           fontFamily: 'Poppins',
                                           fontWeight: FontWeight.w500,
-                                          fontSize: 12,
+                                          fontSize: 14,
                                           letterSpacing: 0,
                                           color: Theme.of(context).colorScheme.onSecondary,
                                         ),
@@ -471,7 +520,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                         prefixIcon: Icon(
                                           Icons.calendar_month,
                                           color: Theme.of(context).colorScheme.tertiary,
-                                          size: 25,
+                                          size: 20,
                                         ),
                                       ),
                                       style: TextStyle(
@@ -512,7 +561,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                     hintStyle: TextStyle(
                                       fontFamily: 'Poppins',
                                       fontWeight: FontWeight.w500,
-                                      fontSize: 12,
+                                      fontSize: 14,
                                       letterSpacing: 0,
                                       color:
                                       Theme.of(context).colorScheme.onSecondary,
@@ -526,7 +575,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                     prefixIcon: Icon(
                                       Icons.lock,
                                       color: Theme.of(context).colorScheme.tertiary,
-                                      size: 25,
+                                      size: 20,
                                     ),
                                     suffixIcon: InkWell(
                                       onTap: () => setState(
@@ -540,7 +589,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                             : Icons.visibility_outlined,
                                         color:
                                         Theme.of(context).colorScheme.tertiary,
-                                        size: 25,
+                                        size: 20,
                                       ),
                                     ),
                                   ),
@@ -583,7 +632,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                     hintStyle: TextStyle(
                                       fontFamily: 'Poppins',
                                       fontWeight: FontWeight.w500,
-                                      fontSize: 12,
+                                      fontSize: 14,
                                       letterSpacing: 0,
                                       color:
                                       Theme.of(context).colorScheme.onSecondary,
@@ -597,7 +646,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                     prefixIcon: Icon(
                                       Icons.lock,
                                       color: Theme.of(context).colorScheme.tertiary,
-                                      size: 25,
+                                      size: 20,
                                     ),
                                     suffixIcon: InkWell(
                                       onTap: () => setState(
@@ -611,7 +660,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                             : Icons.visibility_outlined,
                                         color:
                                         Theme.of(context).colorScheme.tertiary,
-                                        size: 25,
+                                        size: 20,
                                       ),
                                     ),
                                   ),
@@ -657,7 +706,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                       ),
                     ),
                     Padding(
-                      padding: EdgeInsetsDirectional.fromSTEB(10, 0, 0, 0),
+                      padding: EdgeInsetsDirectional.fromSTEB(10, 0, 0, 20),
                       child: Column(
                         children: [
                           CheckboxListTile(
@@ -677,8 +726,12 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                               });
                             },
                             controlAffinity: ListTileControlAffinity.leading,
-                            activeColor: Theme.of(context).primaryColor,
+                            activeColor: Theme.of(context).colorScheme.tertiary,
                             checkColor: Theme.of(context).colorScheme.outline,
+                            side: BorderSide(
+                              color: Theme.of(context).colorScheme.tertiary,
+                              width: 2,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(5.0),
                             ),
@@ -701,8 +754,12 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                               });
                             },
                             controlAffinity: ListTileControlAffinity.leading,
-                            activeColor: Theme.of(context).primaryColor,
+                            activeColor: Theme.of(context).colorScheme.tertiary,
                             checkColor: Theme.of(context).colorScheme.outline,
+                            side: BorderSide(
+                              color: Theme.of(context).colorScheme.tertiary,
+                              width: 2,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(5.0),
                             ),
@@ -725,8 +782,12 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                               });
                             },
                             controlAffinity: ListTileControlAffinity.leading,
-                            activeColor: Theme.of(context).primaryColor,
+                            activeColor: Theme.of(context).colorScheme.tertiary,
                             checkColor: Theme.of(context).colorScheme.outline,
+                            side: BorderSide(
+                              color: Theme.of(context).colorScheme.tertiary,
+                              width: 2,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(5.0),
                             ),
@@ -749,8 +810,12 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                               });
                             },
                             controlAffinity: ListTileControlAffinity.leading,
-                            activeColor: Theme.of(context).primaryColor,
+                            activeColor: Theme.of(context).colorScheme.tertiary,
                             checkColor: Theme.of(context).colorScheme.outline,
+                            side: BorderSide(
+                              color: Theme.of(context).colorScheme.tertiary,
+                              width: 2,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(5.0),
                             ),
@@ -773,8 +838,12 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                               });
                             },
                             controlAffinity: ListTileControlAffinity.leading,
-                            activeColor: Theme.of(context).primaryColor,
+                            activeColor: Theme.of(context).colorScheme.tertiary,
                             checkColor: Theme.of(context).colorScheme.outline,
+                            side: BorderSide(
+                              color: Theme.of(context).colorScheme.tertiary,
+                              width: 2,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(5.0),
                             ),
@@ -797,66 +866,16 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                               });
                             },
                             controlAffinity: ListTileControlAffinity.leading,
-                            activeColor: Theme.of(context).primaryColor,
+                            activeColor: Theme.of(context).colorScheme.tertiary,
                             checkColor: Theme.of(context).colorScheme.outline,
+                            side: BorderSide(
+                              color: Theme.of(context).colorScheme.tertiary,
+                              width: 2,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(5.0),
                             ),
                             dense: true,
-                          ),
-                        ],
-                      ),
-                    ),
-                    Align(
-                      alignment: AlignmentDirectional(0, 0),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.max,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Align(
-                            alignment: AlignmentDirectional(0, 0),
-                            child: Padding(
-                              padding: EdgeInsetsDirectional.fromSTEB(20, 20, 20, 20),
-                              child: _isLoading
-                                  ? Center(
-                                child: CircularProgressIndicator(),
-                              )
-                                  : ElevatedButton.icon(
-                                onPressed:
-                                _isLoading ? null : _addCollaborator,
-                                icon: Icon(
-                                  Icons.add,
-                                  color:
-                                  Theme.of(context).colorScheme.outline,
-                                  size: 25,
-                                ),
-                                label: Text(
-                                  'ADICIONAR',
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0,
-                                    color:
-                                    Theme.of(context).colorScheme.outline,
-                                  ),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  padding: EdgeInsetsDirectional.fromSTEB(
-                                      30, 15, 30, 15),
-                                  backgroundColor:
-                                  Theme.of(context).colorScheme.primary,
-                                  elevation: 3,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(25),
-                                  ),
-                                  side: BorderSide(
-                                    color: Colors.transparent,
-                                    width: 1,
-                                  ),
-                                ),
-                              ),
-                            ),
                           ),
                         ],
                       ),
