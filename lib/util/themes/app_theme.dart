@@ -1,9 +1,9 @@
-
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const Color constantBlack = Color(0xFF000000);  // Cor preta constante
-  static const Color constantGreen = Color(0xFF00FF00);  // Cor verde constante para todos os temas
+  static const Color constantBlack = Color(0xFF000000); // Cor preta constante
+  static const Color constantGreen =
+      Color(0xFF00FF00); // Cor verde constante para todos os temas
   static const Color constantShadow = Color(0x00000066);
 
   static final lightTheme = ThemeData(
@@ -36,10 +36,10 @@ class AppTheme {
     ),
     textTheme: const TextTheme(
       bodyLarge: TextStyle(
-          fontFamily: 'Poppins',
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: Color(0xFF000000),
+        fontFamily: 'Poppins',
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFF000000),
       ),
       bodyMedium: TextStyle(color: Color(0xFF000000)),
       headlineLarge: TextStyle(color: Color(0xFF000000)),

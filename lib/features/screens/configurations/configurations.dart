@@ -132,7 +132,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 userName = empresaData?['NomeEmpresa'] ?? 'Nome não disponível';
                 userEmail = user.email;
                 cnpj = empresaData?['cnpj'] ?? 'CNPJ não disponível';
-                contract = empresaData?['contract'] ?? 'Contrato não disponível';
+                contract =
+                    empresaData?['contract'] ?? 'Contrato não disponível';
                 copiarTelefones = empresaData?['copiarTelefones'] ?? false;
               });
             } else {
@@ -299,11 +300,14 @@ class _SettingsPageState extends State<SettingsPage> {
   void _copyToClipboard(BuildContext context, String content) {
     Clipboard.setData(ClipboardData(text: content)).then((_) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Números de telefone copiados para a área de transferência!')),
+        SnackBar(
+            content: Text(
+                'Números de telefone copiados para a área de transferência!')),
       );
     }).catchError((e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao copiar para a área de transferência: $e')),
+        SnackBar(
+            content: Text('Erro ao copiar para a área de transferência: $e')),
       );
     });
   }
@@ -337,7 +341,7 @@ class _SettingsPageState extends State<SettingsPage> {
           if (companyDoc.exists) {
             companyDocId = createdBy;
             final campaignsSnapshot =
-            await companyDoc.reference.collection('campanhas').get();
+                await companyDoc.reference.collection('campanhas').get();
 
             // Popula a variável `campaignDocs`
             setState(() {
@@ -354,7 +358,7 @@ class _SettingsPageState extends State<SettingsPage> {
         if (companyDoc.exists) {
           companyDocId = user.uid;
           final campaignsSnapshot =
-          await companyDoc.reference.collection('campanhas').get();
+              await companyDoc.reference.collection('campanhas').get();
 
           // Popula a variável `campaignDocs`
           setState(() {
@@ -451,39 +455,42 @@ class _SettingsPageState extends State<SettingsPage> {
                       onPressed: selectedCampaign == null
                           ? null
                           : () async {
-                        try {
-                          final selectedDoc = campaignDocs.firstWhere(
-                                  (doc) => doc.id == selectedCampaign,
-                              orElse: () => throw Exception(
-                                  'Documento não encontrado'));
+                              try {
+                                final selectedDoc = campaignDocs.firstWhere(
+                                    (doc) => doc.id == selectedCampaign,
+                                    orElse: () => throw Exception(
+                                        'Documento não encontrado'));
 
-                          final leadsSnapshot = await selectedDoc.reference
-                              .collection('leads')
-                              .get();
+                                final leadsSnapshot = await selectedDoc
+                                    .reference
+                                    .collection('leads')
+                                    .get();
 
-                          List<String> phones = leadsSnapshot.docs
-                              .map((doc) =>
-                          doc.data()['whatsapp'] as String?)
-                              .where((phone) => phone != null)
-                              .map((phone) => phone!
-                              .replaceAll(RegExp(r'\s|-|\(|\)'), '')
-                              .replaceAll(RegExp(r'^'), '55'))
-                              .toList();
+                                List<String> phones = leadsSnapshot.docs
+                                    .map((doc) =>
+                                        doc.data()['whatsapp'] as String?)
+                                    .where((phone) => phone != null)
+                                    .map((phone) => phone!
+                                        .replaceAll(RegExp(r'\s|-|\(|\)'), '')
+                                        .replaceAll(RegExp(r'^'), '55'))
+                                    .toList();
 
-                          if (phones.isEmpty) {
-                            showErrorDialog(context,
-                                'Nenhum número de telefone encontrado.', 'Atenção');
-                            return;
-                          }
+                                if (phones.isEmpty) {
+                                  showErrorDialog(
+                                      context,
+                                      'Nenhum número de telefone encontrado.',
+                                      'Atenção');
+                                  return;
+                                }
 
-                          final phonesContent = phones.join('\n');
-                          _copyToClipboard(context, phonesContent);
-                          Navigator.pop(context);
-                        } catch (e) {
-                          showErrorDialog(context,
-                              'Erro ao processar campanha: $e', 'Erro');
-                        }
-                      },
+                                final phonesContent = phones.join('\n');
+                                _copyToClipboard(context, phonesContent);
+                                Navigator.pop(context);
+                              } catch (e) {
+                                showErrorDialog(context,
+                                    'Erro ao processar campanha: $e', 'Erro');
+                              }
+                            },
                       child: Text(
                         'Copiar Telefones',
                         style: TextStyle(
@@ -514,177 +521,177 @@ class _SettingsPageState extends State<SettingsPage> {
             child: userName == null
                 ? Center(child: CircularProgressIndicator())
                 : Column(
-              crossAxisAlignment: CrossAxisAlignment.start, // Alinha tudo à esquerda
-              children: [
-                // Avatar e Nome do Usuário
-                Center(
-                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start, // Alinha tudo à esquerda
                     children: [
-                      CircleAvatar(
-                        radius: 55,
-                        backgroundColor:
-                        Theme.of(context).colorScheme.primary,
-                        child: Icon(
-                          Icons.camera_alt,
-                          color: Theme.of(context).colorScheme.outline,
-                          size: 40,
+                      // Avatar e Nome do Usuário
+                      Center(
+                        child: Column(
+                          children: [
+                            CircleAvatar(
+                              radius: 55,
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.primary,
+                              child: Icon(
+                                Icons.camera_alt,
+                                color: Theme.of(context).colorScheme.outline,
+                                size: 40,
+                              ),
+                            ),
+                            SizedBox(height: 20),
+                            Text(
+                              '$userName',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 22,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceVariant,
+                              ),
+                            ),
+                            SizedBox(height: 20),
+                          ],
                         ),
                       ),
-                      SizedBox(height: 20),
-                      Text(
-                        '$userName',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 22,
-                          fontWeight: FontWeight.w600,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surfaceVariant,
-                        ),
+
+                      // Formulário com Labels Separadas
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Campo de Email
+                          // Label para Email
+                          Text(
+                            'Email',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          // Campo de Email
+                          TextField(
+                            readOnly: true,
+                            enableInteractiveSelection: false,
+                            controller: TextEditingController(
+                              text: userEmail ?? 'Email não disponível',
+                            ),
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor:
+                                  Theme.of(context).colorScheme.secondary,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                          ),
+
+                          SizedBox(height: 20),
+
+                          // Campo de CNPJ (se existir)
+                          if (cnpj != null) ...[
+                            // Label para CNPJ
+                            Text(
+                              'CNPJ',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    Theme.of(context).colorScheme.onSecondary,
+                              ),
+                            ),
+                            SizedBox(height: 8),
+                            // Campo de CNPJ
+                            TextField(
+                              readOnly: true,
+                              enableInteractiveSelection: false,
+                              controller: TextEditingController(
+                                  text: cnpj ?? 'CNPJ não disponível'),
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor:
+                                    Theme.of(context).colorScheme.secondary,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                            ),
+                            SizedBox(height: 20),
+
+                            // Label para Final do Contrato
+                            Text(
+                              'Final do Contrato',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    Theme.of(context).colorScheme.onSecondary,
+                              ),
+                            ),
+                            SizedBox(height: 8),
+                            // Campo de Final do Contrato
+                            TextField(
+                              readOnly: true,
+                              enableInteractiveSelection: false,
+                              controller: TextEditingController(
+                                  text: contract ?? 'Contrato não disponível'),
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor:
+                                    Theme.of(context).colorScheme.secondary,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                            ),
+                            SizedBox(height: 20),
+                          ],
+
+                          // Campo de Função (se existir)
+                          if (role != null) ...[
+                            // Label para Função
+                            Text(
+                              'Função',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    Theme.of(context).colorScheme.onSecondary,
+                              ),
+                            ),
+                            SizedBox(height: 8),
+                            // Campo de Função
+                            TextField(
+                              readOnly: true,
+                              enableInteractiveSelection: false,
+                              controller: TextEditingController(
+                                  text: role ?? 'Função não disponível'),
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor:
+                                    Theme.of(context).colorScheme.secondary,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                            ),
+                            SizedBox(height: 20),
+                          ],
+
+                          // Adicione mais campos seguindo o mesmo padrão acima
+                        ],
                       ),
-                      SizedBox(height: 20),
                     ],
                   ),
-                ),
-
-                // Formulário com Labels Separadas
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Campo de Email
-                    // Label para Email
-                    Text(
-                      'Email',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color:
-                        Theme.of(context).colorScheme.onSecondary,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    // Campo de Email
-                    TextField(
-                      readOnly: true,
-                      enableInteractiveSelection: false,
-                      controller: TextEditingController(
-                        text: userEmail ?? 'Email não disponível',
-                      ),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor:
-                        Theme.of(context).colorScheme.secondary,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-
-                    SizedBox(height: 20),
-
-                    // Campo de CNPJ (se existir)
-                    if (cnpj != null) ...[
-                      // Label para CNPJ
-                      Text(
-                        'CNPJ',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.onSecondary,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      // Campo de CNPJ
-                      TextField(
-                        readOnly: true,
-                        enableInteractiveSelection: false,
-                        controller: TextEditingController(
-                            text: cnpj ?? 'CNPJ não disponível'),
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor:
-                          Theme.of(context).colorScheme.secondary,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide.none,
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 20),
-
-                      // Label para Final do Contrato
-                      Text(
-                        'Final do Contrato',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color:
-                          Theme.of(context).colorScheme.onSecondary,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      // Campo de Final do Contrato
-                      TextField(
-                        readOnly: true,
-                        enableInteractiveSelection: false,
-                        controller: TextEditingController(
-                            text:
-                            contract ?? 'Contrato não disponível'),
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor:
-                          Theme.of(context).colorScheme.secondary,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide.none,
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 20),
-                    ],
-
-                    // Campo de Função (se existir)
-                    if (role != null) ...[
-                      // Label para Função
-                      Text(
-                        'Função',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color:
-                          Theme.of(context).colorScheme.onSecondary,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      // Campo de Função
-                      TextField(
-                        readOnly: true,
-                        enableInteractiveSelection: false,
-                        controller: TextEditingController(
-                            text: role ?? 'Função não disponível'),
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor:
-                          Theme.of(context).colorScheme.secondary,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide.none,
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 20),
-                    ],
-
-                    // Adicione mais campos seguindo o mesmo padrão acima
-                  ],
-                ),
-              ],
-            ),
           ),
         ),
         bottomNavigationBar: Column(
