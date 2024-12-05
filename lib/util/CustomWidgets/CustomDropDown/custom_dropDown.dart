@@ -1,80 +1,146 @@
 import 'package:flutter/material.dart';
 
-class CustomDropdownButton<T> extends StatelessWidget {
-  final T? value;
-  final List<DropdownMenuItem<T>> items;
-  final ValueChanged<T?>? onChanged;
-  final String hint;
+class CustomDropdown extends StatefulWidget {
+  final List<Map<String, dynamic>> items;
+  final String? value;
+  final Function(String?) onChanged;
+  final String Function(String?) displayText;
 
-  CustomDropdownButton({
-    required this.value,
+  const CustomDropdown({
+    Key? key,
     required this.items,
+    required this.value,
     required this.onChanged,
-    required this.hint,
-  });
+    required this.displayText,
+  }) : super(key: key);
+
+  @override
+  _CustomDropdownState createState() => _CustomDropdownState();
+}
+
+class _CustomDropdownState extends State<CustomDropdown> {
+  bool _isMenuOpen = false;
+  OverlayEntry? _overlayEntry;
+
+  void _toggleMenu() {
+    if (_isMenuOpen) {
+      _closeMenu();
+    } else {
+      _openMenu();
+    }
+  }
+
+  void _openMenu() {
+    final overlay = Overlay.of(context);
+    final renderBox = context.findRenderObject() as RenderBox;
+    final offset = renderBox.localToGlobal(Offset.zero);
+
+    _overlayEntry = OverlayEntry(
+      builder: (context) {
+        return GestureDetector(
+          onTap: _closeMenu, // Fecha o menu ao clicar fora dele
+          behavior: HitTestBehavior.translucent, // Permite detectar toques fora
+          child: Stack(
+            children: [
+              Positioned(
+                left: offset.dx,
+                top: offset.dy + renderBox.size.height,
+                width: renderBox.size.width,
+                child: Material(
+                  color: Colors.transparent,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.secondary,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: 200.0, // Limita a altura do menu
+                      ),
+                      child: ListView(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        children: widget.items.map((item) {
+                          return InkWell(
+                            onTap: () {
+                              widget.onChanged(item['id']);
+                              _closeMenu();
+                            },
+                            child: Container(
+                              alignment: Alignment.center,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 15,
+                              ),
+                              child: Text(
+                                item['name'],
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: item['isError']
+                                      ? Theme.of(context).colorScheme.error
+                                      : Theme.of(context)
+                                      .colorScheme
+                                      .onSecondary,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    overlay?.insert(_overlayEntry!);
+    setState(() {
+      _isMenuOpen = true;
+    });
+  }
+
+  void _closeMenu() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+    setState(() {
+      _isMenuOpen = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 60, // Define uma altura para evitar problemas de layout
-      child: InputDecorator(
-        decoration: InputDecoration(
-          fillColor: Theme.of(context).colorScheme.primary, // Cor de fundo do DropdownButton
-          filled: true,
-          enabledBorder: OutlineInputBorder(
-            borderSide: BorderSide(color: Theme.of(context).colorScheme.primary),
-            borderRadius: BorderRadius.circular(25),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 2),
-            borderRadius: BorderRadius.circular(25),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderSide: BorderSide(color: Theme.of(context).colorScheme.error),
-            borderRadius: BorderRadius.circular(25),
-          ),
-          focusedErrorBorder: OutlineInputBorder(
-            borderSide: BorderSide(color: Theme.of(context).colorScheme.error, width: 2),
-            borderRadius: BorderRadius.circular(25),
-          ),
+    return GestureDetector(
+      onTap: _toggleMenu,
+      child: Container(
+        alignment: Alignment.center,
+        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 15),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.secondary,
+          borderRadius: BorderRadius.circular(10),
         ),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<T>(
-            iconSize: 0.0,
-            alignment: Alignment.center, // Alinha o valor selecionado à esquerda
-            dropdownColor: Theme.of(context).colorScheme.primary,
-            value: value,
-            items: items,
-            onChanged: onChanged,
-            hint: Align(
-              alignment: Alignment.center,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
               child: Text(
-                hint,
+                widget.displayText(widget.value),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: 'Poppins',
-                  fontSize: 10,
-                  color: Theme.of(context).colorScheme.outline,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSecondary,
                 ),
               ),
             ),
-            style: TextStyle(
-              fontSize: 12,
-              fontFamily: 'Poppins',
-              fontWeight: FontWeight.w500,
-              color: Theme.of(context).colorScheme.outline,
-            ),
-            isDense: true, // Torna o dropdown mais compacto
-            itemHeight: 50,
-            selectedItemBuilder: (BuildContext context) {
-              return items.map<Widget>((DropdownMenuItem<T> item) {
-                return Align(
-                  alignment: Alignment.center, // Alinha as opções à esquerda
-                  child: item.child,
-                );
-              }).toList();
-            },
-          ),
+          ],
         ),
       ),
     );
