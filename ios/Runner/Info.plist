@@ -30,11 +30,25 @@
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Este aplicativo usa Face ID para autenticação.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Este aplicativo requer acesso à rede local para depuração.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
+		<string>voip</string>
+		<string>nearby-interaction</string>
+		<string>bluetooth-central</string>
+		<string>push-to-talk</string>
+		<string>location</string>
+		<string>external-accessory</string>
+		<string>processing</string>
+		<string>audio</string>
+		<string>bluetooth-peripheral</string>
+		<string>fetch</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
@@ -57,17 +71,17 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
-	<key>NSFaceIDUsageDescription</key>
-    <string>Este aplicativo usa Face ID para autenticação.</string>
-    <key>NSLocalNetworkUsageDescription</key>
-    <string>Este aplicativo requer acesso à rede local para depuração.</string>
-    <key>com.apple.developer.associated-domains</key>
-    <array>
-        <string>applinks:yourdomain.com</string>
-    </array>
-    <key>keychain-access-groups</key>
-    <array>
-        <string>$(AppIdentifierPrefix)com.your.bundle</string>
-    </array>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:yourdomain.com</string>
+	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.your.bundle</string>
+	</array>
+	<key>FirebaseAppDelegateProxyEnabled</key>
+    <true/>
+    <key>NSUserTrackingUsageDescription</key>
+    <string>Este aplicativo usa notificações para manter você atualizado.</string>
 </dict>
 </plist>
