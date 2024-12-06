@@ -444,70 +444,82 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
 });
 
 exports.sendNewLeadNotification = functions.firestore
-  .document('empresas/{empresaId}/campanhas/{campanhaId}/leads/{leadId}')
-  .onCreate(async (snap, context) => {
-    const newValue = snap.data();
-    const empresaId = context.params.empresaId;
-    const campanhaId = context.params.campanhaId;
+    .document('empresas/{empresaId}/campanhas/{campanhaId}/leads/{leadId}')
+    .onCreate(async (snap, context) => {
+        try {
+            const { empresaId, campanhaId, leadId } = context.params;
 
-    // Recuperar o nome da campanha
-    const campanhaDoc = await admin.firestore()
-      .collection('empresas')
-      .doc(empresaId)
-      .collection('campanhas')
-      .doc(campanhaId)
-      .get();
+            const campanhaDoc = await admin.firestore()
+                .collection('empresas')
+                .doc(empresaId)
+                .collection('campanhas')
+                .doc(campanhaId)
+                .get();
 
-    const nomeCampanha = campanhaDoc.data().nome_campanha;
+            if (!campanhaDoc.exists) {
+                console.error(`Campanha com ID ${campanhaId} não encontrada para a empresa ${empresaId}`);
+                return null;
+            }
 
-    const tokens = [];
+            const nomeCampanha = campanhaDoc.data().nome_campanha;
+            const tokensSet = new Set();
 
-    // Buscar o documento do usuário que tem o mesmo ID da empresa
-    const userSnapshot = await admin.firestore().collection('empresas').doc(empresaId).get();
+            const empresaDoc = await admin.firestore().collection('empresas').doc(empresaId).get();
+            if (empresaDoc.exists && empresaDoc.data().fcmToken) {
+                tokensSet.add(empresaDoc.data().fcmToken);
+            }
 
-    if (userSnapshot.exists) {
-      const userDoc = userSnapshot.data();
+            const usersSnapshot = await admin.firestore()
+                .collection('users')
+                .where('createdBy', '==', empresaId)
+                .get();
 
-      // Verificar se o documento do usuário tem um fcmToken e adicioná-lo à lista de tokens
-      if (userDoc.fcmToken) {
-        tokens.push(userDoc.fcmToken);
-      }
+            usersSnapshot.forEach(userDoc => {
+                if (userDoc.data().fcmToken) {
+                    tokensSet.add(userDoc.data().fcmToken);
+                }
+            });
 
-      // Buscar o documento da empresa para obter o fcmToken
-      const empresaDoc = await admin.firestore().collection('empresas').doc(empresaId).get();
-      if (empresaDoc.exists && empresaDoc.data().fcmToken) {
-        tokens.push(empresaDoc.data().fcmToken);
-      }
-    } else {
-      console.log(`Usuário com ID ${empresaId} não encontrado.`);
-    }
+            const tokens = Array.from(tokensSet).filter(token => token);
 
-    // Buscar os tokens FCM dos usuários da empresa na coleção 'users'
-    const usersSnapshot = await admin.firestore().collection('users')
-      .where('createdBy', '==', empresaId)
-      .get();
+            if (tokens.length === 0) {
+                console.log(`Nenhum token válido encontrado para a empresa ${empresaId}.`);
+                return null;
+            }
 
-    usersSnapshot.forEach(doc => {
-      if (doc.data().fcmToken) {
-        tokens.push(doc.data().fcmToken);
-      }
+            const payload = {
+                notification: {
+                    title: 'Novo Lead!',
+                    body: `Você tem um novo lead na campanha ${nomeCampanha}`,
+                },
+                data: {
+                    leadId,
+                    campanhaId,
+                    empresaId,
+                    title: 'Novo Lead!',
+                    body: `Você tem um novo lead na campanha ${nomeCampanha}`,
+                },
+            };
+
+            for (const token of tokens) {
+                try {
+                    await admin.messaging().send({
+                        token,
+                        notification: payload.notification,
+                        data: payload.data,
+                    });
+                    console.log(`Notificação enviada para o token: ${token}`);
+                } catch (error) {
+                    console.error(`Erro ao enviar para o token ${token}:, error.message`);
+                }
+            }
+
+            return null;
+        } catch (error) {
+            console.error('Erro ao enviar notificação:', error.message);
+            return null;
+        }
     });
-
-    if (tokens.length > 0) {
-      // Enviar a notificação para os tokens
-      const payload = {
-        notification: {
-          title: 'Novo Lead!',
-          body: `Você tem um novo lead na campanha ${nomeCampanha}`,
-        },
-      };
-
-      return admin.messaging().sendToDevice(tokens, payload);
-    } else {
-      console.log('Nenhum token FCM encontrado.');
-      return null;
-    }
-});
 
 exports.deleteUserByEmail = functions.https.onCall(async (data, context) => {
     const email = data.email;
