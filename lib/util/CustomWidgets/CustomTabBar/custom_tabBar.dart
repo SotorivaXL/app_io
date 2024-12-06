@@ -50,7 +50,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
 
     if (!tutorialShown) {
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) {
+            (_) {
           showDialog(
             context: context,
             barrierDismissible: false,
@@ -113,7 +113,6 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     var userData = doc.data() as Map<String, dynamic>;
     print('Dados do usuário: $userData');
 
-    // Atualize todas as permissões primeiro
     bool newHasLeadsAccess = userData['leads'] ?? false;
     bool newHasDashboardAccess = userData['dashboard'] ?? false;
     bool newHasConfigurarDashAccess = userData['configurarDash'] ?? false;
@@ -124,14 +123,12 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     bool newHasGerenciarParceirosAccess =
         userData['gerenciarParceiros'] ?? false;
 
-    // Atualiza o acesso ao Painel Adm com base nas permissões específicas
     bool newHasAdmPanelAccess = newHasGerenciarParceirosAccess ||
         newHasGerenciarColaboradoresAccess ||
         newHasConfigurarDashAccess ||
         newHasCriarFormAccess ||
         newHasCriarCampanhaAccess;
 
-    // Construa a lista de páginas com base nas novas permissões
     List<Widget> newPages = [];
 
     if (newHasDashboardAccess) {
@@ -146,10 +143,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
       newPages.add(AdminPanelPage());
     }
 
-    // Configurações sempre será a última aba
     newPages.add(SettingsPage());
 
-    // Atualize as listas
     setState(() {
       hasLeadsAccess = newHasLeadsAccess;
       hasDashboardAccess = newHasDashboardAccess;
@@ -162,7 +157,6 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
 
       _pages = newPages;
 
-      // Atualize o _currentIndex se necessário
       if (_currentIndex >= _pages.length) {
         _currentIndex = _pages.length - 1;
         _pageController.jumpToPage(_currentIndex);
@@ -177,7 +171,6 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   }
 
   String _getTitle() {
-    // Define o título com base na aba atual e nas permissões
     if (_currentIndex < _pages.length) {
       if (_pages[_currentIndex] is AdminPanelPage) {
         return 'Painel Administrativo';
@@ -193,7 +186,6 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   }
 
   String _getPrefix() {
-    // Define o prefixo com base na aba atual
     if (_currentIndex < _pages.length) {
       if (_pages[_currentIndex] is SettingsPage) {
         return "Bem-vindo(a) às";
@@ -289,7 +281,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                                 },
                                 child: ListTile(
                                   contentPadding:
-                                      EdgeInsets.symmetric(vertical: 2),
+                                  EdgeInsets.symmetric(vertical: 2),
                                   tileColor: Theme.of(context)
                                       .colorScheme
                                       .secondary
@@ -357,13 +349,11 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     final uid = user.uid;
     String? birthday;
 
-    // Busca na coleção users
     final userDoc =
-        await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    await FirebaseFirestore.instance.collection('users').doc(uid).get();
     if (userDoc.exists) {
       birthday = userDoc.data()?['birth'];
     } else {
-      // Busca na coleção empresas caso não esteja em users
       final empresaDoc = await FirebaseFirestore.instance
           .collection('empresas')
           .doc(uid)
@@ -374,7 +364,6 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     }
 
     if (birthday != null) {
-      // Verifica se hoje é o aniversário
       final today = DateTime.now();
       final birthdayParts = birthday.split('-');
       if (birthdayParts.length == 3) {
@@ -384,14 +373,13 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
         if (birthDay == today.day && birthMonth == today.month) {
           final prefs = await SharedPreferences.getInstance();
           final key =
-              'birthday_shown_$uid${today.toIso8601String()}'; // Chave única baseada no UID e data
+              'birthday_shown_$uid${today.toIso8601String()}';
 
-          // Verifica se a chave foi salva hoje
           final shownToday = prefs.getBool(key) ?? false;
 
           if (!shownToday) {
-            _showBirthdayPopup(); // Mostra o popup
-            await prefs.setBool(key, true); // Marca como exibido
+            _showBirthdayPopup();
+            await prefs.setBool(key, true);
           }
         }
       }
@@ -412,7 +400,6 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
 
   @override
   Widget build(BuildContext context) {
-    // Ajuste do tamanho da AppBar e BottomNavigationBar com base no scrollOffset
     double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
     double tabBarHeight = Platform.isIOS
         ? (111 - (_scrollOffset / 2)).clamp(0.0, 111).ceilToDouble()
@@ -475,7 +462,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                         child: CircleAvatar(
                           radius: 8,
                           backgroundColor:
-                              Theme.of(context).colorScheme.tertiary,
+                          Theme.of(context).colorScheme.tertiary,
                           child: Text(
                             '3',
                             style: TextStyle(color: Colors.white, fontSize: 10),
@@ -496,22 +483,27 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
         body: NotificationListener<ScrollNotification>(
           onNotification: (ScrollNotification scrollInfo) {
             if (scrollInfo.metrics.axis == Axis.vertical) {
-              if (mounted) {
-                setState(() {
-                  _scrollOffset = scrollInfo.metrics.pixels;
-                });
-              }
+              // Em vez de chamar setState() diretamente, agendamos para o próximo frame
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  setState(() {
+                    _scrollOffset = scrollInfo.metrics.pixels;
+                  });
+                }
+              });
             }
             return true;
           },
           child: PageView(
             controller: _pageController,
             onPageChanged: (index) {
-              if (mounted) {
-                setState(() {
-                  _currentIndex = index;
-                });
-              }
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  setState(() {
+                    _currentIndex = index;
+                  });
+                }
+              });
             },
             physics: pageViewPhysics,
             children: _pages,
@@ -530,12 +522,14 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
               iconSize: 25,
               curve: Curves.easeIn,
               onItemSelected: (index) {
-                if (mounted) {
-                  setState(() {
-                    _currentIndex = index;
-                    _pageController.jumpToPage(index);
-                  });
-                }
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    setState(() {
+                      _currentIndex = index;
+                      _pageController.jumpToPage(index);
+                    });
+                  }
+                });
               },
               items: _buildBottomNavyBarItems(),
             ),
@@ -584,7 +578,6 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
       );
     }
 
-    // Configurações sempre será a última aba
     items.add(
       BottomNavyBarItem(
         icon: Icon(Icons.settings),

@@ -5,15 +5,15 @@ import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';
 import 'package:app_io/util/services/firestore_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:dropdown_button2/dropdown_button2.dart'; // Reintroduza este import
+import 'package:flutter/services.dart'; // Para FilteringTextInputFormatter
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 
 class DashboardConfigurations extends StatefulWidget {
   const DashboardConfigurations({super.key});
 
   @override
-  State<DashboardConfigurations> createState() =>
-      _DashboardConfigurationsState();
+  State<DashboardConfigurations> createState() => _DashboardConfigurationsState();
 }
 
 class _DashboardConfigurationsState extends State<DashboardConfigurations> {
@@ -25,27 +25,39 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
 
   String? bmSelecionada;
   String? contaSelecionada;
-
   String? empresaSelecionada;
   List<Map<String, dynamic>> contasAnuncioList = [];
 
   double _scrollOffset = 0.0;
   bool _isLoading = false;
 
+  final List<Map<String, String>> _metricsOptions = [
+    {'id': 'visualizacoes_pagina', 'name': 'Visualizações da página'},
+    {'id': 'registros_pagina', 'name': 'Registros na Página'},
+    {'id': 'visitas_perfil', 'name': 'Visitas ao perfil'},
+    {'id': 'seguidores', 'name': 'Seguidores'},
+    {'id': 'conversas_iniciadas', 'name': 'Conversas iniciadas'},
+  ];
+
+  List<String> _selectedMetrics = [];
+  String? _selectedCampaign;
+  List<Map<String, dynamic>> _campaignsList = [];
+
+  DateTime? _selectedDate;
+  final TextEditingController _dateController = TextEditingController();
+
+  Map<String, TextEditingController> _metricsControllers = {};
+
   Future<List<Map<String, dynamic>>> _fetchBMs() async {
     final dashboardCollection = FirebaseFirestore.instance.collection('dashboard');
     final snapshot = await dashboardCollection.get();
-    return snapshot.docs
-        .map((doc) => {'id': doc.id, 'name': doc['name']})
-        .toList();
+    return snapshot.docs.map((doc) => {'id': doc.id, 'name': doc['name']}).toList();
   }
 
   Future<List<Map<String, dynamic>>> _fetchContasAnuncioPorBM(String bmId) async {
     final dashboardDoc = FirebaseFirestore.instance.collection('dashboard').doc(bmId);
     final contasSnapshot = await dashboardDoc.collection('contasAnuncio').get();
-    return contasSnapshot.docs
-        .map((subDoc) => {'id': subDoc.id, 'name': subDoc['name']})
-        .toList();
+    return contasSnapshot.docs.map((subDoc) => {'id': subDoc.id, 'name': subDoc['name']}).toList();
   }
 
   Future<void> _updateContasAnuncioList() async {
@@ -61,8 +73,7 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
 
     setState(() {
       contasAnuncioList = newContasAnuncioList;
-      if (contaSelecionada != null &&
-          !contasAnuncioList.any((c) => c['id'] == contaSelecionada)) {
+      if (contaSelecionada != null && !contasAnuncioList.any((c) => c['id'] == contaSelecionada)) {
         contaSelecionada = null;
       }
     });
@@ -71,9 +82,47 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
   Future<List<Map<String, dynamic>>> _fetchEmpresas() async {
     final empresasCollection = FirebaseFirestore.instance.collection('empresas');
     final snapshot = await empresasCollection.get();
-    return snapshot.docs
-        .map((doc) => {'id': doc.id, 'NomeEmpresa': doc['NomeEmpresa']})
-        .toList();
+    return snapshot.docs.map((doc) => {'id': doc.id, 'NomeEmpresa': doc['NomeEmpresa']}).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchCampaigns(String bmId, String contaId) async {
+    final contaDoc = FirebaseFirestore.instance
+        .collection('dashboard')
+        .doc(bmId)
+        .collection('contasAnuncio')
+        .doc(contaId);
+
+    final campaignsSnap = await contaDoc.collection('campanhas').get();
+    return campaignsSnap.docs.map((doc) {
+      final data = doc.data();
+      return {
+        'id': data['id'],
+        'name': data['name'],
+        'docId': doc.id,
+      };
+    }).toList();
+  }
+
+  Future<void> _loadCampaignsIfNeeded() async {
+    if (contaSelecionada != null && bmSelecionada != null) {
+      bool needsCampaign = _selectedMetrics.contains('visitas_perfil') ||
+          _selectedMetrics.contains('seguidores') ||
+          _selectedMetrics.contains('conversas_iniciadas');
+      if (needsCampaign) {
+        final campaigns = await _fetchCampaigns(bmSelecionada!, contaSelecionada!);
+        setState(() {
+          _campaignsList = campaigns;
+          if (campaigns.isEmpty) {
+            _selectedCampaign = null;
+          }
+        });
+      } else {
+        setState(() {
+          _campaignsList = [];
+          _selectedCampaign = null;
+        });
+      }
+    }
   }
 
   Future<void> _saveAnuncios() async {
@@ -95,46 +144,158 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
       return;
     }
 
+    if (bmSelecionada == null || contaSelecionada == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Por favor, selecione BM e conta de anúncio."),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return;
+    }
+
+    if (_selectedMetrics.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Por favor, selecione ao menos uma métrica."),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return;
+    }
+
+    bool needsCampaign = _selectedMetrics.contains('visitas_perfil') ||
+        _selectedMetrics.contains('seguidores') ||
+        _selectedMetrics.contains('conversas_iniciadas');
+
+    if (needsCampaign && _selectedCampaign == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Por favor, selecione uma campanha para as métricas escolhidas."),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return;
+    }
+
+    if (_selectedDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Por favor, selecione uma data."),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return;
+    }
+
+    for (var metric in _selectedMetrics) {
+      if (_metricsControllers[metric]?.text.trim().isEmpty ?? true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Por favor, preencha o valor para ${_getMetricName(metric)}."),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+        return;
+      }
+    }
+
     final dataToSave = {
       'BMs': bmSelecionada != null ? [bmSelecionada] : [],
       'contasAnuncio': contaSelecionada != null ? [contaSelecionada] : [],
     };
 
     try {
-      await FirebaseFirestore.instance
-          .collection('empresas')
-          .doc(empresaSelecionada)
-          .set(dataToSave, SetOptions(merge: true));
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "Configurações salvas com sucesso!",
-            style: TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: Theme.of(context).colorScheme.outline,
-            ),
-          ),
-          backgroundColor: Theme.of(context).colorScheme.tertiary,
-        ),
-      );
+      await FirebaseFirestore.instance.collection('empresas').doc(empresaSelecionada).set(dataToSave, SetOptions(merge: true));
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Falha ao salvar configurações: $e"),
+          content: Text("Falha ao salvar configurações da empresa: $e"),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
+      return;
     }
+
+    String dataFormatada = DateFormat('yyyy-MM-dd').format(_selectedDate!);
+
+    List<String> generalMetrics = [];
+    List<String> campaignMetrics = [];
+
+    for (var m in _selectedMetrics) {
+      if (m == 'visitas_perfil' || m == 'seguidores' || m == 'conversas_iniciadas') {
+        campaignMetrics.add(m);
+      } else {
+        generalMetrics.add(m);
+      }
+    }
+
+    if (generalMetrics.isNotEmpty) {
+      final insightsRef = FirebaseFirestore.instance
+          .collection('dashboard')
+          .doc(bmSelecionada)
+          .collection('contasAnuncio')
+          .doc(contaSelecionada)
+          .collection('insights')
+          .doc(dataFormatada);
+
+      Map<String, dynamic> generalData = {};
+      for (var gm in generalMetrics) {
+        generalData[gm] = _metricsControllers[gm]?.text.trim();
+      }
+      generalData['data'] = dataFormatada;
+
+      await insightsRef.set(generalData, SetOptions(merge: true));
+    }
+
+    if (campaignMetrics.isNotEmpty && _selectedCampaign != null) {
+      final selectedCampaignDoc = _campaignsList.firstWhere((c) => c['id'] == _selectedCampaign, orElse: () => {});
+      if (selectedCampaignDoc.isNotEmpty) {
+        final campaignDocId = selectedCampaignDoc['docId'];
+
+        final insightsCampanhaRef = FirebaseFirestore.instance
+            .collection('dashboard')
+            .doc(bmSelecionada)
+            .collection('contasAnuncio')
+            .doc(contaSelecionada)
+            .collection('campanhas')
+            .doc(campaignDocId)
+            .collection('insights_campanhas')
+            .doc(dataFormatada);
+
+        Map<String, dynamic> campaignData = {};
+        for (var cm in campaignMetrics) {
+          campaignData[cm] = _metricsControllers[cm]?.text.trim();
+        }
+
+        campaignData['data'] = dataFormatada;
+
+        await insightsCampanhaRef.set(campaignData, SetOptions(merge: true));
+      }
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          "Configurações salvas com sucesso!",
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Theme.of(context).colorScheme.outline,
+          ),
+        ),
+        backgroundColor: Theme.of(context).colorScheme.tertiary,
+      ),
+    );
+  }
+
+  String _getMetricName(String metricId) {
+    return _metricsOptions.firstWhere((element) => element['id'] == metricId, orElse: () => {'name': metricId})['name']!;
   }
 
   Future<void> _loadAnunciosParaEmpresa(String empresaId) async {
-    final empresaDoc = await FirebaseFirestore.instance
-        .collection('empresas')
-        .doc(empresaId)
-        .get();
+    final empresaDoc = await FirebaseFirestore.instance.collection('empresas').doc(empresaId).get();
 
     if (empresaDoc.exists) {
       final data = empresaDoc.data()!;
@@ -171,8 +332,7 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
 
     if (user != null) {
       try {
-        DocumentSnapshot<Map<String, dynamic>> userDoc = await FirebaseFirestore
-            .instance
+        DocumentSnapshot<Map<String, dynamic>> userDoc = await FirebaseFirestore.instance
             .collection('empresas')
             .doc(user.uid)
             .get();
@@ -188,8 +348,7 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
           if (userDoc.exists) {
             _listenToUserDocument('users', user.uid);
           } else {
-            print(
-                "Documento do usuário não encontrado nas coleções 'empresas' ou 'users'.");
+            print("Documento do usuário não encontrado nas coleções 'empresas' ou 'users'.");
             setState(() {
               isLoading = false;
             });
@@ -218,8 +377,7 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
       if (userDoc.exists) {
         _updatePermissions(userDoc);
       } else {
-        print(
-            "Documento do usuário não encontrado na coleção '$collectionName'.");
+        print("Documento do usuário não encontrado na coleção '$collectionName'.");
       }
     });
   }
@@ -280,12 +438,11 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                     SizedBox(height: 24.0),
                     ElevatedButton(
                       onPressed: () {
-                        Navigator.of(context).pop(); // Fechar o BottomSheet
+                        Navigator.of(context).pop();
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).colorScheme.primary,
-                        padding:
-                        EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                        padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20.0),
                         ),
@@ -321,12 +478,49 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
   @override
   void dispose() {
     _userDocSubscription?.cancel();
+    _dateController.dispose();
+    for (var controller in _metricsControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
+
+  Future<void> _pickDate() async {
+    DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedDate = picked;
+        _dateController.text = DateFormat('dd/MM/yyyy').format(picked);
+      });
+    }
+  }
+
+  void _onMetricsDropdownChanged(String? value) {
+    if (value != null && !_selectedMetrics.contains(value)) {
+      setState(() {
+        _selectedMetrics.add(value);
+        _metricsControllers[value] = TextEditingController();
+      });
+    }
+    Future.microtask(() {
+      setState(() {});
+    });
+  }
+
+  bool get needsCampaign => _selectedMetrics.contains('visitas_perfil') ||
+      _selectedMetrics.contains('seguidores') ||
+      _selectedMetrics.contains('conversas_iniciadas');
 
   @override
   Widget build(BuildContext context) {
     double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
+
+    bool showDateAndInputs = _selectedMetrics.isNotEmpty;
 
     return ConnectivityBanner(
       child: Scaffold(
@@ -400,9 +594,9 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
           surfaceTintColor: Colors.transparent,
           backgroundColor: Theme.of(context).colorScheme.secondary,
         ),
-        body: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: SingleChildScrollView(
+        body: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -413,14 +607,18 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                     if (!snapshot.hasData) return const CircularProgressIndicator();
                     return Row(
                       children: [
-                        Expanded(
-                          child: DropdownButtonFormField2<String>(
+                        Flexible(
+                          child: DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            menuMaxHeight: 200,
                             value: empresaSelecionada,
                             items: snapshot.data!.map((empresa) {
                               return DropdownMenuItem<String>(
                                 value: empresa['id'],
                                 child: Text(
                                   empresa['NomeEmpresa'],
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.left,
                                   style: TextStyle(
                                     fontFamily: 'Poppins',
                                     fontSize: 12,
@@ -439,7 +637,8 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                             },
                             hint: Text(
                               'Selecionar Empresa',
-                              textAlign: TextAlign.center,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.left,
                               style: TextStyle(
                                 fontFamily: 'Poppins',
                                 fontSize: 14,
@@ -455,20 +654,6 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                                 borderSide: BorderSide.none,
                               ),
                             ),
-                            // Ajuste via IconStyleData
-                            iconStyleData: IconStyleData(
-                              icon: Icon(Icons.arrow_drop_down),
-                              iconSize: 24,
-                              iconEnabledColor: Theme.of(context).colorScheme.onBackground,
-                            ),
-                            // Ajuste via DropdownStyleData
-                            dropdownStyleData: DropdownStyleData(
-                              maxHeight: 200, // Altura máxima do menu
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.background,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
                           ),
                         ),
                       ],
@@ -482,14 +667,18 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                     if (!snapshot.hasData) return const CircularProgressIndicator();
                     return Row(
                       children: [
-                        Expanded(
-                          child: DropdownButtonFormField2<String>(
+                        Flexible(
+                          child: DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            menuMaxHeight: 200,
                             value: bmSelecionada,
                             items: snapshot.data!.map((bm) {
                               return DropdownMenuItem<String>(
                                 value: bm['id'],
                                 child: Text(
                                   bm['name'],
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.left,
                                   style: TextStyle(
                                     fontFamily: 'Poppins',
                                     fontSize: 12,
@@ -508,7 +697,8 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                             },
                             hint: Text(
                               'Selecione a BM',
-                              textAlign: TextAlign.center,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.left,
                               style: TextStyle(
                                 fontFamily: 'Poppins',
                                 fontSize: 14,
@@ -524,20 +714,6 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                                 borderSide: BorderSide.none,
                               ),
                             ),
-                            iconStyleData: IconStyleData(
-                              icon: Icon(Icons.arrow_drop_down),
-                              iconSize: 24,
-                              iconEnabledColor: Theme.of(context).colorScheme.onBackground,
-                            ),
-                            // Ajuste via DropdownStyleData
-                            dropdownStyleData: DropdownStyleData(
-                              maxHeight: 200, // Altura máxima do menu
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.background,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-
                           ),
                         ),
                       ],
@@ -547,14 +723,18 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                 const SizedBox(height: 16.0),
                 Row(
                   children: [
-                    Expanded(
-                      child: DropdownButtonFormField2<String>(
+                    Flexible(
+                      child: DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        menuMaxHeight: 200,
                         value: contaSelecionada,
                         items: contasAnuncioList.map((conta) {
                           return DropdownMenuItem<String>(
                             value: conta['id'],
                             child: Text(
                               conta['name'],
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.left,
                               style: TextStyle(
                                 fontFamily: 'Poppins',
                                 fontSize: 12,
@@ -563,16 +743,25 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                             ),
                           );
                         }).toList(),
-                        onChanged: (value) {
+                        onChanged: (value) async {
                           if (value != null) {
                             setState(() {
                               contaSelecionada = value;
+                              _selectedMetrics.clear();
+                              _metricsControllers.forEach((key, c) => c.dispose());
+                              _metricsControllers.clear();
+                              _selectedCampaign = null;
+                              _campaignsList.clear();
+                              _selectedDate = null;
+                              _dateController.clear();
                             });
+                            await _loadCampaignsIfNeeded();
                           }
                         },
                         hint: Text(
                           'Selecione a conta de anúncio',
-                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.left,
                           style: TextStyle(
                             fontFamily: 'Poppins',
                             fontSize: 14,
@@ -588,24 +777,247 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                             borderSide: BorderSide.none,
                           ),
                         ),
-                        iconStyleData: IconStyleData(
-                          icon: Icon(Icons.arrow_drop_down),
-                          iconSize: 24,
-                          iconEnabledColor: Theme.of(context).colorScheme.onBackground,
-                        ),
-                        // Ajuste via DropdownStyleData
-                        dropdownStyleData: DropdownStyleData(
-                          maxHeight: 200, // Altura máxima do menu
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.background,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-
                       ),
                     ),
                   ],
                 ),
+                const SizedBox(height: 16.0),
+                if (contaSelecionada != null) ...[
+                  Text(
+                    "Selecione as métricas:",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8.0),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          menuMaxHeight: 200,
+                          value: null,
+                          items: _metricsOptions.map((metric) {
+                            return DropdownMenuItem<String>(
+                              value: metric['id'],
+                              child: Text(
+                                metric['name']!,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.left,
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 12,
+                                  color: Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              _onMetricsDropdownChanged(value);
+                              _loadCampaignsIfNeeded();
+                            }
+                          },
+                          hint: Text(
+                            'Selecione as métricas',
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.left,
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 14,
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Theme.of(context).colorScheme.secondary,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            border: UnderlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8.0),
+                  Wrap(
+                    spacing: 8.0,
+                    runSpacing: 4.0,
+                    children: _selectedMetrics.map((m) {
+                      return Chip(
+                        backgroundColor: Theme.of(context).colorScheme.tertiary,
+                        label: Text(
+                          _getMetricName(m),
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
+                        ),
+                        side: BorderSide(color: Colors.transparent),
+                        onDeleted: () {
+                          setState(() {
+                            _selectedMetrics.remove(m);
+                            _metricsControllers[m]?.dispose();
+                            _metricsControllers.remove(m);
+                          });
+                          _loadCampaignsIfNeeded();
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ],
+                const SizedBox(height: 16.0),
+                if (needsCampaign && _campaignsList.isNotEmpty) ...[
+                  Text(
+                    "Selecione a campanha:",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8.0),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          menuMaxHeight: 200,
+                          value: _selectedCampaign,
+                          items: _campaignsList.map((camp) {
+                            return DropdownMenuItem<String>(
+                              value: camp['id'],
+                              child: Text(
+                                camp['name'],
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.left,
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 12,
+                                  color: Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedCampaign = value;
+                            });
+                          },
+                          hint: Text(
+                            'Selecione a campanha',
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.left,
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 14,
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Theme.of(context).colorScheme.secondary,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            border: UnderlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16.0),
+                ],
+                if (showDateAndInputs) ...[
+                  Text(
+                    "Selecione a data:",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8.0),
+                  TextFormField(
+                    controller: _dateController,
+                    readOnly: true,
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                    textAlignVertical: TextAlignVertical.center,
+                    textAlign: TextAlign.left,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Theme.of(context).colorScheme.secondary,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      border: UnderlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                      hintText: 'Selecione uma data',
+                      hintStyle: TextStyle(
+                        color: Theme.of(context).colorScheme.onSecondary,
+                      ),
+                      suffixIcon: IconButton(
+                        icon: Icon(Icons.date_range, color: Theme.of(context).colorScheme.onBackground),
+                        onPressed: _pickDate,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16.0),
+                  Text(
+                    "Preencha os valores para cada métrica selecionada:",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8.0),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: _selectedMetrics.map((m) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16.0),
+                        child: TextFormField(
+                          controller: _metricsControllers[m],
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            color: Theme.of(context).colorScheme.onSecondary,
+                          ),
+                          textAlignVertical: TextAlignVertical.center,
+                          textAlign: TextAlign.left,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Theme.of(context).colorScheme.secondary,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 15),
+                            border: UnderlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                            hintText: 'Valor para ${_getMetricName(m)}',
+                            hintStyle: TextStyle(
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
               ],
             ),
           ),
