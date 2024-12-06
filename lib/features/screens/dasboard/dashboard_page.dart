@@ -27,7 +27,7 @@ class _DashboardPageState extends State<DashboardPage> {
   DateRangePickerController();
 
   final String apiUrl =
-      "https://0ea6-2804-6fc-aeb7-7100-e52c-fd68-cf54-241c.ngrok-free.app/dynamic_insights";
+      "https://app-io-1c16f.uc.r.appspot.com/dynamic_insights";
 
   List<Map<String, dynamic>> adAccounts = [];
 
@@ -221,6 +221,9 @@ class _DashboardPageState extends State<DashboardPage> {
                 _buildFilters(),
                 const SizedBox(height: 20),
                 _buildMetricCards(),
+                const SizedBox(height: 20),
+                _buildGroupedCards(),
+                const SizedBox(height: 50),
               ],
             ),
           ),
@@ -559,6 +562,114 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  String _getFormattedValue(String key) {
+    final dynamic dataValue = initialInsightsData[key];
+
+    if (dataValue != null) {
+      final double numericValue = _parseToDouble(dataValue);
+      if (['spend', 'cost_per_inline_link_click', 'cpc'].contains(key)) {
+        // Formata como valor monetário
+        return NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$').format(numericValue);
+      } else {
+        // Formata como número com separador de milhares
+        return NumberFormat('#,##0', 'pt_BR').format(numericValue);
+      }
+    }
+    return '—'; // Valor padrão se não houver dados
+  }
+
+  Widget _buildGroupedCards() {
+    final List<Map<String, dynamic>> metrics = [
+      {
+        'title': 'Cliques no Link',
+        'key': 'inline_link_clicks',
+        'icon': FontAwesomeIcons.link
+      },
+      {
+        'title': 'Custo por Clique no Link',
+        'key': 'cost_per_inline_link_click',
+        'icon': FontAwesomeIcons.circleDollarToSlot
+      },
+      {
+        'title': 'Cliques (Todos)',
+        'key': 'clicks',
+        'icon': FontAwesomeIcons.computerMouse
+      },
+      {
+        'title': 'Custo por Clique (CPC - Todos)',
+        'key': 'cpc',
+        'icon': FontAwesomeIcons.coins
+      },
+    ];
+
+    final currencyFormatter =
+    NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+    final formatter = NumberFormat('#,##0', 'pt_BR');
+
+    return Card(
+      elevation: 6,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      color: Theme.of(context).colorScheme.secondary,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Column(
+              children: [
+                // Primeira linha de cards
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: _buildMetricCard(
+                        metrics[0]['title'],
+                        _getFormattedValue(metrics[0]['key']),
+                        metrics[0]['icon'],
+                      ),
+                    ),
+                    const SizedBox(width: 16), // Espaço entre os cards
+                    Expanded(
+                      child: _buildMetricCard(
+                        metrics[1]['title'],
+                        _getFormattedValue(metrics[1]['key']),
+                        metrics[1]['icon'],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16), // Espaço entre as linhas
+                // Segunda linha de cards
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: _buildMetricCard(
+                        metrics[2]['title'],
+                        _getFormattedValue(metrics[2]['key']),
+                        metrics[2]['icon'],
+                      ),
+                    ),
+                    const SizedBox(width: 16), // Espaço entre os cards
+                    Expanded(
+                      child: _buildMetricCard(
+                        metrics[3]['title'],
+                        _getFormattedValue(metrics[3]['key']),
+                        metrics[3]['icon'],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildMetricCards() {
     final List<Map<String, dynamic>> metrics = [
       {
@@ -579,47 +690,17 @@ class _DashboardPageState extends State<DashboardPage> {
       {
         'title': 'Custo por Resultado',
         'key': 'cost_per_result',
-        'icon': FontAwesomeIcons.circleDollarToSlot
-      },
-      {
-        'title': 'Visulização da página',
-        'key': 'PageView',
-        'icon': FontAwesomeIcons.circleDollarToSlot
-      },
-      {
-        'title': 'Registros Completos',
-        'key': 'CompleteRegistration',
-        'icon': FontAwesomeIcons.circleDollarToSlot
-      },
-      {
-        'title': 'Cliques no Link',
-        'key': 'inline_link_clicks',
-        'icon': FontAwesomeIcons.circleDollarToSlot
-      },
-      {
-        'title': 'Custo por Clique no Link',
-        'key': 'cost_per_inline_link_click',
-        'icon': FontAwesomeIcons.circleDollarToSlot
-      },
-      {
-        'title': 'Cliques (Todos)',
-        'key': 'clicks',
-        'icon': FontAwesomeIcons.circleDollarToSlot
-      },
-      {
-        'title': 'Custo por Clique (CPC - Todos)',
-        'key': 'cpc',
-        'icon': FontAwesomeIcons.circleDollarToSlot
+        'icon': FontAwesomeIcons.moneyBillTrendUp
       },
       {
         'title': 'Impressões',
         'key': 'impressions',
-        'icon': FontAwesomeIcons.circleDollarToSlot
+        'icon': FontAwesomeIcons.eye
       },
       {
         'title': 'Custo por Mil Pessoas Alcançadas (CPM)',
         'key': 'cpm',
-        'icon': FontAwesomeIcons.circleDollarToSlot
+        'icon': FontAwesomeIcons.sackDollar
       },
     ];
 
