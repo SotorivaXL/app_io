@@ -15,14 +15,17 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Sempre inicialize o Firebase, mesmo sem conexão
+  // Inicialize o Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
@@ -37,9 +40,12 @@ void main() async {
 
   if (Platform.isAndroid || Platform.isIOS) {
     SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp, // Permite apenas a orientação vertical
+      DeviceOrientation.portraitUp,
     ]);
   }
+
+  // Inicialize o Flutter Local Notifications
+  await initializeLocalNotifications();
 
   runApp(
     MultiProvider(
@@ -52,19 +58,35 @@ void main() async {
   );
 }
 
+Future<void> initializeLocalNotifications() async {
+  // Configuração para Android
+  const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+
+  // Configuração para iOS
+  const DarwinInitializationSettings iosSettings = DarwinInitializationSettings();
+
+  // Configuração geral
+  const InitializationSettings settings = InitializationSettings(
+    android: androidSettings,
+    iOS: iosSettings,
+  );
+
+  await flutterLocalNotificationsPlugin.initialize(settings);
+}
+
 class MyApp extends StatefulWidget {
   @override
   _MyAppState createState() => _MyAppState();
 }
 
 class _MyAppState extends State<MyApp> {
-  FirebaseMessaging? _firebaseMessaging; // Modificado para ser inicializado posteriormente
+  FirebaseMessaging? _firebaseMessaging;
 
   @override
   void initState() {
     super.initState();
 
-    // Inicialize o FirebaseMessaging após garantir que o Firebase foi inicializado
+    // Inicialize o FirebaseMessaging
     _initializeFirebaseMessaging();
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -75,33 +97,45 @@ class _MyAppState extends State<MyApp> {
     try {
       _firebaseMessaging = FirebaseMessaging.instance;
 
-      // Request permission for iOS
-      await _firebaseMessaging!.requestPermission();
+      // Solicitar permissão no iOS
+      NotificationSettings settings = await _firebaseMessaging!.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      print('Permissões de notificação: ${settings.authorizationStatus}');
 
-      // Get the token for this device and save it to Firestore
+      // Obter o token FCM e salvá-lo no Firestore
       _firebaseMessaging!.getToken().then((token) {
         if (token != null) {
           _saveTokenToFirestore(token);
         }
       });
 
-      // Listen for token refresh
+      // Escutar atualizações de token
       _firebaseMessaging!.onTokenRefresh.listen((newToken) {
         _saveTokenToFirestore(newToken);
       });
 
+      // Escutar notificações no foreground
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        print('Mensagem recebida: ${message.notification?.title}');
-        _showNotification(message.notification!.title, message.notification!.body);
+        print('Mensagem recebida no foreground: ${message.notification?.title}');
+        if (message.notification != null) {
+          _showNotification(
+            message.notification!.title,
+            message.notification!.body,
+            message.data,
+          );
+        }
       });
 
+      // Notificações quando o app é aberto a partir de uma notificação
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-        print('Message clicked!');
-        // Handle the logic when a notification is clicked and the app is opened
+        print('Notificação clicada: ${message.data}');
+        // Lógica ao abrir o app a partir da notificação
       });
     } catch (e) {
       print('Erro ao inicializar FirebaseMessaging: $e');
-      // Você pode definir uma flag para indicar que o FirebaseMessaging não foi inicializado
     }
   }
 
@@ -110,28 +144,32 @@ class _MyAppState extends State<MyApp> {
     final user = authProvider.user;
     if (user != null) {
       final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
-      await userDoc.update({
-        'fcmToken': token,
-      });
+      await userDoc.update({'fcmToken': token});
       print('Token atualizado no Firestore: $token');
     }
   }
 
-  void _showNotification(String? title, String? body) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(title ?? 'Notification'),
-        content: Text(body ?? 'You have received a new message.'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-            child: Text('OK'),
-          ),
-        ],
-      ),
+  void _showNotification(String? title, String? body, Map<String, dynamic> payload) {
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'high_importance_channel',
+      'Notificações importantes',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+
+    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails();
+
+    const NotificationDetails platformDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    flutterLocalNotificationsPlugin.show(
+      0, // ID da notificação
+      title, // Título
+      body, // Corpo
+      platformDetails,
+      payload: payload.toString(),
     );
   }
 
@@ -152,7 +190,6 @@ class _MyAppState extends State<MyApp> {
         const Locale('en', ''), // Inglês
         const Locale('pt', 'BR'), // Português Brasil
       ],
-      // Definimos a SplashScreen como a tela inicial
       home: SplashScreen(),
       routes: {
         '/tabBar': (context) => AuthGuard(child: CustomTabBarPage()),
@@ -162,7 +199,7 @@ class _MyAppState extends State<MyApp> {
         '/admin': (context) => AuthGuard(child: AdminPanelPage()),
       },
       onGenerateRoute: (settings) {
-        return null; // Deixe como null para usar `onUnknownRoute`
+        return null;
       },
       onUnknownRoute: (settings) {
         return MaterialPageRoute(

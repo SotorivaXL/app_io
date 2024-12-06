@@ -1,12 +1,11 @@
 import 'dart:async';
-
 import 'package:app_io/auth/providers/auth_provider.dart' as appProvider;
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';
 import 'package:app_io/util/services/firestore_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-// Removido: import 'package:dropdown_button2/dropdown_button2.dart';
+import 'package:dropdown_button2/dropdown_button2.dart'; // Reintroduza este import
 import 'package:provider/provider.dart';
 
 class DashboardConfigurations extends StatefulWidget {
@@ -18,17 +17,14 @@ class DashboardConfigurations extends StatefulWidget {
 }
 
 class _DashboardConfigurationsState extends State<DashboardConfigurations> {
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
-  _userDocSubscription;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userDocSubscription;
   bool hasConfigurarDashAccess = false;
   bool isLoading = true;
   bool _hasShownPermissionRevokedDialog = false;
   final FirestoreService _firestoreService = FirestoreService();
 
-  final Map<String, dynamic> anuncios = {
-    'BMs': [],
-    'contasAnuncio': [],
-  };
+  String? bmSelecionada;
+  String? contaSelecionada;
 
   String? empresaSelecionada;
   List<Map<String, dynamic>> contasAnuncioList = [];
@@ -37,65 +33,43 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
   bool _isLoading = false;
 
   Future<List<Map<String, dynamic>>> _fetchBMs() async {
-    final dashboardCollection =
-    FirebaseFirestore.instance.collection('dashboard');
+    final dashboardCollection = FirebaseFirestore.instance.collection('dashboard');
     final snapshot = await dashboardCollection.get();
     return snapshot.docs
         .map((doc) => {'id': doc.id, 'name': doc['name']})
         .toList();
   }
 
-  Future<List<Map<String, dynamic>>> _fetchContasAnuncioPorBM(
-      String bmId) async {
-    final dashboardDoc =
-    FirebaseFirestore.instance.collection('dashboard').doc(bmId);
-    final contasSnapshot =
-    await dashboardDoc.collection('contasAnuncio').get();
+  Future<List<Map<String, dynamic>>> _fetchContasAnuncioPorBM(String bmId) async {
+    final dashboardDoc = FirebaseFirestore.instance.collection('dashboard').doc(bmId);
+    final contasSnapshot = await dashboardDoc.collection('contasAnuncio').get();
     return contasSnapshot.docs
         .map((subDoc) => {'id': subDoc.id, 'name': subDoc['name']})
         .toList();
   }
 
   Future<void> _updateContasAnuncioList() async {
-    List<Map<String, dynamic>> newContasAnuncioList = [];
-
-    // Coletar futures para buscar as contas de anúncio de todas as BMs selecionadas
-    List<Future<List<Map<String, dynamic>>>> futures = [];
-
-    for (var bm in anuncios['BMs']) {
-      String bmId = bm['id'];
-      futures.add(_fetchContasAnuncioPorBM(bmId));
-    }
-
-    // Aguardar todas as buscas terminarem
-    List<List<Map<String, dynamic>>> results = await Future.wait(futures);
-
-    // Combinar todas as contas de anúncio
-    for (var contas in results) {
-      newContasAnuncioList.addAll(contas);
-    }
-
-    // Remover duplicatas
-    final ids = <String>{};
-    newContasAnuncioList =
-        newContasAnuncioList.where((conta) => ids.add(conta['id'])).toList();
-
-    if (mounted) {
+    if (bmSelecionada == null) {
       setState(() {
-        contasAnuncioList = newContasAnuncioList;
-        // Atualizar 'anuncios['contasAnuncio']' para remover contas que não estão mais disponíveis
-        final availableIds =
-        newContasAnuncioList.map((conta) => conta['id']).toSet();
-        anuncios['contasAnuncio'] = anuncios['contasAnuncio']
-            .where((conta) => availableIds.contains(conta['id']))
-            .toList();
+        contasAnuncioList = [];
+        contaSelecionada = null;
       });
+      return;
     }
+
+    final newContasAnuncioList = await _fetchContasAnuncioPorBM(bmSelecionada!);
+
+    setState(() {
+      contasAnuncioList = newContasAnuncioList;
+      if (contaSelecionada != null &&
+          !contasAnuncioList.any((c) => c['id'] == contaSelecionada)) {
+        contaSelecionada = null;
+      }
+    });
   }
 
   Future<List<Map<String, dynamic>>> _fetchEmpresas() async {
-    final empresasCollection =
-    FirebaseFirestore.instance.collection('empresas');
+    final empresasCollection = FirebaseFirestore.instance.collection('empresas');
     final snapshot = await empresasCollection.get();
     return snapshot.docs
         .map((doc) => {'id': doc.id, 'NomeEmpresa': doc['NomeEmpresa']})
@@ -121,14 +95,11 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
       return;
     }
 
-    // Preparar dados para salvar
     final dataToSave = {
-      'BMs': anuncios['BMs'].map((bm) => bm['id']).toList(),
-      'contasAnuncio':
-      anuncios['contasAnuncio'].map((conta) => conta['id']).toList(),
+      'BMs': bmSelecionada != null ? [bmSelecionada] : [],
+      'contasAnuncio': contaSelecionada != null ? [contaSelecionada] : [],
     };
 
-    // Salvar no Firestore no documento do usuário selecionado
     try {
       await FirebaseFirestore.instance
           .collection('empresas')
@@ -159,7 +130,6 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
     }
   }
 
-  // Função adicionada para carregar as configurações salvas
   Future<void> _loadAnunciosParaEmpresa(String empresaId) async {
     final empresaDoc = await FirebaseFirestore.instance
         .collection('empresas')
@@ -171,40 +141,18 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
       final bmIds = List<String>.from(data['BMs'] ?? []);
       final contaIds = List<String>.from(data['contasAnuncio'] ?? []);
 
-      // Fetch all BMs
-      final allBMs = await _fetchBMs();
-      final bmMap = {for (var bm in allBMs) bm['id']: bm['name']};
-
-      // Atualizar anuncios['BMs']
-      setState(() {
-        anuncios['BMs'] = bmIds
-            .map((id) => {'id': id, 'name': bmMap[id] ?? 'BM desconhecida'})
-            .toList();
-      });
-
-      // Atualizar contasAnuncioList com base nas BMs selecionadas
+      bmSelecionada = bmIds.isNotEmpty ? bmIds.first : null;
       await _updateContasAnuncioList();
-
-      // Criar um mapa de contasAnuncio disponíveis
-      final contaMap = {
-        for (var conta in contasAnuncioList) conta['id']: conta['name']
-      };
-
-      // Atualizar anuncios['contasAnuncio']
-      setState(() {
-        anuncios['contasAnuncio'] = contaIds
-            .map((id) =>
-        {'id': id, 'name': contaMap[id] ?? 'Conta desconhecida'})
-            .toList();
-      });
+      contaSelecionada = contaIds.isNotEmpty ? contaIds.first : null;
     } else {
-      // Se não houver configurações salvas para a empresa
       setState(() {
-        anuncios['BMs'] = [];
-        anuncios['contasAnuncio'] = [];
+        bmSelecionada = null;
+        contaSelecionada = null;
         contasAnuncioList = [];
       });
     }
+
+    if (mounted) setState(() {});
   }
 
   @override
@@ -218,13 +166,11 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
       isLoading = true;
     });
 
-    final authProvider =
-    Provider.of<appProvider.AuthProvider>(context, listen: false);
+    final authProvider = Provider.of<appProvider.AuthProvider>(context, listen: false);
     final user = authProvider.user;
 
     if (user != null) {
       try {
-        // Verifica se o documento existe na coleção 'empresas'
         DocumentSnapshot<Map<String, dynamic>> userDoc = await FirebaseFirestore
             .instance
             .collection('empresas')
@@ -234,7 +180,6 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
         if (userDoc.exists) {
           _listenToUserDocument('empresas', user.uid);
         } else {
-          // Se não existir em 'empresas', verifica em 'users'
           userDoc = await FirebaseFirestore.instance
               .collection('users')
               .doc(user.uid)
@@ -360,7 +305,6 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
             },
           );
 
-          // Após o diálogo ser fechado, redirecionar o usuário
           if (mounted) {
             Navigator.pushReplacement(
               context,
@@ -370,8 +314,7 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
         });
       }
     } else {
-      _hasShownPermissionRevokedDialog =
-      false; // Reseta a flag se a permissão voltar
+      _hasShownPermissionRevokedDialog = false;
     }
   }
 
@@ -383,9 +326,6 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
 
   @override
   Widget build(BuildContext context) {
-    // Defina a largura desejada para os menus suspensos
-    const double dropdownWidth = 200.0;
-
     double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
 
     return ConnectivityBanner(
@@ -400,7 +340,6 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Botão de voltar e título
                   Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -441,7 +380,6 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                       ),
                     ],
                   ),
-                  // Stack na direita
                   Stack(
                     children: [
                       _isLoading
@@ -466,32 +404,27 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
           padding: const EdgeInsets.all(20.0),
           child: SingleChildScrollView(
             child: Column(
-              mainAxisSize:
-              MainAxisSize.min, // Ocupa apenas o espaço necessário
-              crossAxisAlignment:
-              CrossAxisAlignment.start, // Alinha o conteúdo à esquerda
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 FutureBuilder<List<Map<String, dynamic>>>(
                   future: _fetchEmpresas(),
                   builder: (context, snapshot) {
-                    if (!snapshot.hasData)
-                      return const CircularProgressIndicator();
+                    if (!snapshot.hasData) return const CircularProgressIndicator();
                     return Row(
                       children: [
                         Expanded(
-                          child: DropdownButtonFormField<String>(
+                          child: DropdownButtonFormField2<String>(
                             value: empresaSelecionada,
                             items: snapshot.data!.map((empresa) {
                               return DropdownMenuItem<String>(
-                                value: empresa['id'] as String,
+                                value: empresa['id'],
                                 child: Text(
                                   empresa['NomeEmpresa'],
                                   style: TextStyle(
                                     fontFamily: 'Poppins',
                                     fontSize: 12,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary,
+                                    color: Theme.of(context).colorScheme.onSecondary,
                                   ),
                                 ),
                               );
@@ -509,26 +442,33 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontFamily: 'Poppins',
-                                fontSize: 15,
-                                color:
-                                Theme.of(context).colorScheme.onSecondary,
+                                fontSize: 14,
+                                color: Theme.of(context).colorScheme.onSecondary,
                               ),
                             ),
                             decoration: InputDecoration(
                               filled: true,
                               fillColor: Theme.of(context).colorScheme.secondary,
-                              contentPadding: EdgeInsets.symmetric(
-                                  horizontal: 20, vertical: 0),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                               border: UnderlineInputBorder(
                                 borderRadius: BorderRadius.circular(10),
                                 borderSide: BorderSide.none,
                               ),
                             ),
-                            icon: Icon(Icons.arrow_drop_down,
-                                color: Theme.of(context).colorScheme.onSecondary),
-                            dropdownColor: Theme.of(context)
-                                .colorScheme
-                                .background, // Cor de fundo do dropdown
+                            // Ajuste via IconStyleData
+                            iconStyleData: IconStyleData(
+                              icon: Icon(Icons.arrow_drop_down),
+                              iconSize: 24,
+                              iconEnabledColor: Theme.of(context).colorScheme.onBackground,
+                            ),
+                            // Ajuste via DropdownStyleData
+                            dropdownStyleData: DropdownStyleData(
+                              maxHeight: 200, // Altura máxima do menu
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.background,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -539,24 +479,21 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                 FutureBuilder<List<Map<String, dynamic>>>(
                   future: _fetchBMs(),
                   builder: (context, snapshot) {
-                    if (!snapshot.hasData)
-                      return const CircularProgressIndicator();
+                    if (!snapshot.hasData) return const CircularProgressIndicator();
                     return Row(
                       children: [
                         Expanded(
-                          child: DropdownButtonFormField<String>(
-                            value: null,
+                          child: DropdownButtonFormField2<String>(
+                            value: bmSelecionada,
                             items: snapshot.data!.map((bm) {
                               return DropdownMenuItem<String>(
-                                value: bm['id'] as String,
+                                value: bm['id'],
                                 child: Text(
                                   bm['name'],
                                   style: TextStyle(
                                     fontFamily: 'Poppins',
                                     fontSize: 12,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary,
+                                    color: Theme.of(context).colorScheme.onSecondary,
                                   ),
                                 ),
                               );
@@ -564,87 +501,64 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                             onChanged: (value) {
                               if (value != null) {
                                 setState(() {
-                                  // Verifica se a BM já está selecionada
-                                  if (!anuncios['BMs']
-                                      .any((bm) => bm['id'] == value)) {
-                                    anuncios['BMs'].add({
-                                      'id': value,
-                                      'name': snapshot.data!
-                                          .firstWhere(
-                                              (bm) => bm['id'] == value)['name'],
-                                    });
-                                    // Atualiza a lista de contas de anúncio
-                                    _updateContasAnuncioList();
-                                  }
+                                  bmSelecionada = value;
+                                  _updateContasAnuncioList();
                                 });
                               }
                             },
                             hint: Text(
-                              'Selecione as BMs',
+                              'Selecione a BM',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontFamily: 'Poppins',
-                                fontSize: 15,
-                                color:
-                                Theme.of(context).colorScheme.onSecondary,
+                                fontSize: 14,
+                                color: Theme.of(context).colorScheme.onSecondary,
                               ),
                             ),
                             decoration: InputDecoration(
                               filled: true,
                               fillColor: Theme.of(context).colorScheme.secondary,
-                              contentPadding: EdgeInsets.symmetric(
-                                  horizontal: 20, vertical: 0),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                               border: UnderlineInputBorder(
                                 borderRadius: BorderRadius.circular(10),
                                 borderSide: BorderSide.none,
                               ),
                             ),
-                            icon: Icon(Icons.arrow_drop_down,
-                                color: Theme.of(context).colorScheme.onSecondary),
-                            dropdownColor:
-                            Theme.of(context).colorScheme.background,
+                            iconStyleData: IconStyleData(
+                              icon: Icon(Icons.arrow_drop_down),
+                              iconSize: 24,
+                              iconEnabledColor: Theme.of(context).colorScheme.onBackground,
+                            ),
+                            // Ajuste via DropdownStyleData
+                            dropdownStyleData: DropdownStyleData(
+                              maxHeight: 200, // Altura máxima do menu
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.background,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+
                           ),
                         ),
                       ],
                     );
                   },
                 ),
-                const SizedBox(height: 8.0),
-                Wrap(
-                  spacing: 8.0, // Espaçamento horizontal entre os chips
-                  runSpacing: 4.0, // Espaçamento vertical entre as linhas
-                  children: anuncios['BMs']
-                      .map<Widget>((bm) => Chip(
-                    backgroundColor:
-                    Theme.of(context).colorScheme.tertiary,
-                    side: BorderSide.none,
-                    label: Text(bm['name']),
-                    onDeleted: () {
-                      setState(() {
-                        anuncios['BMs'].remove(bm);
-                        // Atualiza a lista de contas de anúncio
-                        _updateContasAnuncioList();
-                      });
-                    },
-                  ))
-                      .toList(),
-                ),
                 const SizedBox(height: 16.0),
                 Row(
                   children: [
                     Expanded(
-                      child: DropdownButtonFormField<String>(
-                        value: null,
+                      child: DropdownButtonFormField2<String>(
+                        value: contaSelecionada,
                         items: contasAnuncioList.map((conta) {
                           return DropdownMenuItem<String>(
-                            value: conta['id'] as String,
+                            value: conta['id'],
                             child: Text(
                               conta['name'],
                               style: TextStyle(
                                 fontFamily: 'Poppins',
                                 fontSize: 12,
-                                color:
-                                Theme.of(context).colorScheme.onSecondary,
+                                color: Theme.of(context).colorScheme.onSecondary,
                               ),
                             ),
                           );
@@ -652,62 +566,45 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                         onChanged: (value) {
                           if (value != null) {
                             setState(() {
-                              // Verifica se a conta já está selecionada
-                              if (!anuncios['contasAnuncio']
-                                  .any((conta) => conta['id'] == value)) {
-                                anuncios['contasAnuncio'].add({
-                                  'id': value,
-                                  'name': contasAnuncioList
-                                      .firstWhere(
-                                          (conta) => conta['id'] == value)['name'],
-                                });
-                              }
+                              contaSelecionada = value;
                             });
                           }
                         },
                         hint: Text(
-                          'Selecione as contas de anúncio',
+                          'Selecione a conta de anúncio',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontFamily: 'Poppins',
-                            fontSize: 15,
+                            fontSize: 14,
                             color: Theme.of(context).colorScheme.onSecondary,
                           ),
                         ),
                         decoration: InputDecoration(
                           filled: true,
                           fillColor: Theme.of(context).colorScheme.secondary,
-                          contentPadding:
-                          EdgeInsets.symmetric(horizontal: 20, vertical: 0),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                           border: UnderlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                             borderSide: BorderSide.none,
                           ),
                         ),
-                        icon: Icon(Icons.arrow_drop_down,
-                            color: Theme.of(context).colorScheme.onSecondary),
-                        dropdownColor: Theme.of(context).colorScheme.background,
+                        iconStyleData: IconStyleData(
+                          icon: Icon(Icons.arrow_drop_down),
+                          iconSize: 24,
+                          iconEnabledColor: Theme.of(context).colorScheme.onBackground,
+                        ),
+                        // Ajuste via DropdownStyleData
+                        dropdownStyleData: DropdownStyleData(
+                          maxHeight: 200, // Altura máxima do menu
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.background,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 8.0),
-                Wrap(
-                  spacing: 8.0, // Espaçamento horizontal entre os chips
-                  runSpacing: 4.0, // Espaçamento vertical entre as linhas
-                  children: anuncios['contasAnuncio']
-                      .map<Widget>((conta) => Chip(
-                    backgroundColor:
-                    Theme.of(context).colorScheme.tertiary,
-                    side: BorderSide.none,
-                    label: Text(conta['name']),
-                    onDeleted: () {
-                      setState(() {
-                        anuncios['contasAnuncio'].remove(conta);
-                      });
-                    },
-                  ))
-                      .toList(),
                 ),
               ],
             ),

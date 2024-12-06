@@ -5,7 +5,6 @@ import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner
 import 'package:app_io/util/CustomWidgets/CustomDropDown/custom_dropDown.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -28,7 +27,7 @@ class _DashboardPageState extends State<DashboardPage> {
   DateRangePickerController();
 
   final String apiUrl =
-      "https://bf0a-2804-6fc-aeb7-7100-83e-feab-93d3-21c7.ngrok-free.app/dynamic_insights";
+      "https://0ea6-2804-6fc-aeb7-7100-e52c-fd68-cf54-241c.ngrok-free.app/dynamic_insights";
 
   List<Map<String, dynamic>> adAccounts = [];
 
@@ -227,18 +226,6 @@ class _DashboardPageState extends State<DashboardPage> {
                 _buildFilters(),
                 const SizedBox(height: 20),
                 _buildMetricCards(),
-                const SizedBox(height: 20),
-                _buildClicksReachImpressionsChart(),
-                const SizedBox(height: 20),
-                _buildSpendPercentageChart(),
-                const SizedBox(height: 20),
-                _buildCPCvsCPMChart(),
-                const SizedBox(height: 20),
-                _buildEngagementChart(),
-                const SizedBox(height: 20),
-                _buildInlineLinkClicksChart(),
-                const SizedBox(height: 20),
-                _buildClicksCPCCPMChart(),
               ],
             ),
           ),
@@ -562,7 +549,6 @@ class _DashboardPageState extends State<DashboardPage> {
                         final insights = await _fetchMetaInsights(
                             id, level, dataInicial, dataFinal);
                         final pixelData =
-                        await _fetchPixelData(id, dataInicial, dataFinal);
 
                         // Exibe os dados de insights da Meta em prints separados
                         print('\n--- Dados de Insights Recuperados ---');
@@ -570,11 +556,6 @@ class _DashboardPageState extends State<DashboardPage> {
                           print('$key: $value');
                         });
 
-                        // Exibe os dados do Pixel em prints separados
-                        print('\n--- Dados do Pixel Recuperados ---');
-                        pixelData.forEach((key, value) {
-                          print('$key: $value');
-                        });
                       } catch (e) {
                         print('Erro ao buscar dados: $e');
                       }
@@ -604,12 +585,52 @@ class _DashboardPageState extends State<DashboardPage> {
       },
       {
         'title': 'Resultado',
-        'key': 'results',
+        'key': 'CompleteRegistration',
         'icon': FontAwesomeIcons.filterCircleDollar
       },
       {
         'title': 'Custo por Resultado',
         'key': 'cost_per_result',
+        'icon': FontAwesomeIcons.circleDollarToSlot
+      },
+      {
+        'title': 'Visulização da página',
+        'key': 'PageView',
+        'icon': FontAwesomeIcons.circleDollarToSlot
+      },
+      {
+        'title': 'Registros Completos',
+        'key': 'CompleteRegistration',
+        'icon': FontAwesomeIcons.circleDollarToSlot
+      },
+      {
+        'title': 'Cliques no Link',
+        'key': 'inline_link_clicks',
+        'icon': FontAwesomeIcons.circleDollarToSlot
+      },
+      {
+        'title': 'Custo por Clique no Link',
+        'key': 'cost_per_inline_link_click',
+        'icon': FontAwesomeIcons.circleDollarToSlot
+      },
+      {
+        'title': 'Cliques (Todos)',
+        'key': 'clicks',
+        'icon': FontAwesomeIcons.circleDollarToSlot
+      },
+      {
+        'title': 'Custo por Clique (CPC - Todos)',
+        'key': 'cpc',
+        'icon': FontAwesomeIcons.circleDollarToSlot
+      },
+      {
+        'title': 'Impressões',
+        'key': 'impressions',
+        'icon': FontAwesomeIcons.circleDollarToSlot
+      },
+      {
+        'title': 'Custo por Mil Pessoas Alcançadas (CPM)',
+        'key': 'cpm',
         'icon': FontAwesomeIcons.circleDollarToSlot
       },
     ];
@@ -636,6 +657,7 @@ class _DashboardPageState extends State<DashboardPage> {
               double numericValue = _parseToDouble(dataValue);
               if (metric['key'] == 'spend' ||
                   metric['key'] == 'cpm' ||
+                  metric['key'] == 'cost_per_inline_link_click' ||
                   metric['key'] == 'cpc') {
                 value = currencyFormatter.format(numericValue);
               } else {
@@ -689,624 +711,6 @@ class _DashboardPageState extends State<DashboardPage> {
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: Theme.of(context).colorScheme.onBackground,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildClicksReachImpressionsChart() {
-    if (initialInsightsData.isEmpty) {
-      return SizedBox(); // Ou exiba um indicador de carregamento ou mensagem
-    }
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      color: Theme.of(context).colorScheme.secondary,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              'Cliques, Alcance e Impressões',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onBackground,
-              ),
-            ),
-            const SizedBox(height: 10),
-            AspectRatio(
-              aspectRatio: 1.5,
-              child: Center(
-                child: BarChart(
-                  BarChartData(
-                    alignment: BarChartAlignment.spaceEvenly,
-                    maxY: _getMaxYValue([
-                      _parseToDouble(initialInsightsData['clicks']),
-                      _parseToDouble(initialInsightsData['reach']),
-                      _parseToDouble(initialInsightsData['impressions']),
-                    ]),
-                    barGroups: [
-                      BarChartGroupData(
-                        x: 0,
-                        barRods: [
-                          BarChartRodData(
-                            toY: _parseToDouble(initialInsightsData['clicks']),
-                            color: Colors.blueAccent,
-                            width: 20,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ],
-                      ),
-                      BarChartGroupData(
-                        x: 1,
-                        barRods: [
-                          BarChartRodData(
-                            toY: _parseToDouble(initialInsightsData['reach']),
-                            color: Colors.greenAccent,
-                            width: 20,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ],
-                      ),
-                      BarChartGroupData(
-                        x: 2,
-                        barRods: [
-                          BarChartRodData(
-                            toY: _parseToDouble(
-                                initialInsightsData['impressions']),
-                            color: Colors.purpleAccent,
-                            width: 20,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ],
-                      ),
-                    ],
-                    titlesData: FlTitlesData(
-                      show: true,
-                      bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: 32,
-                          getTitlesWidget: (value, meta) {
-                            switch (value.toInt()) {
-                              case 0:
-                                return Text('Cliques');
-                              case 1:
-                                return Text('Alcance');
-                              case 2:
-                                return Text('Impressões');
-                              default:
-                                return Text('');
-                            }
-                          },
-                        ),
-                      ),
-                      leftTitles: AxisTitles(
-                        sideTitles: SideTitles(showTitles: false),
-                      ),
-                      rightTitles: AxisTitles(
-                        sideTitles: SideTitles(showTitles: false),
-                      ),
-                      topTitles: AxisTitles(
-                        sideTitles: SideTitles(showTitles: false),
-                      ),
-                    ),
-                    gridData: FlGridData(show: false),
-                    borderData: FlBorderData(show: false),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-// Função para calcular o valor máximo do eixo Y
-  double _getMaxYValue(List<dynamic> values) {
-    double max = 0;
-    for (var value in values) {
-      double val = _parseToDouble(value);
-      if (val > max) {
-        max = val;
-      }
-    }
-    return max * 1.1; // Adiciona um buffer de 10% ao valor máximo
-  }
-
-  Widget _buildSpendPercentageChart() {
-    if (initialInsightsData.isEmpty) {
-      return SizedBox(); // Ou exiba um indicador de carregamento ou mensagem
-    }
-
-    // Converte todos os valores para double de forma segura
-    double totalSpend = _parseToDouble(initialInsightsData['spend']);
-    double cpcValue = _parseToDouble(initialInsightsData['cpc']);
-    double clicksValue = _parseToDouble(initialInsightsData['clicks']);
-    double cpmValue = _parseToDouble(initialInsightsData['cpm']);
-    double impressionsValue =
-    _parseToDouble(initialInsightsData['impressions']);
-    double costPerInlineLinkClick =
-    _parseToDouble(initialInsightsData['cost_per_inline_link_click']);
-    double inlineLinkClicks =
-    _parseToDouble(initialInsightsData['inline_link_clicks']);
-
-    double cpcSpend = cpcValue * clicksValue;
-    double cpmSpend = (cpmValue * impressionsValue) / 1000;
-    double costPerLinkClickSpend = costPerInlineLinkClick * inlineLinkClicks;
-
-    double cpcPercentage = totalSpend > 0 ? (cpcSpend / totalSpend) * 100 : 0.0;
-    double cpmPercentage = totalSpend > 0 ? (cpmSpend / totalSpend) * 100 : 0.0;
-    double costPerLinkClickPercentage =
-    totalSpend > 0 ? (costPerLinkClickSpend / totalSpend) * 100 : 0.0;
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      color: Theme.of(context).colorScheme.secondary,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              'Percentual de Gastos',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onBackground,
-              ),
-            ),
-            const SizedBox(height: 10),
-            AspectRatio(
-              aspectRatio: 1.5,
-              child: PieChart(
-                PieChartData(
-                  sections: [
-                    PieChartSectionData(
-                      color: Colors.blueAccent,
-                      value: cpcPercentage,
-                      title: 'CPC (${cpcPercentage.toStringAsFixed(1)}%)',
-                      radius: 50,
-                      titleStyle: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    PieChartSectionData(
-                      color: Colors.greenAccent,
-                      value: cpmPercentage,
-                      title: 'CPM (${cpmPercentage.toStringAsFixed(1)}%)',
-                      radius: 50,
-                      titleStyle: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    PieChartSectionData(
-                      color: Colors.redAccent,
-                      value: costPerLinkClickPercentage,
-                      title:
-                      'Custo por Clique (${costPerLinkClickPercentage.toStringAsFixed(1)}%)',
-                      radius: 50,
-                      titleStyle: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                  sectionsSpace: 2,
-                  centerSpaceRadius: 40,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCPCvsCPMChart() {
-    if (initialInsightsData.isEmpty) {
-      return SizedBox(); // Ou exiba um indicador de carregamento ou mensagem
-    }
-
-    // Converte os valores de forma segura
-    double cpcValue = _parseToDouble(initialInsightsData['cpc']);
-    double cpmValue = _parseToDouble(initialInsightsData['cpm']);
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      color: Theme.of(context).colorScheme.secondary,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              'CPC vs. CPM',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onBackground,
-              ),
-            ),
-            const SizedBox(height: 10),
-            AspectRatio(
-              aspectRatio: 1.5,
-              child: BarChart(
-                BarChartData(
-                  alignment: BarChartAlignment.spaceEvenly,
-                  maxY: _getMaxYValue([cpcValue, cpmValue]),
-                  barGroups: [
-                    BarChartGroupData(
-                      x: 0,
-                      barRods: [
-                        BarChartRodData(
-                          toY: cpcValue,
-                          color: Colors.tealAccent,
-                          width: 20,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ],
-                    ),
-                    BarChartGroupData(
-                      x: 1,
-                      barRods: [
-                        BarChartRodData(
-                          toY: cpmValue,
-                          color: Colors.indigoAccent,
-                          width: 20,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ],
-                    ),
-                  ],
-                  titlesData: FlTitlesData(
-                    show: true,
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 32,
-                        getTitlesWidget: (value, meta) {
-                          switch (value.toInt()) {
-                            case 0:
-                              return Text('CPC');
-                            case 1:
-                              return Text('CPM');
-                            default:
-                              return Text('');
-                          }
-                        },
-                      ),
-                    ),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    rightTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    topTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                  ),
-                  gridData: FlGridData(show: false),
-                  borderData: FlBorderData(show: false),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEngagementChart() {
-    if (initialInsightsData.isEmpty) {
-      return SizedBox(); // Ou exiba um indicador de carregamento ou mensagem
-    }
-
-    double inlineLinkClicks =
-    _parseToDouble(initialInsightsData['inline_link_clicks']);
-    double inlinePostEngagement =
-    _parseToDouble(initialInsightsData['inline_post_engagement']);
-    double totalEngagement = inlineLinkClicks + inlinePostEngagement;
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      color: Theme.of(context).colorScheme.secondary,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              'Engajamento Total',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onBackground,
-              ),
-            ),
-            const SizedBox(height: 10),
-            AspectRatio(
-              aspectRatio: 1.5,
-              child: BarChart(
-                BarChartData(
-                  alignment: BarChartAlignment.center,
-                  maxY: totalEngagement * 1.1,
-                  barGroups: [
-                    BarChartGroupData(
-                      x: 0,
-                      barRods: [
-                        BarChartRodData(
-                          toY: totalEngagement,
-                          rodStackItems: [
-                            BarChartRodStackItem(
-                                0, inlineLinkClicks, Colors.orangeAccent),
-                            BarChartRodStackItem(inlineLinkClicks,
-                                totalEngagement, Colors.pinkAccent),
-                          ],
-                          width: 40.0,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ],
-                    ),
-                  ],
-                  titlesData: FlTitlesData(
-                    show: true,
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 32,
-                        getTitlesWidget: (value, meta) {
-                          return Text('Engajamento');
-                        },
-                      ),
-                    ),
-                    leftTitles:
-                    AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles:
-                    AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    topTitles:
-                    AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  ),
-                  gridData: FlGridData(show: false),
-                  borderData: FlBorderData(show: false),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInlineLinkClicksChart() {
-    if (initialInsightsData.isEmpty) {
-      return SizedBox(); // Ou exiba um indicador de carregamento ou mensagem
-    }
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      color: Theme.of(context).colorScheme.secondary,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              'Clicks em Links vs. Custo por Clique',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onBackground,
-              ),
-            ),
-            const SizedBox(height: 10),
-            AspectRatio(
-              aspectRatio: 1.5,
-              child: BarChart(
-                BarChartData(
-                  alignment: BarChartAlignment.spaceAround,
-                  maxY: _getMaxYValue([
-                    initialInsightsData['inline_link_clicks'],
-                    initialInsightsData['cost_per_inline_link_click'],
-                  ]),
-                  barGroups: [
-                    BarChartGroupData(
-                      x: 0,
-                      barRods: [
-                        BarChartRodData(
-                          toY: initialInsightsData['inline_link_clicks']
-                              ?.toDouble() ??
-                              0,
-                          color: Colors.blueAccent,
-                          width: 20,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ],
-                      showingTooltipIndicators: [0],
-                    ),
-                    BarChartGroupData(
-                      x: 1,
-                      barRods: [
-                        BarChartRodData(
-                          toY: initialInsightsData['cost_per_inline_link_click']
-                              ?.toDouble() ??
-                              0,
-                          color: Colors.redAccent,
-                          width: 20,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ],
-                      showingTooltipIndicators: [0],
-                    ),
-                  ],
-                  titlesData: FlTitlesData(
-                    show: true,
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 32,
-                        getTitlesWidget: (value, meta) {
-                          switch (value.toInt()) {
-                            case 0:
-                              return Text('Clicks em Links');
-                            case 1:
-                              return Text('Custo por Clique');
-                            default:
-                              return Text('');
-                          }
-                        },
-                      ),
-                    ),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    rightTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    topTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                  ),
-                  gridData: FlGridData(show: false),
-                  borderData: FlBorderData(show: false),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildClicksCPCCPMChart() {
-    if (initialInsightsData.isEmpty) {
-      return SizedBox(); // Exibe vazio caso não haja dados
-    }
-
-    // Converte os valores de forma segura
-    double clicks = _parseToDouble(initialInsightsData['clicks']);
-    double cpc = _parseToDouble(initialInsightsData['cpc']);
-    double cpm = _parseToDouble(initialInsightsData['cpm']);
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      color: Theme.of(context).colorScheme.secondary,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              'Clicks, CPC e CPM',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onBackground,
-              ),
-            ),
-            const SizedBox(height: 10),
-            AspectRatio(
-              aspectRatio: 1.5,
-              child: BarChart(
-                BarChartData(
-                  alignment: BarChartAlignment.spaceEvenly,
-                  maxY: _getMaxYValue([clicks, cpc, cpm]),
-                  barGroups: [
-                    BarChartGroupData(
-                      x: 0,
-                      barRods: [
-                        BarChartRodData(
-                          toY: clicks,
-                          color: Colors.blueAccent,
-                          width: 20,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ],
-                    ),
-                    BarChartGroupData(
-                      x: 1,
-                      barRods: [
-                        BarChartRodData(
-                          toY: cpc,
-                          color: Colors.greenAccent,
-                          width: 20,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ],
-                    ),
-                    BarChartGroupData(
-                      x: 2,
-                      barRods: [
-                        BarChartRodData(
-                          toY: cpm,
-                          color: Colors.purpleAccent,
-                          width: 20,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ],
-                    ),
-                  ],
-                  titlesData: FlTitlesData(
-                    show: true,
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 32,
-                        getTitlesWidget: (value, meta) {
-                          switch (value.toInt()) {
-                            case 0:
-                              return Text('Clicks');
-                            case 1:
-                              return Text('CPC');
-                            case 2:
-                              return Text('CPM');
-                            default:
-                              return Text('');
-                          }
-                        },
-                      ),
-                    ),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    rightTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    topTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                  ),
-                  gridData: FlGridData(show: false),
-                  borderData: FlBorderData(show: false),
-                ),
               ),
             ),
           ],
@@ -1829,39 +1233,6 @@ class _DashboardPageState extends State<DashboardPage> {
       }
     } catch (e) {
       print('Erro ao buscar insights da API: $e');
-      throw e;
-    }
-  }
-
-  Future<Map<String, dynamic>> _fetchPixelData(
-      String id, String startDate, String endDate) async {
-    try {
-      final response = await http.post(
-        Uri.parse(apiUrl),
-        headers: {"Content-Type": "application/json"},
-        body: json.encode({
-          "id": id,
-          "level": "account", // Pixel está vinculado a nível de conta
-          "start_date": startDate,
-          "end_date": endDate,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'success') {
-          return {
-            'pixel_data': data['data']['pixel_data'] ?? [],
-          };
-        } else {
-          throw Exception('Erro: ${data['data']}');
-        }
-      } else {
-        throw Exception(
-            'Erro na API: ${response.statusCode} - ${response.body}');
-      }
-    } catch (e) {
-      print('Erro ao buscar dados do Pixel da API: $e');
       throw e;
     }
   }

@@ -466,7 +466,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                         color: Theme.of(context).colorScheme.onSecondary,
                         iconSize: 30,
                         onPressed: () async {
-                          _showNotificationsSidebar(context);
+                          // _showNotificationsSidebar(context);
                         },
                       ),
                       Positioned(

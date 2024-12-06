@@ -33,6 +33,8 @@ class _LeadsPageState extends State<LeadsPage> {
 
   final ScrollController _scrollController = ScrollController();
 
+  final TextEditingController _searchController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -94,14 +96,43 @@ class _LeadsPageState extends State<LeadsPage> {
     }
   }
 
+  void _filterLeads() {
+    setState(() {
+      if (_searchQuery.isEmpty) {
+        // Quando não há pesquisa, reseta os dados e o total
+        leadsData = List<Map<String, dynamic>>.from(allLeads);
+      } else {
+        // Filtra os leads com base na pesquisa
+        leadsData = allLeads
+            .where((lead) => (lead['nome']?.toLowerCase() ?? '').contains(_searchQuery))
+            .toList();
+      }
+      totalLeads = leadsData.length; // Atualiza o total com base em leadsData
+    });
+  }
+
+  Widget _buildSearchIcon() {
+    return _searchQuery.isNotEmpty
+        ? IconButton(
+      icon: Icon(Icons.close),
+      onPressed: () {
+        setState(() {
+          _searchQuery = '';
+          leadsData = List<Map<String, dynamic>>.from(allLeads); // Reset leadsData
+        });
+      },
+    )
+        : Icon(Icons.search);
+  }
+
   Future<void> _loadLeads(String empresaId) async {
     final allLeads = await _getAllLeadsStream(empresaId).first;
     setState(() {
-      leadsData = allLeads;
+      this.allLeads = allLeads; // Salva todos os leads
+      leadsData = List<Map<String, dynamic>>.from(allLeads); // Exibe todos os leads inicialmente
+      totalLeads = leadsData.length; // Inicializa o total de leads
       areLeadsLoaded = true;
     });
-
-    await _updateTotalLeads(); // Atualiza totalLeads com base nos filtros atuais
   }
 
   Future<void> _getUserData() async {
@@ -232,6 +263,23 @@ class _LeadsPageState extends State<LeadsPage> {
       return;
     }
 
+    // Filtro das variáveis que não devem ser exibidas
+    final Map<String, dynamic> filteredLeadData = {
+      for (var entry in originalLeadData.entries)
+        if (entry.key != 'redirect_url' &&
+            entry.key != 'empresa_id' &&
+            entry.key != 'nome' &&
+            entry.key != 'email' &&
+            entry.key != 'nome_campanha' &&
+            entry.key != 'timestamp' &&
+            entry.key != 'whatsapp' &&
+            entry.key != 'leadId' &&
+            entry.key != 'campaignId' &&
+            entry.key != 'empresaId' &&
+            entry.key != 'status')
+          entry.key: entry.value
+    };
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -342,6 +390,10 @@ class _LeadsPageState extends State<LeadsPage> {
                       if (whatsapp != null)
                         _buildDetailRow('WhatsApp', whatsapp, context,
                             maxLines: 1),
+                      ...filteredLeadData.entries.map((entry) {
+                        return _buildDetailRow(
+                            entry.key, entry.value.toString(), context);
+                      }).toList(),
                     ],
                   ),
                 ),
@@ -373,8 +425,7 @@ class _LeadsPageState extends State<LeadsPage> {
                                 'Cancelar',
                                 style: TextStyle(
                                   fontFamily: 'Poppins',
-                                  color:
-                                  Theme.of(context).colorScheme.onSecondary,
+                                  color: Theme.of(context).colorScheme.onSecondary,
                                 ),
                               ),
                             ),
@@ -627,13 +678,86 @@ class _LeadsPageState extends State<LeadsPage> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      // Campo de pesquisa
-                      SearchBar(
-                        onChanged: (value) {
-                          setState(() {
-                            _searchQuery = value.toLowerCase();
-                          });
-                        },
+                      // Campo de pesquisa com texto ao lado direito
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _searchController, // Usa o controlador para manter o texto
+                              onChanged: (value) {
+                                _searchQuery = value.toLowerCase(); // Atualiza a variável de pesquisa
+                              },
+                              onSubmitted: (value) {
+                                setState(() {
+                                  _filterLeads(); // Executa a pesquisa ao pressionar Enter
+                                });
+                              },
+                              decoration: InputDecoration(
+                                hintText: 'Pesquisar leads',
+                                hintStyle: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 14,
+                                ),
+                                filled: true,
+                                fillColor: Theme.of(context).colorScheme.secondary,
+                                contentPadding: EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+                                border: UnderlineInputBorder(
+                                  borderRadius: BorderRadius.circular(15),
+                                  borderSide: BorderSide.none,
+                                ),
+                                suffixIcon: IconButton(
+                                  icon: Icon(_searchQuery.isNotEmpty ? Icons.close : Icons.search),
+                                  onPressed: () {
+                                    if (_searchQuery.isNotEmpty) {
+                                      setState(() {
+                                        _searchQuery = '';
+                                        _searchController.clear(); // Limpa o texto da barra
+                                        leadsData = List<Map<String, dynamic>>.from(allLeads); // Reseta os leads
+                                        totalLeads = leadsData.length; // Atualiza o total de leads
+                                      });
+                                    } else {
+                                      setState(() {
+                                        _filterLeads(); // Executa a pesquisa ao clicar no botão de busca
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 30), // Espaço entre a SearchBar e o texto
+                          Padding(
+                            padding: EdgeInsets.only(right: 10),
+                            child: Column(
+                              children: [
+                                Text(
+                                  'Total',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).colorScheme.outline,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  '$totalLeads', // Exibe o total atualizado dinamicamente
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).colorScheme.outline,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                       SizedBox(height: 8),
                       // Ícones de filtro e campanha
@@ -800,53 +924,6 @@ class _LeadsPageState extends State<LeadsPage> {
             selectedCampaignId != null
                 ? _buildLeadsStream(empresaId, selectedCampaignId!)
                 : _buildAllLeadsView(empresaId),
-            // Card com o total de leads
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: 100,
-                child: Align(
-                  alignment: Alignment.bottomRight,
-                  child: Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Card(
-                      elevation: 4.0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12.0),
-                      ),
-                      color: Theme.of(context).colorScheme.primary,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Total de Leads',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(context).colorScheme.outline,
-                              ),
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              totalLeads
-                                  .toString(), // Variável que será atualizada
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(context).colorScheme.outline,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
           ],
         );
       },

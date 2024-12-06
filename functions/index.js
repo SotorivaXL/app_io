@@ -444,82 +444,83 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
 });
 
 exports.sendNewLeadNotification = functions.firestore
-    .document('empresas/{empresaId}/campanhas/{campanhaId}/leads/{leadId}')
-    .onCreate(async (snap, context) => {
-        try {
-            const { empresaId, campanhaId, leadId } = context.params;
+  .document('empresas/{empresaId}/campanhas/{campanhaId}/leads/{leadId}')
+  .onCreate(async (snap, context) => {
+    try {
+      const newValue = snap.data();
+      const { empresaId, campanhaId, leadId } = context.params;
 
-            const campanhaDoc = await admin.firestore()
-                .collection('empresas')
-                .doc(empresaId)
-                .collection('campanhas')
-                .doc(campanhaId)
-                .get();
+      const campanhaDoc = await admin.firestore()
+        .collection('empresas')
+        .doc(empresaId)
+        .collection('campanhas')
+        .doc(campanhaId)
+        .get();
 
-            if (!campanhaDoc.exists) {
-                console.error(`Campanha com ID ${campanhaId} não encontrada para a empresa ${empresaId}`);
-                return null;
-            }
+      if (!campanhaDoc.exists) {
+        console.error(`Campanha com ID ${campanhaId} não encontrada para a empresa ${empresaId}`);
+        return null;
+      }
 
-            const nomeCampanha = campanhaDoc.data().nome_campanha;
-            const tokensSet = new Set();
+      const nomeCampanha = campanhaDoc.data().nome_campanha;
+      const tokensSet = new Set();
 
-            const empresaDoc = await admin.firestore().collection('empresas').doc(empresaId).get();
-            if (empresaDoc.exists && empresaDoc.data().fcmToken) {
-                tokensSet.add(empresaDoc.data().fcmToken);
-            }
+      const empresaDoc = await admin.firestore().collection('empresas').doc(empresaId).get();
+      if (empresaDoc.exists && empresaDoc.data().fcmToken) {
+        tokensSet.add(empresaDoc.data().fcmToken);
+      }
 
-            const usersSnapshot = await admin.firestore()
-                .collection('users')
-                .where('createdBy', '==', empresaId)
-                .get();
+      const usersSnapshot = await admin.firestore()
+        .collection('users')
+        .where('createdBy', '==', empresaId)
+        .get();
 
-            usersSnapshot.forEach(userDoc => {
-                if (userDoc.data().fcmToken) {
-                    tokensSet.add(userDoc.data().fcmToken);
-                }
-            });
-
-            const tokens = Array.from(tokensSet).filter(token => token);
-
-            if (tokens.length === 0) {
-                console.log(`Nenhum token válido encontrado para a empresa ${empresaId}.`);
-                return null;
-            }
-
-            const payload = {
-                notification: {
-                    title: 'Novo Lead!',
-                    body: `Você tem um novo lead na campanha ${nomeCampanha}`,
-                },
-                data: {
-                    leadId,
-                    campanhaId,
-                    empresaId,
-                    title: 'Novo Lead!',
-                    body: `Você tem um novo lead na campanha ${nomeCampanha}`,
-                },
-            };
-
-            for (const token of tokens) {
-                try {
-                    await admin.messaging().send({
-                        token,
-                        notification: payload.notification,
-                        data: payload.data,
-                    });
-                    console.log(`Notificação enviada para o token: ${token}`);
-                } catch (error) {
-                    console.error(`Erro ao enviar para o token ${token}:, error.message`);
-                }
-            }
-
-            return null;
-        } catch (error) {
-            console.error('Erro ao enviar notificação:', error.message);
-            return null;
+      usersSnapshot.forEach(userDoc => {
+        if (userDoc.data().fcmToken) {
+          tokensSet.add(userDoc.data().fcmToken);
         }
-    });
+      });
+
+      const tokens = Array.from(tokensSet).filter(token => token);
+
+      if (tokens.length === 0) {
+        console.log(`Nenhum token válido encontrado para a empresa ${empresaId}.`);
+        return null;
+      }
+
+      const payload = {
+        notification: {
+          title: 'Novo Lead!',
+          body: `Você tem um novo lead na campanha ${nomeCampanha}`,
+        },
+        data: {
+          leadId,
+          campanhaId,
+          empresaId,
+        },
+      };
+
+      const response = await admin.messaging().sendMulticast({
+        tokens,
+        notification: payload.notification,
+        data: payload.data,
+      });
+
+      console.log(`${response.successCount} notificações enviadas com sucesso.`);
+      if (response.failureCount > 0) {
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            console.error(`Erro ao enviar para o token ${tokens[idx]}: ${resp.error.message}`);
+          }
+        });
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Erro ao enviar notificação:', error);
+      return null;
+    }
+});
 
 exports.deleteUserByEmail = functions.https.onCall(async (data, context) => {
     const email = data.email;
