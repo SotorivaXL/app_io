@@ -58,14 +58,13 @@ class _DashboardPageState extends State<DashboardPage> {
     } else if (value is num) {
       return value.toDouble();
     }
-    return 0.0; // Valor padrão para valores nulos ou não numéricos
+    return 0.0;
   }
 
   void _openDateRangePicker() {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        // Envolva o AlertDialog em um Theme para personalizar os estilos dos botões
         return Theme(
           data: Theme.of(context).copyWith(
             textButtonTheme: TextButtonThemeData(),
@@ -94,7 +93,6 @@ class _DashboardPageState extends State<DashboardPage> {
                 view: DateRangePickerView.month,
                 selectionMode: DateRangePickerSelectionMode.range,
                 showActionButtons: false,
-                // Desabilita os botões internos
                 initialSelectedRange: startDate != null && endDate != null
                     ? PickerDateRange(startDate, endDate)
                     : null,
@@ -137,7 +135,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     textStyle: TextStyle(
                       color: Theme.of(context).colorScheme.onSecondary,
                       fontFamily: 'Poppins',
-                      fontSize: 12, // Ajuste o tamanho da fonte aqui
+                      fontSize: 12,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -158,7 +156,6 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
               ),
             ),
-            // Botões personalizados
             actions: [
               TextButton(
                 child: Text(
@@ -179,7 +176,6 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
                 ),
                 onPressed: () {
-                  // Certifique-se de que o `selectedRange` não é nulo antes de acessar suas propriedades
                   PickerDateRange? selectedRange =
                       _datePickerController.selectedRange;
                   if (selectedRange != null &&
@@ -190,7 +186,6 @@ class _DashboardPageState extends State<DashboardPage> {
                       endDate = selectedRange.endDate;
                     });
 
-                    // Adiciona o print das datas selecionadas
                     print(
                         'Data inicial: ${DateFormat('dd/MM/yyyy').format(selectedRange.startDate!)}');
                     print(
@@ -234,7 +229,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // Atualizações no método _buildFilters()
   Widget _buildFilters() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -242,15 +236,15 @@ class _DashboardPageState extends State<DashboardPage> {
         Container(
           decoration: BoxDecoration(
             color: _isExpanded
-                ? Theme.of(context).colorScheme.background // Cor quando expandido
-                : Theme.of(context).colorScheme.secondary, // Cor quando recolhido
+                ? Theme.of(context).colorScheme.background
+                : Theme.of(context).colorScheme.secondary,
             borderRadius: BorderRadius.circular(10),
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: Theme(
               data: Theme.of(context).copyWith(
-                dividerColor: Colors.transparent, // Remove as linhas de divisão
+                dividerColor: Colors.transparent,
               ),
               child: ExpansionTile(
                 tilePadding: EdgeInsetsDirectional.fromSTEB(28, 0, 0, 0),
@@ -260,7 +254,6 @@ class _DashboardPageState extends State<DashboardPage> {
                     _isExpanded = expanded;
                   });
                 },
-                // Remove o ícone padrão na lateral direita
                 trailing: SizedBox.shrink(),
                 backgroundColor: Colors.transparent,
                 collapsedBackgroundColor: Colors.transparent,
@@ -270,13 +263,12 @@ class _DashboardPageState extends State<DashboardPage> {
                     curve: Curves.easeInOut,
                     child: Icon(
                       Icons.filter_list,
-                      size: _isExpanded ? 32.0 : 24.0, // Tamanho do ícone animado
+                      size: _isExpanded ? 32.0 : 24.0,
                       color: Theme.of(context).colorScheme.tertiary,
                     ),
                   ),
                 ),
                 children: [
-                  // Botão para abrir o DatePicker
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -316,7 +308,6 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                     ),
                   ),
-                  // FutureBuilder para buscar campanhas
                   FutureBuilder<List<Map<String, dynamic>>>(
                     future: _fetchCampaigns(),
                     builder: (context, snapshot) {
@@ -325,23 +316,23 @@ class _DashboardPageState extends State<DashboardPage> {
                       } else if (snapshot.hasError) {
                         return Text('Erro: ${snapshot.error}');
                       } else {
-                        campaignsList = snapshot.data ?? [];
+                        // Não atualiza diretamente campaignsList aqui
+                        final localCampaigns = snapshot.data ?? [];
 
-                        // Converte todos os IDs para String e remove duplicatas
-                        campaignsList = campaignsList.map((campaign) {
+                        // Processa localmente as campanhas sem modificar o estado
+                        var processedCampaigns = localCampaigns.map((campaign) {
                           campaign['id'] = campaign['id'].toString();
                           return campaign;
                         }).toList();
 
-                        // Remove duplicatas com base no ID
                         final ids = Set();
-                        campaignsList
+                        processedCampaigns
                             .retainWhere((campaign) => ids.add(campaign['id']));
 
-                        // Lista de opções combinada para itens e selectedItemBuilder
+                        // Cria a lista de opções local
                         List<Map<String, dynamic>> campaignOptions = [
                           {'id': '', 'name': 'Limpar Filtro', 'isError': true},
-                          ...campaignsList.map((campaign) {
+                          ...processedCampaigns.map((campaign) {
                             return {
                               'id': campaign['id'],
                               'name': campaign['name'],
@@ -350,25 +341,21 @@ class _DashboardPageState extends State<DashboardPage> {
                           }).toList(),
                         ];
 
-                        // Certifica-se de que selectedCampaignId é uma String
+                        // Verifica se selectedCampaignId ainda é válido
                         if (selectedCampaignId != null) {
-                          selectedCampaignId = selectedCampaignId.toString();
-                        }
-
-                        // Verifica se selectedCampaignId está na lista de opções
-                        bool isSelectedIdValid = campaignOptions.any(
-                                (option) => option['id'] == selectedCampaignId);
-                        if (!isSelectedIdValid) {
-                          selectedCampaignId = null;
+                          bool isSelectedIdValid = campaignOptions.any(
+                                  (option) => option['id'] == selectedCampaignId);
+                          if (!isSelectedIdValid) {
+                            selectedCampaignId = null;
+                          }
                         }
 
                         return Column(
                           children: [
-                            // Dropdown de Campanhas
                             Padding(
                               padding: EdgeInsets.only(top: 20.0),
                               child: SizedBox(
-                                height: 50, // Aumenta a altura do dropdown
+                                height: 50,
                                 child: CustomDropdown(
                                   items: campaignOptions,
                                   value: selectedCampaignId,
@@ -376,73 +363,80 @@ class _DashboardPageState extends State<DashboardPage> {
                                     setState(() {
                                       selectedCampaignId = value;
 
-                                      // Atualiza `selectedCampaigns` com a campanha selecionada
                                       if (value != null && value.isNotEmpty) {
                                         selectedCampaigns = campaignOptions
-                                            .where((option) => option['id'] == value)
+                                            .where((option) =>
+                                        option['id'] == value)
                                             .toList();
                                       } else {
                                         selectedCampaigns = [];
                                       }
 
-                                      // Limpa os grupos de anúncio e a seleção anterior
                                       selectedGrupoAnuncioId = null;
                                       gruposAnunciosList.clear();
                                     });
 
-                                    // Recarrega os grupos de anúncio para a campanha selecionada
                                     if (selectedCampaigns.isNotEmpty) {
                                       final grupos = await _fetchGruposAnuncios();
-                                      setState(() {
-                                        gruposAnunciosList = grupos;
+                                      // Agenda atualização após o frame atual
+                                      WidgetsBinding.instance
+                                          .addPostFrameCallback((_) {
+                                        if (mounted) {
+                                          setState(() {
+                                            gruposAnunciosList = grupos;
+                                          });
+                                        }
                                       });
                                     }
                                   },
                                   displayText: (value) {
                                     if (value == null || value.isEmpty) {
-                                      return 'Selecione a campanha'; // Texto padrão
+                                      return 'Selecione a campanha';
                                     }
-                                    final selectedItem = campaignOptions.firstWhere(
-                                          (item) => item['id'] == value,
-                                      orElse: () => {'name': 'Selecione a campanha'},
-                                    );
+                                    final selectedItem = campaignOptions
+                                        .firstWhere(
+                                            (item) => item['id'] == value,
+                                        orElse: () => {
+                                          'name':
+                                          'Selecione a campanha'
+                                        });
                                     return selectedItem['name'];
                                   },
                                 ),
                               ),
                             ),
-                            // Se campanhas foram selecionadas, exibe o dropdown de grupos
                             if (selectedCampaigns.isNotEmpty) ...[
                               const SizedBox(height: 20),
                               FutureBuilder<List<Map<String, dynamic>>>(
                                 future: _fetchGruposAnuncios(),
                                 builder: (context, snapshot) {
-                                  if (snapshot.connectionState == ConnectionState.waiting) {
+                                  if (snapshot.connectionState ==
+                                      ConnectionState.waiting) {
                                     return const CircularProgressIndicator();
                                   } else if (snapshot.hasError) {
-                                    // Em caso de erro, exiba um dropdown com a mensagem de erro personalizada
                                     return CustomDropdown(
                                       items: [],
                                       value: null,
-                                      onChanged: (_) {}, // Não faz nada
-                                      displayText: (_) => 'Erro ao carregar grupos de anúncios',
+                                      onChanged: (_) {},
+                                      displayText: (_) =>
+                                      'Erro ao carregar grupos de anúncios',
                                     );
                                   } else {
-                                    gruposAnunciosList = snapshot.data ?? [];
+                                    final localGruposAnuncios =
+                                        snapshot.data ?? [];
 
-                                    // Verifica se a lista está vazia
-                                    if (gruposAnunciosList.isEmpty) {
+                                    if (localGruposAnuncios.isEmpty) {
                                       return CustomDropdown(
                                         items: [],
                                         value: null,
-                                        onChanged: (_) {}, // Não faz nada
-                                        displayText: (_) => 'Nenhum grupo de anúncio encontrado',
+                                        onChanged: (_) {},
+                                        displayText: (_) =>
+                                        'Nenhum grupo de anúncio encontrado',
                                       );
                                     }
 
-                                    // Exibe o dropdown com os grupos de anúncio
                                     return CustomDropdown(
-                                      items: gruposAnunciosList,
+                                      items: localGruposAnuncios,
                                       value: selectedGrupoAnuncioId,
                                       onChanged: (value) {
                                         setState(() {
@@ -451,11 +445,15 @@ class _DashboardPageState extends State<DashboardPage> {
                                       },
                                       displayText: (value) {
                                         if (value == null || value.isEmpty) {
-                                          return 'Selecione o grupo de anúncios'; // Texto padrão
+                                          return 'Selecione o grupo de anúncios';
                                         }
-                                        final selectedItem = gruposAnunciosList.firstWhere(
+                                        final selectedItem =
+                                        localGruposAnuncios.firstWhere(
                                               (item) => item['id'] == value,
-                                          orElse: () => {'name': 'Selecione o grupo de anúncios'},
+                                          orElse: () => {
+                                            'name':
+                                            'Selecione o grupo de anúncios'
+                                          },
                                         );
                                         return selectedItem['name'];
                                       },
@@ -469,9 +467,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       }
                     },
                   ),
-                  // Espaçamento antes do botão
                   const SizedBox(height: 20),
-                  // Botão "Filtrar" fora do FutureBuilder
                   ElevatedButton.icon(
                     icon: Icon(
                       Icons.manage_search,
@@ -497,21 +493,17 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                     ),
                     onPressed: () async {
-                      // Verifica se o campo de data foi preenchido
                       if (startDate == null || endDate == null) {
-                        print(
-                            'Erro: Nenhum intervalo de datas foi selecionado.');
+                        print('Erro: Nenhum intervalo de datas foi selecionado.');
                         return;
                       }
 
-                      // Obtém o intervalo de datas
                       String dataInicial =
                       DateFormat('yyyy-MM-dd').format(startDate!);
                       String dataFinal =
                       DateFormat('yyyy-MM-dd').format(endDate!);
                       print('Intervalo de datas: $dataInicial - $dataFinal');
 
-                      // Verifica se o ID da conta de anúncios está disponível
                       if (selectedContaAnuncioId == null) {
                         await _fetchInitialInsights();
                         if (selectedContaAnuncioId == null) {
@@ -521,7 +513,6 @@ class _DashboardPageState extends State<DashboardPage> {
                         }
                       }
 
-                      // Determina o ID e o nível selecionado (conta, campanha ou grupo de anúncios)
                       String? id;
                       String level;
 
@@ -545,12 +536,9 @@ class _DashboardPageState extends State<DashboardPage> {
                       }
 
                       try {
-                        // Chama a API para buscar insights
                         final insights = await _fetchMetaInsights(
                             id, level, dataInicial, dataFinal);
-                        final pixelData =
 
-                        // Exibe os dados de insights da Meta em prints separados
                         print('\n--- Dados de Insights Recuperados ---');
                         insights.forEach((key, value) {
                           print('$key: $value');
@@ -561,7 +549,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       }
                     },
                   ),
-                  const SizedBox(height: 20), // Espaçamento após o botão
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
@@ -650,7 +638,7 @@ class _DashboardPageState extends State<DashboardPage> {
           spacing: 16,
           runSpacing: 16,
           children: metrics.map((metric) {
-            String value = '—'; // Placeholder
+            String value = '—';
             dynamic dataValue = initialInsightsData[metric['key']];
 
             if (dataValue != null) {
@@ -702,8 +690,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 color: Theme.of(context).colorScheme.onBackground,
               ),
               overflow: TextOverflow.ellipsis,
-              // Adiciona elipses se o texto for muito longo
-              maxLines: 1, // Limita o texto a uma linha
+              maxLines: 1,
             ),
             const SizedBox(height: 8),
             Text(
@@ -719,12 +706,15 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // Método atualizado _fetchInitialInsights()
   Future<void> _fetchInitialInsights({bool shouldSetState = true}) async {
     try {
-      setState(() {
-        _isLoading = true; // Inicia o carregamento
-      });
+      if (shouldSetState) {
+        setState(() {
+          _isLoading = true;
+        });
+      } else {
+        _isLoading = true;
+      }
 
       final authProvider =
       Provider.of<appProvider.AuthProvider>(context, listen: false);
@@ -732,90 +722,91 @@ class _DashboardPageState extends State<DashboardPage> {
 
       if (user == null) {
         print('Usuário não está logado.');
-        setState(() {
-          _isLoading = false; // Finaliza o carregamento em caso de erro
-        });
+        if (shouldSetState) {
+          setState(() {
+            _isLoading = false;
+          });
+        } else {
+          _isLoading = false;
+        }
         return;
       }
 
       String? companyId;
       DocumentSnapshot<Map<String, dynamic>>? empresaDoc;
 
-      // Verifica se o usuário é um "user"
-      print('Verificando se o usuário é um "user"...');
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .get();
 
       if (userDoc.exists) {
-        print('Usuário é um "user". Documento do usuário: ${userDoc.data()}');
         if (userDoc.data()!.containsKey('createdBy')) {
           companyId = userDoc['createdBy'];
-          print('CompanyId do usuário encontrado: $companyId');
-
-          // Obtém o documento da empresa usando o companyId
           empresaDoc = await FirebaseFirestore.instance
               .collection('empresas')
               .doc(companyId)
               .get();
 
           if (!empresaDoc.exists) {
-            print(
-                'Documento da empresa não encontrado para o companyId: $companyId');
-            setState(() {
-              _isLoading = false; // Finaliza o carregamento em caso de erro
-            });
+            print('Documento da empresa não encontrado para o companyId: $companyId');
+            if (shouldSetState) {
+              setState(() {
+                _isLoading = false;
+              });
+            } else {
+              _isLoading = false;
+            }
             return;
           }
         } else {
           print('Campo "createdBy" não encontrado no documento do usuário.');
-          setState(() {
-            _isLoading = false; // Finaliza o carregamento em caso de erro
-          });
+          if (shouldSetState) {
+            setState(() {
+              _isLoading = false;
+            });
+          } else {
+            _isLoading = false;
+          }
           return;
         }
       } else {
-        // Verifica se o usuário é uma "empresa"
-        print('Usuário não é um "user". Verificando se é uma "empresa"...');
         empresaDoc = await FirebaseFirestore.instance
             .collection('empresas')
             .doc(user.uid)
             .get();
 
         if (empresaDoc.exists) {
-          print(
-              'Usuário é uma "empresa". Documento da empresa: ${empresaDoc.data()}');
           companyId = user.uid;
         } else {
-          print(
-              'Usuário não é "user" nem "empresa". Documento não encontrado.');
-          setState(() {
-            _isLoading = false; // Finaliza o carregamento em caso de erro
-          });
+          print('Usuário não é "user" nem "empresa".');
+          if (shouldSetState) {
+            setState(() {
+              _isLoading = false;
+            });
+          } else {
+            _isLoading = false;
+          }
           return;
         }
       }
 
-      // Verifica se os campos BMs e contasAnuncio existem
-      print('Verificando se os campos BMs e contasAnuncio existem...');
       if (!empresaDoc.data()!.containsKey('BMs') ||
           !empresaDoc.data()!.containsKey('contasAnuncio')) {
-        print(
-            'Campos BMs ou contasAnuncio não existem no documento da empresa.');
-        setState(() {
-          _isLoading = false; // Finaliza o carregamento em caso de erro
-        });
+        print('Campos BMs ou contasAnuncio não existem no documento da empresa.');
+        if (shouldSetState) {
+          setState(() {
+            _isLoading = false;
+          });
+        } else {
+          _isLoading = false;
+        }
         return;
       }
 
-      // Obtém as BMs e as contas de anúncio vinculadas à empresa
       var bmIds = empresaDoc['BMs'];
       var contaAnuncioIds = empresaDoc['contasAnuncio'];
 
-      print('BM IDs: $bmIds, Conta Anúncio IDs: $contaAnuncioIds');
-
-      // Garante que bmIds e contaAnuncioIds sejam listas de Strings, eliminando aninhamentos
       if (bmIds is! List) {
         bmIds = [bmIds];
       } else {
@@ -829,22 +820,13 @@ class _DashboardPageState extends State<DashboardPage> {
             contaAnuncioIds.expand((e) => e is List ? e : [e]).toList();
       }
 
-      // Converte os itens das listas para String, caso ainda não sejam
       bmIds = bmIds.map((e) => e.toString()).toList();
       contaAnuncioIds = contaAnuncioIds.map((e) => e.toString()).toList();
 
-      print(
-          'BM IDs após processamento: $bmIds, Conta Anúncio IDs após processamento: $contaAnuncioIds');
-
-      adAccounts =
-      []; // Garante que adAccounts esteja vazio antes de preenchê-lo
+      adAccounts = [];
 
       for (var bmId in bmIds) {
         for (var contaAnuncioDocId in contaAnuncioIds) {
-          print(
-              'Processando BM ID: $bmId, Conta Anúncio Doc ID: $contaAnuncioDocId');
-
-          // Obtém o documento da conta de anúncio
           final adAccountDoc = await FirebaseFirestore.instance
               .collection('dashboard')
               .doc(bmId)
@@ -853,14 +835,11 @@ class _DashboardPageState extends State<DashboardPage> {
               .get();
 
           if (adAccountDoc.exists) {
-            // Armazena o 'id' e 'name' da conta de anúncio
             adAccounts.add({
               'id': adAccountDoc.data()?['id'],
-              // 'id' dentro do documento
               'name': adAccountDoc.data()?['name'],
               'bmId': bmId,
               'contaAnuncioDocId': contaAnuncioDocId,
-              // ID do documento no Firestore
             });
           } else {
             print(
@@ -870,30 +849,26 @@ class _DashboardPageState extends State<DashboardPage> {
       }
 
       if (adAccounts.isNotEmpty) {
-        // Seleciona a primeira conta de anúncio
-        selectedContaAnuncioId =
-        adAccounts.first['id']; // Usa o 'id' dentro do documento
+        selectedContaAnuncioId = adAccounts.first['id'];
         print('ID da conta de anúncios selecionada: $selectedContaAnuncioId');
       } else {
         print('Nenhuma conta de anúncio encontrada.');
-        setState(() {
-          _isLoading = false; // Finaliza o carregamento em caso de erro
-        });
+        if (shouldSetState) {
+          setState(() {
+            _isLoading = false;
+          });
+        } else {
+          _isLoading = false;
+        }
         return;
       }
 
-      // Agora, prossegue para buscar os insights usando o 'contaAnuncioDocId' para acessar o documento
       Map<String, dynamic> combinedInsights = {};
 
       for (var adAccount in adAccounts) {
         String bmId = adAccount['bmId'];
-        String contaAnuncioDocId =
-        adAccount['contaAnuncioDocId']; // ID do documento no Firestore
+        String contaAnuncioDocId = adAccount['contaAnuncioDocId'];
 
-        print(
-            'Processando BM ID: $bmId, Conta Anúncio Doc ID: $contaAnuncioDocId');
-
-        // Acessa o documento "dados_insights" na coleção "insights"
         final dadosInsightsDoc = await FirebaseFirestore.instance
             .collection('dashboard')
             .doc(bmId)
@@ -904,96 +879,70 @@ class _DashboardPageState extends State<DashboardPage> {
             .get();
 
         if (dadosInsightsDoc.exists) {
-          print(
-              'Documento de insights encontrado para BM ID $bmId e Conta Anúncio Doc ID $contaAnuncioDocId');
-
           Map<String, dynamic>? insightsData = dadosInsightsDoc.data();
 
           if (insightsData != null) {
-            // Verifica se existe a chave 'insights' no documento
             if (insightsData.containsKey('insights')) {
               List<dynamic>? insightsList = insightsData['insights'];
-
               if (insightsList != null && insightsList is List) {
-                // Itera sobre cada item da lista de insights
                 for (var insight in insightsList) {
                   if (insight is Map<String, dynamic>) {
                     insight.forEach((key, value) {
                       if (value is String) {
                         final numValue = num.tryParse(value);
                         if (numValue != null) {
-                          if (combinedInsights.containsKey(key)) {
-                            combinedInsights[key] += numValue;
-                          } else {
-                            combinedInsights[key] = numValue;
-                          }
+                          combinedInsights[key] =
+                              (combinedInsights[key] ?? 0) + numValue;
                         }
                       } else if (value is num) {
-                        if (combinedInsights.containsKey(key)) {
-                          combinedInsights[key] += value;
-                        } else {
-                          combinedInsights[key] = value;
-                        }
+                        combinedInsights[key] =
+                            (combinedInsights[key] ?? 0) + value;
                       }
                     });
-                  } else {
-                    print('Formato inesperado de item de insight: $insight');
                   }
                 }
-              } else {
-                print('A lista de insights está vazia ou não é uma lista.');
               }
             } else {
-              // Caso o documento 'dados_insights' não tenha a chave 'insights', utiliza os dados do documento diretamente
               insightsData.forEach((key, value) {
                 if (value is String) {
                   final numValue = num.tryParse(value);
                   if (numValue != null) {
-                    if (combinedInsights.containsKey(key)) {
-                      combinedInsights[key] += numValue;
-                    } else {
-                      combinedInsights[key] = numValue;
-                    }
+                    combinedInsights[key] =
+                        (combinedInsights[key] ?? 0) + numValue;
                   }
                 } else if (value is num) {
-                  if (combinedInsights.containsKey(key)) {
-                    combinedInsights[key] += value;
-                  } else {
-                    combinedInsights[key] = value;
-                  }
+                  combinedInsights[key] =
+                      (combinedInsights[key] ?? 0) + value;
                 }
               });
             }
-          } else {
-            print('Dados de insights não encontrados no documento.');
           }
-        } else {
-          print(
-              'Documento de insights não encontrado para BM ID $bmId e Conta Anúncio Doc ID $contaAnuncioDocId');
         }
       }
 
       if (shouldSetState) {
         setState(() {
           initialInsightsData = combinedInsights;
-          _isLoading = false; // Finaliza o carregamento após sucesso
+          _isLoading = false;
         });
       } else {
         initialInsightsData = combinedInsights;
-        _isLoading = false; // Finaliza o carregamento após sucesso
+        _isLoading = false;
       }
 
-      print('Dados de insights combinados: $combinedInsights');
     } catch (e, stacktrace) {
       print('Erro ao buscar insights iniciais: $e');
       print(stacktrace);
-      setState(() {
-        _isLoading = false; // Finaliza o carregamento em caso de exceção
-      });
+      if (shouldSetState && mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      } else {
+        _isLoading = false;
+      }
     }
   }
 
-  // Método para buscar contas de anúncio
   Future<List<Map<String, dynamic>>> _fetchAdAccounts() async {
     try {
       final authProvider =
@@ -1008,7 +957,6 @@ class _DashboardPageState extends State<DashboardPage> {
       String? companyId;
       DocumentSnapshot<Map<String, dynamic>> empresaDoc;
 
-      // Verifica se o usuário é um "user"
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -1016,20 +964,16 @@ class _DashboardPageState extends State<DashboardPage> {
 
       if (userDoc.exists) {
         companyId = userDoc['createdBy'];
-
-        // Obtém o documento da empresa usando o companyId
         empresaDoc = await FirebaseFirestore.instance
             .collection('empresas')
             .doc(companyId)
             .get();
 
         if (!empresaDoc.exists) {
-          print(
-              'Documento da empresa não encontrado para o companyId: $companyId');
+          print('Documento da empresa não encontrado.');
           return [];
         }
       } else {
-        // Verifica se o usuário é uma "empresa"
         empresaDoc = await FirebaseFirestore.instance
             .collection('empresas')
             .doc(user.uid)
@@ -1043,18 +987,15 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      // Verifica se o campo contasAnuncio existe
       if (!empresaDoc.data()!.containsKey('BMs') ||
           !empresaDoc.data()!.containsKey('contasAnuncio')) {
-        print(
-            'Campos BMs ou contasAnuncio não existem no documento da empresa.');
+        print('Campos BMs ou contasAnuncio não existem no documento da empresa.');
         return [];
       }
 
       var bmIds = empresaDoc['BMs'];
       var contaAnuncioIds = empresaDoc['contasAnuncio'];
 
-      // Garante que bmIds e contaAnuncioIds sejam listas
       if (bmIds is! List) {
         bmIds = [bmIds];
       }
@@ -1080,8 +1021,7 @@ class _DashboardPageState extends State<DashboardPage> {
               'bmId': bmId,
             });
           } else {
-            print(
-                'Documento da conta de anúncio não encontrado para BM ID: $bmId, Conta Anúncio ID: $contaAnuncioId');
+            print('Conta de anúncio não encontrada para BM $bmId');
           }
         }
       }
@@ -1096,11 +1036,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<List<Map<String, dynamic>>> _fetchCampaigns() async {
     try {
-      List<Map<String, dynamic>> allCampaigns = [];
-
-      // Verifica se adAccounts está preenchido
       if (adAccounts.isEmpty) {
-        // Evita loop infinito ao não chamar setState durante a construção
+        // Em vez de chamar setState diretamente, chamamos a função sem atualizar o estado
         await _fetchInitialInsights(shouldSetState: false);
         if (adAccounts.isEmpty) {
           print('Nenhuma conta de anúncio disponível para buscar campanhas.');
@@ -1108,43 +1045,35 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      // Percorre cada conta de anúncio
+      List<Map<String, dynamic>> allCampaigns = [];
+
       for (var adAccount in adAccounts) {
         String bmId = adAccount['bmId'];
         String contaAnuncioDocId = adAccount['contaAnuncioDocId'];
-        String contaAnuncioId = adAccount['id']; // 'id' dentro do documento
+        String contaAnuncioId = adAccount['id'];
 
-        print('Processando BM ID: $bmId, Conta Anúncio ID: $contaAnuncioId');
-
-        // Acessa o documento da conta de anúncio
         final contaAnuncioDoc = FirebaseFirestore.instance
             .collection('dashboard')
             .doc(bmId)
             .collection('contasAnuncio')
             .doc(contaAnuncioDocId);
 
-        // Obtém as campanhas dentro da subcoleção 'campanhas'
         final campanhasSnapshot =
         await contaAnuncioDoc.collection('campanhas').get();
 
-        print(
-            'Número de campanhas encontradas para BM $bmId e Conta $contaAnuncioId: ${campanhasSnapshot.docs.length}');
-
-        // Percorre cada documento de campanha
         for (var doc in campanhasSnapshot.docs) {
           var data = doc.data();
           allCampaigns.add({
-            'id': data['id'].toString(), // Converte 'id' para String
-            'name': data['name'], // 'name' dentro do documento da campanha
+            'id': data['id'].toString(),
+            'name': data['name'],
             'bmId': bmId,
             'contaAnuncioId': contaAnuncioId,
             'contaAnuncioDocId': contaAnuncioDocId,
-            'campaignDocId': doc.id, // ID do documento da campanha no Firestore
+            'campaignDocId': doc.id,
           });
         }
       }
 
-      // Remove duplicatas com base no ID
       final ids = Set();
       allCampaigns.retainWhere((campaign) => ids.add(campaign['id']));
 
@@ -1156,7 +1085,6 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  // Método para buscar grupos de anúncios
   Future<List<Map<String, dynamic>>> _fetchGruposAnuncios() async {
     try {
       List<Map<String, dynamic>> allGruposAnuncios = [];
@@ -1164,9 +1092,8 @@ class _DashboardPageState extends State<DashboardPage> {
       for (var campaign in selectedCampaigns) {
         String bmId = campaign['bmId'];
         String contaAnuncioDocId = campaign['contaAnuncioDocId'];
-        String campaignId = campaign['id']; // 'id' da campanha selecionada
-        String campaignDocId = campaign[
-        'campaignDocId']; // ID do documento da campanha no Firestore
+        String campaignId = campaign['id'];
+        String campaignDocId = campaign['campaignDocId'];
 
         final gruposAnunciosSnapshot = await FirebaseFirestore.instance
             .collection('dashboard')
@@ -1182,14 +1109,12 @@ class _DashboardPageState extends State<DashboardPage> {
           var data = doc.data();
           allGruposAnuncios.add({
             'id': data['id'],
-            // 'id' dentro do documento do grupo de anúncios
             'name': data['name'],
             'bmId': bmId,
             'contaAnuncioDocId': contaAnuncioDocId,
             'campaignId': campaignId,
             'campaignDocId': campaignDocId,
             'grupoAnuncioDocId': doc.id,
-            // ID do documento do grupo de anúncios no Firestore
           });
         }
       }
@@ -1219,7 +1144,6 @@ class _DashboardPageState extends State<DashboardPage> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
-          // Atualiza os dados globais com os insights retornados
           setState(() {
             initialInsightsData = data['data']['insights'][0] ?? {};
           });
