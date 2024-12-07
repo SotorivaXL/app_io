@@ -682,16 +682,16 @@ class _DashboardPageState extends State<DashboardPage> {
         'key': 'spend',
         'icon': FontAwesomeIcons.moneyBillTransfer
       },
-      {
-        'title': 'Resultado',
-        'key': 'CompleteRegistration',
-        'icon': FontAwesomeIcons.filterCircleDollar
-      },
-      {
-        'title': 'Custo por Resultado',
-        'key': 'cost_per_result',
-        'icon': FontAwesomeIcons.moneyBillTrendUp
-      },
+      // {
+      //   'title': 'Resultado',
+      //   'key': 'CompleteRegistration',
+      //   'icon': FontAwesomeIcons.filterCircleDollar
+      // },
+      // {
+      //   'title': 'Custo por Resultado',
+      //   'key': 'cost_per_result',
+      //   'icon': FontAwesomeIcons.moneyBillTrendUp
+      // },
       {
         'title': 'Impressões',
         'key': 'impressions',

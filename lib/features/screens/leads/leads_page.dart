@@ -174,9 +174,11 @@ class _LeadsPageState extends State<LeadsPage> {
       } finally {
         // Aguarde pelo menos 1 segundo antes de remover o carregamento
         Future.delayed(Duration(seconds: 1), () {
-          setState(() {
-            isLoading = false;
-          });
+          if (mounted) { // Verifica se o widget ainda está montado
+            setState(() {
+              isLoading = false;
+            });
+          }
         });
       }
     } else {
@@ -666,8 +668,7 @@ class _LeadsPageState extends State<LeadsPage> {
               pinned: false,
               floating: true,
               automaticallyImplyLeading: false,
-              expandedHeight:
-              130, // Aumentado para acomodar o campo de pesquisa
+              expandedHeight: 130, // Aumentado para acomodar o campo de pesquisa
               backgroundColor: Theme.of(context).colorScheme.background,
               surfaceTintColor: Colors.transparent,
               elevation: 0,
@@ -696,6 +697,7 @@ class _LeadsPageState extends State<LeadsPage> {
                               decoration: InputDecoration(
                                 hintText: 'Pesquisar leads',
                                 hintStyle: TextStyle(
+                                  color: Theme.of(context).colorScheme.onSecondary,
                                   fontFamily: 'Poppins',
                                   fontSize: 14,
                                 ),
@@ -708,6 +710,7 @@ class _LeadsPageState extends State<LeadsPage> {
                                 ),
                                 suffixIcon: IconButton(
                                   icon: Icon(_searchQuery.isNotEmpty ? Icons.close : Icons.search),
+                                  color: Theme.of(context).colorScheme.onSecondary,
                                   onPressed: () {
                                     if (_searchQuery.isNotEmpty) {
                                       setState(() {
@@ -737,7 +740,7 @@ class _LeadsPageState extends State<LeadsPage> {
                                     fontFamily: 'Poppins',
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).colorScheme.outline,
+                                    color: Theme.of(context).colorScheme.onSecondary,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -749,7 +752,7 @@ class _LeadsPageState extends State<LeadsPage> {
                                     fontFamily: 'Poppins',
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).colorScheme.outline,
+                                    color: Theme.of(context).colorScheme.onSecondary,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
