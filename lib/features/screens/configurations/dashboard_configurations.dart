@@ -32,11 +32,12 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
   bool _isLoading = false;
 
   final List<Map<String, String>> _metricsOptions = [
-    {'id': 'visualizacoes_pagina', 'name': 'Visualizações da página'},
-    {'id': 'registros_pagina', 'name': 'Registros na Página'},
+    {'id': 'visualizacoes_pagina', 'name': 'Visualizações da Página'},
+    {'id': 'registros_consluidos', 'name': 'Registros na Concluídos'},
     {'id': 'visitas_perfil', 'name': 'Visitas ao perfil'},
     {'id': 'seguidores', 'name': 'Seguidores'},
-    {'id': 'conversas_iniciadas', 'name': 'Conversas iniciadas'},
+    {'id': 'conversas_iniciadas', 'name': 'Conversas Iniciadas'},
+    {'id': 'custo_resultado', 'name': 'Custo por Resultado'},
   ];
 
   List<String> _selectedMetrics = [];
@@ -105,23 +106,13 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
 
   Future<void> _loadCampaignsIfNeeded() async {
     if (contaSelecionada != null && bmSelecionada != null) {
-      bool needsCampaign = _selectedMetrics.contains('visitas_perfil') ||
-          _selectedMetrics.contains('seguidores') ||
-          _selectedMetrics.contains('conversas_iniciadas');
-      if (needsCampaign) {
-        final campaigns = await _fetchCampaigns(bmSelecionada!, contaSelecionada!);
-        setState(() {
-          _campaignsList = campaigns;
-          if (campaigns.isEmpty) {
-            _selectedCampaign = null;
-          }
-        });
-      } else {
-        setState(() {
-          _campaignsList = [];
+      final campaigns = await _fetchCampaigns(bmSelecionada!, contaSelecionada!);
+      setState(() {
+        _campaignsList = campaigns;
+        if (campaigns.isEmpty) {
           _selectedCampaign = null;
-        });
-      }
+        }
+      });
     }
   }
 
@@ -219,33 +210,10 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
 
     String dataFormatada = DateFormat('yyyy-MM-dd').format(_selectedDate!);
 
-    List<String> generalMetrics = [];
     List<String> campaignMetrics = [];
 
     for (var m in _selectedMetrics) {
-      if (m == 'visitas_perfil' || m == 'seguidores' || m == 'conversas_iniciadas') {
-        campaignMetrics.add(m);
-      } else {
-        generalMetrics.add(m);
-      }
-    }
-
-    if (generalMetrics.isNotEmpty) {
-      final insightsRef = FirebaseFirestore.instance
-          .collection('dashboard')
-          .doc(bmSelecionada)
-          .collection('contasAnuncio')
-          .doc(contaSelecionada)
-          .collection('insights')
-          .doc(dataFormatada);
-
-      Map<String, dynamic> generalData = {};
-      for (var gm in generalMetrics) {
-        generalData[gm] = _metricsControllers[gm]?.text.trim();
-      }
-      generalData['data'] = dataFormatada;
-
-      await insightsRef.set(generalData, SetOptions(merge: true));
+      campaignMetrics.add(m);
     }
 
     if (campaignMetrics.isNotEmpty && _selectedCampaign != null) {
@@ -874,7 +842,7 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                   ),
                 ],
                 const SizedBox(height: 16.0),
-                if (needsCampaign && _campaignsList.isNotEmpty) ...[
+                if (_campaignsList.isNotEmpty) ...[
                   Text(
                     "Selecione a campanha:",
                     style: TextStyle(
@@ -966,13 +934,16 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                       ),
                       hintText: 'Selecione uma data',
                       hintStyle: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 14,
                         color: Theme.of(context).colorScheme.onSecondary,
                       ),
-                      suffixIcon: IconButton(
-                        icon: Icon(Icons.date_range, color: Theme.of(context).colorScheme.onBackground),
-                        onPressed: _pickDate,
+                      suffixIcon: Icon(
+                          Icons.date_range,
+                          color: Theme.of(context).colorScheme.onBackground
                       ),
                     ),
+                    onTap: _pickDate, // Ao clicar no campo todo, abre o date picker
                   ),
                   const SizedBox(height: 16.0),
                   Text(
@@ -998,8 +969,15 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                           ),
                           textAlignVertical: TextAlignVertical.center,
                           textAlign: TextAlign.left,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          keyboardType: TextInputType.numberWithOptions(decimal: true),
+                          textInputAction: TextInputAction.done, // Define a ação do botão como "Done"
+                          inputFormatters: [
+                            // Permite apenas dígitos (0-9), vírgula (,) e ponto (.)
+                            FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                          ],
+                          onEditingComplete: () {
+                            FocusScope.of(context).unfocus(); // Fecha o teclado quando "Done" é pressionado
+                          },
                           decoration: InputDecoration(
                             filled: true,
                             fillColor: Theme.of(context).colorScheme.secondary,
@@ -1010,6 +988,8 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
                             ),
                             hintText: 'Valor para ${_getMetricName(m)}',
                             hintStyle: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 14,
                               color: Theme.of(context).colorScheme.onSecondary,
                             ),
                           ),
