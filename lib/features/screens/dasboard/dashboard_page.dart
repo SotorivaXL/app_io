@@ -113,15 +113,11 @@ class _DashboardPageState extends State<DashboardPage> {
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
-                  todayTextStyle: TextStyle(
-                    color: Theme.of(context).colorScheme.tertiary,
+                  disabledDatesTextStyle: TextStyle(
                     fontFamily: 'Poppins',
-                    fontSize: 14,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
-                  ),
-                  blackoutDatesDecoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.error,
-                    borderRadius: BorderRadius.circular(5),
+                    color: Theme.of(context).colorScheme.inverseSurface.withOpacity(0.5),
                   ),
                 ),
                 startRangeSelectionColor: Theme.of(context).colorScheme.primary,
@@ -475,7 +471,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     icon: Icon(
                       Icons.manage_search,
                       size: 22,
-                      color: Theme.of(context).colorScheme.onSecondary,
+                      color: Theme.of(context).colorScheme.outline,
                     ),
                     label: Text(
                       'Filtrar',
@@ -490,7 +486,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     style: ElevatedButton.styleFrom(
                       padding:
                       EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      backgroundColor: Theme.of(context).colorScheme.tertiary,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(25),
                       ),
