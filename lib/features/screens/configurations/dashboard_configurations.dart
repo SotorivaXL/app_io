@@ -458,13 +458,67 @@ class _DashboardConfigurationsState extends State<DashboardConfigurations> {
       context: context,
       initialDate: _selectedDate ?? DateTime.now(),
       firstDate: DateTime(2000),
-      lastDate: DateTime.now(),
+      lastDate: DateTime(2101),
+      locale: Locale('pt', 'BR'),
+      builder: (BuildContext context, Widget? child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            // 1. Remover a linha de separação
+            dividerColor: Colors.transparent,
+            dividerTheme: DividerThemeData(
+              color: Colors.transparent,
+              thickness: 0,
+            ),
+
+            // 2. Definir as cores específicas no ColorScheme
+            colorScheme: ColorScheme.light(
+              primary: Theme.of(context).colorScheme.primary,        // Mantém a cor primária existente
+              secondary: Theme.of(context).colorScheme.secondary,    // Mantém a cor secundária existente
+              onPrimary: Theme.of(context).colorScheme.onSecondary, // Define o texto selecionado como onSecondary
+              surface: Theme.of(context).colorScheme.background,     // Mantém a cor de superfície existente
+              onSurface: Theme.of(context).colorScheme.onBackground, // Mantém a cor do texto de superfície existente
+            ),
+
+            // 3. Definir o fundo do diálogo
+            dialogBackgroundColor: Theme.of(context).colorScheme.secondary,
+
+            // 4. Ajustar o TextTheme para garantir que o texto principal use onSecondary
+            textTheme: Theme.of(context).textTheme.copyWith(
+              headlineLarge: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                color: Theme.of(context).colorScheme.onSecondary, // Texto principal (data selecionada) como onSecondary
+              ),
+              bodyLarge: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: Theme.of(context).colorScheme.onSecondary, // Texto dos dias do calendário como onSecondary
+              ),
+              labelLarge: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: Theme.of(context).colorScheme.onSecondary, // Outros textos, se necessário
+              ),
+            ),
+
+            // 5. Garantir que os ícones também usem onSecondary
+            iconTheme: Theme.of(context).iconTheme.copyWith(
+              color: Theme.of(context).colorScheme.onSecondary, // Ícones como onSecondary
+            ),
+
+            // 6. Definir a cor dos botões "OK" e "Cancelar" para onSecondary
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.onSecondary, // Cor do texto dos botões
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
+
     if (picked != null) {
-      setState(() {
-        _selectedDate = picked;
-        _dateController.text = DateFormat('dd/MM/yyyy').format(picked);
-      });
+      if (mounted) { // Verificação para garantir que o widget ainda está montado
+        setState(() {
+          _selectedDate = picked;
+          _dateController.text = DateFormat('dd/MM/yyyy').format(picked);
+        });
+      }
     }
   }
 
