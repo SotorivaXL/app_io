@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.seuapp.tarefa</string>
+	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -42,17 +46,7 @@
 	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
-		<string>remote-notification</string>
-		<string>voip</string>
-		<string>nearby-interaction</string>
-		<string>bluetooth-central</string>
-		<string>push-to-talk</string>
-		<string>location</string>
-		<string>external-accessory</string>
 		<string>processing</string>
-		<string>audio</string>
-		<string>bluetooth-peripheral</string>
-		<string>fetch</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
@@ -81,14 +75,7 @@
 	<array>
 		<string>$(AppIdentifierPrefix)com.your.bundle</string>
 	</array>
-
-	<key>UIBackgroundModes</key>
-    <array>
-        <string>processing</string>
-    </array>
-    <key>BGTaskSchedulerPermittedIdentifiers</key>
-    <array>
-        <string>com.seuapp.tarefa</string>
-    </array>
+	<key>NSPhotoLibraryUsageDescription</key>
+    <string>Este aplicativo precisa acessar sua biblioteca de fotos para permitir o upload de imagens.</string>
 </dict>
 </plist>
