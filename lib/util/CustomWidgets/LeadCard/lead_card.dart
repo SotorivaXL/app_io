@@ -235,8 +235,8 @@ class _LeadCardState extends State<LeadCard> with SingleTickerProviderStateMixin
       if (cleanedPhone.length >= 10) {
         // URL para abrir o WhatsApp com a mensagem
         final url = kIsWeb
-            ? 'https://wa.me/$cleanedPhone?text=${Uri.encodeComponent(message)}'
-            : 'whatsapp://send?phone=$cleanedPhone&text=${Uri.encodeComponent(message)}';
+            ? 'https://wa.me/55$cleanedPhone?text=${Uri.encodeComponent(message)}'
+            : 'whatsapp://send?phone=55$cleanedPhone&text=${Uri.encodeComponent(message)}';
 
         if (await canLaunch(url)) {
           await launch(url);
