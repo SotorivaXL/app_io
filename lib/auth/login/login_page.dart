@@ -13,6 +13,7 @@ import 'package:http/http.dart' as http;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
+
   @override
   _LoginPageState createState() => _LoginPageState();
 }
@@ -32,7 +33,8 @@ class _LoginPageState extends State<LoginPage> {
   void initState() {
     super.initState();
     _loadSavedCredentials();
-    final authProvider = Provider.of<app_io_auth.AuthProvider>(context, listen: false);
+    final authProvider =
+        Provider.of<app_io_auth.AuthProvider>(context, listen: false);
     authProvider.listenToAuthChanges();
   }
 
@@ -69,19 +71,23 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _login() async {
     FocusScope.of(context).unfocus();
-    final authProvider = Provider.of<app_io_auth.AuthProvider>(context, listen: false);
+    final authProvider =
+        Provider.of<app_io_auth.AuthProvider>(context, listen: false);
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
     try {
       // Verifica o sessionId antes de autenticar
       final usersCollection = FirebaseFirestore.instance.collection('users');
-      final companiesCollection = FirebaseFirestore.instance.collection('empresas');
+      final companiesCollection =
+          FirebaseFirestore.instance.collection('empresas');
 
-      QuerySnapshot userQuerySnapshot = await usersCollection.where('email', isEqualTo: email).get();
+      QuerySnapshot userQuerySnapshot =
+          await usersCollection.where('email', isEqualTo: email).get();
 
       if (userQuerySnapshot.docs.isEmpty) {
-        userQuerySnapshot = await companiesCollection.where('email', isEqualTo: email).get();
+        userQuerySnapshot =
+            await companiesCollection.where('email', isEqualTo: email).get();
       }
 
       if (userQuerySnapshot.docs.isNotEmpty) {
@@ -91,7 +97,8 @@ class _LoginPageState extends State<LoginPage> {
         final newSessionId = authProvider.sessionId;
 
         if (currentSessionId != null && currentSessionId != newSessionId) {
-          _showErrorDialog(context, 'Esta conta já está ativa em outro dispositivo. Por favor, desconecte-se de lá antes de continuar.');
+          _showErrorDialog(context,
+              'Esta conta já está ativa em outro dispositivo. Por favor, desconecte-se de lá antes de continuar.');
           return;
         }
       }
@@ -119,7 +126,8 @@ class _LoginPageState extends State<LoginPage> {
           if (!userDocExists && companyDocExists) {
             await companyDocRef.update({'sessionId': authProvider.sessionId});
           } else if (!userDocExists && !companyDocExists) {
-            await userDocRef.set({'sessionId': authProvider.sessionId, 'email': email});
+            await userDocRef
+                .set({'sessionId': authProvider.sessionId, 'email': email});
           } else if (userDocExists) {
             await userDocRef.update({'sessionId': authProvider.sessionId});
           }
@@ -131,10 +139,12 @@ class _LoginPageState extends State<LoginPage> {
           Navigator.of(context).pushReplacement(
             PageRouteBuilder(
               transitionDuration: Duration(milliseconds: 500),
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
                 return FadeTransition(opacity: animation, child: child);
               },
-              pageBuilder: (context, animation, secondaryAnimation) => CustomTabBarPage(),
+              pageBuilder: (context, animation, secondaryAnimation) =>
+                  CustomTabBarPage(),
             ),
           );
         }
@@ -153,10 +163,14 @@ class _LoginPageState extends State<LoginPage> {
     if (token != null && FirebaseAuth.instance.currentUser != null) {
       try {
         // Atualiza o token na coleção 'users'
-        await FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser!.uid).update({
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(FirebaseAuth.instance.currentUser!.uid)
+            .update({
           'fcmToken': token,
         });
-        print('FCM Token atualizado com sucesso para o usuário ${FirebaseAuth.instance.currentUser!.uid}.');
+        print(
+            'FCM Token atualizado com sucesso para o usuário ${FirebaseAuth.instance.currentUser!.uid}.');
       } catch (error) {
         print('Erro ao atualizar o FCM Token: $error');
       }
@@ -233,15 +247,18 @@ class _LoginPageState extends State<LoginPage> {
     String titleMessage;
     switch (e.code) {
       case 'invalid-email':
-        errorMessage = 'O endereço de e-mail fornecido é inválido. Verifique e tente novamente.';
+        errorMessage =
+            'O endereço de e-mail fornecido é inválido. Verifique e tente novamente.';
         titleMessage = 'E-mail inválido';
         break;
       case 'user-disabled':
-        errorMessage = 'A conta foi desativada. Entre em contato com o suporte.';
+        errorMessage =
+            'A conta foi desativada. Entre em contato com o suporte.';
         titleMessage = 'Login não permitido';
         break;
       case 'user-not-found':
-        errorMessage = 'Não há registro de usuário com esse e-mail. Verifique e tente novamente.';
+        errorMessage =
+            'Não há registro de usuário com esse e-mail. Verifique e tente novamente.';
         titleMessage = 'Login não permitido';
         break;
       case 'wrong-password':
@@ -249,19 +266,23 @@ class _LoginPageState extends State<LoginPage> {
         titleMessage = 'Senha inválida';
         break;
       case 'email-already-in-use':
-        errorMessage = 'Já existe uma conta com esse e-mail. Tente fazer login ou use um e-mail diferente.';
+        errorMessage =
+            'Já existe uma conta com esse e-mail. Tente fazer login ou use um e-mail diferente.';
         titleMessage = 'E-mail existente';
         break;
       case 'weak-password':
-        errorMessage = 'A senha fornecida é muito fraca. Escolha uma senha mais forte.';
+        errorMessage =
+            'A senha fornecida é muito fraca. Escolha uma senha mais forte.';
         titleMessage = 'Senha inválida';
         break;
       case 'operation-not-allowed':
-        errorMessage = 'Essa operação não está permitida. Entre em contato com o suporte.';
+        errorMessage =
+            'Essa operação não está permitida. Entre em contato com o suporte.';
         titleMessage = 'Operação não permitida';
         break;
       case 'invalid-credential':
-        errorMessage = 'E-mail ou senha incorretos, verifique e faça login novamente!.';
+        errorMessage =
+            'E-mail ou senha incorretos, verifique e faça login novamente!.';
         titleMessage = 'E-mail ou senha inválidos';
         break;
       case 'invalid-verification-code':
@@ -277,7 +298,8 @@ class _LoginPageState extends State<LoginPage> {
         titleMessage = 'Campo(s) vázios';
         break;
       default:
-        errorMessage = 'Ocorreu um erro inesperado. Tente novamente mais tarde.';
+        errorMessage =
+            'Ocorreu um erro inesperado. Tente novamente mais tarde.';
         titleMessage = 'ocorreu um erro';
         break;
     }
@@ -350,9 +372,10 @@ class _LoginPageState extends State<LoginPage> {
     bool isDarkTheme = Theme.of(context).brightness == Brightness.dark;
 
     // Retorna "dark" se o tema for escuro, ou "light" se for claro
-    return isDarkTheme ? 'assets/images/icons/logoDark.png' : 'assets/images/icons/logoLight.png';
+    return isDarkTheme
+        ? 'assets/images/icons/logoDark.png'
+        : 'assets/images/icons/logoLight.png';
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -381,18 +404,24 @@ class _LoginPageState extends State<LoginPage> {
                   children: [
                     Padding(
                       padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 50),
-                      child: Image.asset(theme, width: 400,),
+                      child: Image.asset(
+                        theme,
+                        width: 400,
+                      ),
                     ),
                     // LOGIN text - remains centered
                     Text(
                       'Bem-vindo(a) de volta',
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                        fontFamily: 'BrandingSF',
-                        fontSize: 30,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.onSecondary,
-                      ),
+                      style: Theme.of(context)
+                          .textTheme
+                          .headlineLarge
+                          ?.copyWith(
+                            fontFamily: 'BrandingSF',
+                            fontSize: 30,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onSecondary,
+                          ),
                     ),
                     SizedBox(height: 50),
                     // EMAIL TextFormField
@@ -404,12 +433,16 @@ class _LoginPageState extends State<LoginPage> {
                         textInputAction: TextInputAction.next,
                         decoration: InputDecoration(
                           hintText: 'Digite seu e-mail',
-                          hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontFamily: 'Poppins',
-                            fontWeight: FontWeight.w500,
-                            fontSize: 12,
-                            color: Theme.of(context).colorScheme.onSecondary,
-                          ),
+                          hintStyle: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w500,
+                                fontSize: 12,
+                                color:
+                                    Theme.of(context).colorScheme.onSecondary,
+                              ),
                           labelText: 'E-mail',
                           labelStyle: TextStyle(
                             fontFamily: 'Poppins',
@@ -445,19 +478,21 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                             borderRadius: BorderRadius.circular(25),
                           ),
-                          contentPadding: EdgeInsetsDirectional.fromSTEB(20, 16, 20, 16),
+                          contentPadding:
+                              EdgeInsetsDirectional.fromSTEB(20, 16, 20, 16),
                         ),
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: Theme.of(context).colorScheme.onSecondary,
-                        ),
+                              fontFamily: 'Poppins',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
                         textAlign: TextAlign.start,
                         keyboardType: TextInputType.emailAddress,
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            _showErrorDialog(context, "Por favor, insira seu email");
+                            _showErrorDialog(
+                                context, "Por favor, insira seu email");
                           }
                           return null;
                         },
@@ -474,12 +509,16 @@ class _LoginPageState extends State<LoginPage> {
                         textInputAction: TextInputAction.done,
                         decoration: InputDecoration(
                           hintText: 'Digite sua senha',
-                          hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontFamily: 'Poppins',
-                            fontWeight: FontWeight.w500,
-                            fontSize: 12,
-                            color: Theme.of(context).colorScheme.onSecondary,
-                          ),
+                          hintStyle: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w500,
+                                fontSize: 12,
+                                color:
+                                    Theme.of(context).colorScheme.onSecondary,
+                              ),
                           labelText: 'Senha',
                           labelStyle: TextStyle(
                             fontFamily: 'Poppins',
@@ -515,10 +554,11 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                             borderRadius: BorderRadius.circular(25),
                           ),
-                          contentPadding: EdgeInsetsDirectional.fromSTEB(20, 16, 20, 16),
+                          contentPadding:
+                              EdgeInsetsDirectional.fromSTEB(20, 16, 20, 16),
                           suffixIcon: InkWell(
                             onTap: () => setState(
-                                  () => _passwordVisibility = !_passwordVisibility,
+                              () => _passwordVisibility = !_passwordVisibility,
                             ),
                             focusNode: FocusNode(skipTraversal: true),
                             hoverColor: Color(0x20933FFC),
@@ -527,7 +567,8 @@ class _LoginPageState extends State<LoginPage> {
                               _passwordVisibility
                                   ? Icons.visibility_off_outlined
                                   : Icons.visibility_outlined,
-                              color: Theme.of(context).colorScheme.inverseSurface,
+                              color:
+                                  Theme.of(context).colorScheme.inverseSurface,
                               size: 20,
                             ),
                           ),
@@ -536,16 +577,17 @@ class _LoginPageState extends State<LoginPage> {
                           _loginFuture = _login();
                         },
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: 0,
-                          color: Theme.of(context).colorScheme.onSecondary,
-                        ),
+                              fontFamily: 'Poppins',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 0,
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
                         textAlign: TextAlign.start,
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            _showErrorDialog(context, "Por favor, insira sua senha");
+                            _showErrorDialog(
+                                context, "Por favor, insira sua senha");
                           }
                           return null;
                         },
@@ -557,81 +599,108 @@ class _LoginPageState extends State<LoginPage> {
                       future: _loginFuture,
                       builder: (context, snapshot) {
                         return Container(
-                          width: textFieldWidth, // Define a largura do botão igual à largura do TextFormField
-                          child: snapshot.connectionState == ConnectionState.waiting
+                          width: textFieldWidth,
+                          // Define a largura do botão igual à largura do TextFormField
+                          child: snapshot.connectionState ==
+                                  ConnectionState.waiting
                               ? ElevatedButton(
-                            onPressed: null, // Desabilita o botão enquanto carrega
-                            style: ElevatedButton.styleFrom(
-                              padding: EdgeInsets.symmetric(horizontal: 25, vertical: 15),
-                              backgroundColor: Theme.of(context).colorScheme.primary,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(25),
-                              ),
-                            ),
-                            child: SizedBox(
-                              width: 20,
-                              height: 20, // Define o tamanho da ProgressBar
-                              child: CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.outline),
-                                strokeWidth: 2.0,
-                              ),
-                            ),
-                          )
+                                  onPressed: null,
+                                  // Desabilita o botão enquanto carrega
+                                  style: ElevatedButton.styleFrom(
+                                    padding: EdgeInsets.symmetric(
+                                        horizontal: 25, vertical: 15),
+                                    backgroundColor:
+                                        Theme.of(context).colorScheme.primary,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(25),
+                                    ),
+                                  ),
+                                  child: SizedBox(
+                                    width: 20,
+                                    height:
+                                        20, // Define o tamanho da ProgressBar
+                                    child: CircularProgressIndicator(
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                          Theme.of(context)
+                                              .colorScheme
+                                              .primary),
+                                      strokeWidth: 2.0,
+                                    ),
+                                  ),
+                                )
                               : ElevatedButton.icon(
-                            onPressed: () {
-                              setState(() {
-                                FocusScope.of(context).unfocus();
-                                _loginFuture = _login();
-                              });
-                            },
-                            icon: Icon(
-                              Icons.login_outlined,
-                              color: Theme.of(context).colorScheme.outline,
-                              size: 20,
-                            ),
-                            label: Text(
-                              'ENTRAR',
-                              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                                fontFamily: 'Poppins',
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0,
-                                color: Theme.of(context).colorScheme.outline,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              padding: EdgeInsets.symmetric(horizontal: 25, vertical: 15),
-                              backgroundColor: Theme.of(context).colorScheme.primary,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(25),
-                              ),
-                            ),
-                          ),
+                                  onPressed: () {
+                                    setState(() {
+                                      FocusScope.of(context).unfocus();
+                                      _loginFuture = _login();
+                                    });
+                                  },
+                                  icon: Icon(
+                                    Icons.login_outlined,
+                                    color:
+                                        Theme.of(context).colorScheme.outline,
+                                    size: 20,
+                                  ),
+                                  label: Text(
+                                    'ENTRAR',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelLarge
+                                        ?.copyWith(
+                                          fontFamily: 'Poppins',
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w600,
+                                          letterSpacing: 0,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .outline,
+                                        ),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    padding: EdgeInsets.symmetric(
+                                        horizontal: 25, vertical: 15),
+                                    backgroundColor:
+                                        Theme.of(context).colorScheme.primary,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(25),
+                                    ),
+                                  ),
+                                ),
                         );
                       },
                     ),
                     SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: _rememberMe,
-                          onChanged: (value) {
-                            setState(() {
-                              _rememberMe = value ?? false;
-                            });
-                          },
-                        ),
-                        Text(
+                    SizedBox(
+                      width: 450,
+                      child: CheckboxListTile(
+                        title: Text(
                           'Lembrar de mim',
                           style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: Theme.of(context).colorScheme.onSecondary
+                              fontFamily: 'Poppins',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Theme.of(context).colorScheme.onSecondary
                           ),
                         ),
-                      ],
-                    ),
+                        side: BorderSide(
+                            color: Theme.of(context).primaryColor,
+                            width: 2
+                        ),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        activeColor: Theme.of(context).primaryColor,
+                        checkColor: Theme.of(context).colorScheme.outline,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(5.0),
+                        ),
+                        dense: true,
+                        value: _rememberMe,
+                        onChanged: (value) {
+                          setState(() {
+                            _rememberMe = value ?? false;
+                          });
+                        },
+                      ),
+                    )
                   ],
                 ),
               ),
