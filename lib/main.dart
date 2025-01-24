@@ -10,6 +10,7 @@ import 'package:app_io/features/screens/splash/splash_screen.dart';
 import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';
 import 'package:app_io/util/services/connectivity_service.dart';
 import 'package:app_io/util/themes/app_theme.dart';
+import 'package:app_tracking_transparency/app_tracking_transparency.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -24,6 +25,11 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterL
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  /// Solicita a permissão de rastreamento antes de tudo
+  if (Platform.isIOS) {
+    await _forceAppTrackingPermission();
+  }
 
   // Inicialize o Firebase
   await Firebase.initializeApp(
@@ -56,6 +62,17 @@ void main() async {
       child: MyApp(),
     ),
   );
+}
+
+Future<void> _forceAppTrackingPermission() async {
+  print('Solicitando permissão de rastreamento...');
+  var status = await AppTrackingTransparency.trackingAuthorizationStatus;
+
+  // Força a exibição se a permissão não foi decidida
+  while (status == TrackingStatus.notDetermined) {
+    status = await AppTrackingTransparency.requestTrackingAuthorization();
+    print('Status da permissão ATT: $status');
+  }
 }
 
 Future<void> initializeLocalNotifications() async {

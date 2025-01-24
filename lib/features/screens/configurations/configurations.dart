@@ -686,7 +686,93 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             SizedBox(height: 20),
                           ],
-
+                          SizedBox(height: 30),
+                          _buildNotificationToggle(),
+                          SizedBox(height: 30),
+                          if (copiarTelefones == true)
+                            Align(
+                              alignment: AlignmentDirectional(0, 0),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.max,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Align(
+                                    alignment: AlignmentDirectional(0, 0),
+                                    child: Padding(
+                                      padding:
+                                      EdgeInsetsDirectional.fromSTEB(0, 20, 20, 0),
+                                      child:
+                                      _isLoading // Exibe a barra de progresso se estiver carregando
+                                          ? ElevatedButton(
+                                        onPressed: null,
+                                        // Botão desabilitado durante o carregamento
+                                        style: ElevatedButton.styleFrom(
+                                          padding: EdgeInsets.symmetric(
+                                              horizontal: 25, vertical: 15),
+                                          backgroundColor: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                            BorderRadius.circular(25),
+                                          ),
+                                        ),
+                                        child: SizedBox(
+                                          width: 20,
+                                          height:
+                                          20, // Define o tamanho da ProgressBar
+                                          child: CircularProgressIndicator(
+                                            valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                                Colors.white),
+                                            strokeWidth: 2.0,
+                                          ),
+                                        ),
+                                      )
+                                          : ElevatedButton.icon(
+                                        onPressed: () => _showCampaignsSheet(context),
+                                        icon: Icon(
+                                          Icons.copy_all,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .outline,
+                                          size: 25,
+                                        ),
+                                        label: Text(
+                                          'Copiar telefones',
+                                          style: TextStyle(
+                                            fontFamily: 'Poppins',
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: 0,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .outline,
+                                          ),
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          padding:
+                                          EdgeInsetsDirectional.fromSTEB(
+                                              30, 15, 30, 15),
+                                          backgroundColor: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
+                                          elevation: 3,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                            BorderRadius.circular(25),
+                                          ),
+                                          side: BorderSide(
+                                            color: Colors.transparent,
+                                            width: 1,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           // Adicione mais campos seguindo o mesmo padrão acima
                         ],
                       ),
