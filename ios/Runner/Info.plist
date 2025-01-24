@@ -40,13 +40,16 @@
 	<string>Este aplicativo usa Face ID para autenticação.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Este aplicativo requer acesso à rede local para depuração.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Este aplicativo precisa acessar sua biblioteca de fotos para permitir o upload de imagens.</string>
 	<key>NSUserTrackingUsageDescription</key>
-	<string>Este aplicativo usa notificações para manter você atualizado.</string>
+    <string>Precisamos da sua permissão de rastreamento para personalizar anúncios e melhorar nossos serviços.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>processing</string>
+		<string>remote-notification</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
@@ -75,7 +78,5 @@
 	<array>
 		<string>$(AppIdentifierPrefix)com.your.bundle</string>
 	</array>
-	<key>NSPhotoLibraryUsageDescription</key>
-    <string>Este aplicativo precisa acessar sua biblioteca de fotos para permitir o upload de imagens.</string>
 </dict>
 </plist>
