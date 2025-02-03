@@ -175,7 +175,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
       if (_pages[_currentIndex] is AdminPanelPage) {
         return 'Painel Administrativo';
       } else if (_pages[_currentIndex] is DashboardPage) {
-        return 'Dashboard';
+        return 'Início';
       } else if (_pages[_currentIndex] is LeadsPage) {
         return 'Leads';
       } else if (_pages[_currentIndex] is SettingsPage) {
@@ -369,7 +369,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
       items.add(
         BottomNavyBarItem(
           icon: Icon(Icons.dashboard),
-          title: Text('Dashboard'),
+          title: Text('Início'),
           inactiveColor: Theme.of(context).colorScheme.onSecondary,
           activeColor: Theme.of(context).colorScheme.tertiary,
           textAlign: TextAlign.center,

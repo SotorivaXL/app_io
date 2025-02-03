@@ -177,14 +177,14 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                               Icons.arrow_back_ios_new,
                               color:
                               Theme.of(context).colorScheme.onBackground,
-                              size: 20,
+                              size: 18,
                             ),
                             const SizedBox(width: 4),
                             Text(
                               'Voltar',
                               style: TextStyle(
                                 fontFamily: 'Poppins',
-                                fontSize: 16,
+                                fontSize: 14,
                                 color:
                                 Theme.of(context).colorScheme.onSecondary,
                               ),
@@ -197,7 +197,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                         'Criar Campanhas',
                         style: TextStyle(
                           fontFamily: 'Poppins',
-                          fontSize: 26,
+                          fontSize: 22,
                           fontWeight: FontWeight.w700,
                           color: Theme.of(context).colorScheme.onSecondary,
                         ),

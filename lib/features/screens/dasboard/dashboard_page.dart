@@ -23,11 +23,12 @@ class _DashboardPageState extends State<DashboardPage> {
   String? selectedGrupoAnuncioId;
   bool _isExpanded = false;
   bool _isLoading = true;
+  bool _isFiltering = false;
   final DateRangePickerController _datePickerController =
   DateRangePickerController();
 
   final String apiUrl =
-      "https://app-io-1c16f.uc.r.appspot.com/dynamic_insights";
+      "https://us-central1-app-io-1c16f.cloudfunctions.net/getInsights";
 
   List<Map<String, dynamic>> adAccounts = [];
 
@@ -217,8 +218,6 @@ class _DashboardPageState extends State<DashboardPage> {
                 _buildFilters(),
                 const SizedBox(height: 20),
                 _buildMetricCards(),
-                const SizedBox(height: 20),
-                _buildGroupedCards(),
                 const SizedBox(height: 50),
               ],
             ),
@@ -446,15 +445,13 @@ class _DashboardPageState extends State<DashboardPage> {
                                         if (value == null || value.isEmpty) {
                                           return 'Selecione o grupo de anúncios';
                                         }
-                                        final selectedItem =
-                                        localGruposAnuncios.firstWhere(
+                                        final selectedItem = localGruposAnuncios.firstWhere(
                                               (item) => item['id'] == value,
                                           orElse: () => {
-                                            'name':
-                                            'Selecione o grupo de anúncios'
+                                            'name': 'Selecione o grupo de anúncios'
                                           },
                                         );
-                                        return selectedItem['name'];
+                                        return selectedItem['name'] ?? 'Selecione o grupo de anúncios';
                                       },
                                     );
                                   }
@@ -468,13 +465,24 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
                   const SizedBox(height: 20),
                   ElevatedButton.icon(
-                    icon: Icon(
+                    icon: _isFiltering
+                        ? SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.0,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Theme.of(context).colorScheme.outline,
+                        ),
+                      ),
+                    )
+                        : Icon(
                       Icons.manage_search,
                       size: 22,
                       color: Theme.of(context).colorScheme.outline,
                     ),
                     label: Text(
-                      'Filtrar',
+                      _isFiltering ? 'Filtrando...' : 'Filtrar',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontFamily: 'Poppins',
@@ -484,67 +492,82 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      padding:
-                      EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                       backgroundColor: Theme.of(context).colorScheme.tertiary,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(25),
                       ),
                     ),
-                    onPressed: () async {
-                      if (startDate == null || endDate == null) {
-                        print('Erro: Nenhum intervalo de datas foi selecionado.');
-                        return;
-                      }
-
-                      String dataInicial =
-                      DateFormat('yyyy-MM-dd').format(startDate!);
-                      String dataFinal =
-                      DateFormat('yyyy-MM-dd').format(endDate!);
-                      print('Intervalo de datas: $dataInicial - $dataFinal');
-
-                      if (selectedContaAnuncioId == null) {
-                        await _fetchInitialInsights();
-                        if (selectedContaAnuncioId == null) {
-                          print(
-                              'Erro: ID da conta de anúncios não encontrado.');
+                    onPressed: _isFiltering
+                        ? null
+                        : () async {
+                      // Desativa o botão e exibe o CircularProgressIndicator
+                      setState(() {
+                        _isFiltering = true;
+                      });
+                      try {
+                        if (startDate == null || endDate == null) {
+                          print('Erro: Nenhum intervalo de datas foi selecionado.');
+                          _handleApiError('Por favor, selecione um intervalo de datas.');
                           return;
                         }
-                      }
 
-                      String? id;
-                      String level;
+                        String dataInicial =
+                        DateFormat('yyyy-MM-dd').format(startDate!);
+                        String dataFinal = DateFormat('yyyy-MM-dd').format(endDate!);
 
-                      if (selectedGrupoAnuncioId != null) {
-                        id = selectedGrupoAnuncioId;
-                        level = "adset";
-                        print('ID do grupo de anúncios selecionado: $id');
-                      } else if (selectedCampaignId != null) {
-                        id = selectedCampaignId;
-                        level = "campaign";
-                        print('ID da campanha selecionada: $id');
-                      } else {
-                        id = selectedContaAnuncioId;
-                        level = "account";
-                        print('ID da conta de anúncios selecionada: $id');
-                      }
+                        String? id;
+                        String level;
 
-                      if (id == null) {
-                        print('Erro: Nenhum ID válido foi selecionado.');
-                        return;
-                      }
+                        // Hierarquia correta de seleção
+                        if (selectedGrupoAnuncioId != null && selectedCampaignId == null) {
+                          // Nível Adset (grupo de anúncios)
+                          id = selectedGrupoAnuncioId;
+                          level = "adset";
+                          print('Buscando insights do grupo de anúncios: $id');
+                        } else if (selectedCampaignId != null) {
+                          // Nível Campaign
+                          id = selectedCampaignId;
+                          level = "campaign";
+                          print('Buscando insights da campanha: $id');
+                        } else {
+                          // Nível Account (conta de anúncios)
+                          if (selectedContaAnuncioId == null) {
+                            await _fetchInitialInsights();
+                            if (selectedContaAnuncioId == null) {
+                              print('Erro: ID da conta de anúncios não encontrado.');
+                              _handleApiError('ID da conta de anúncios não encontrado.');
+                              return;
+                            }
+                          }
+                          id = selectedContaAnuncioId;
+                          level = "account";
+                          print('Buscando insights da conta: $id');
+                        }
 
-                      try {
                         final insights = await _fetchMetaInsights(
-                            id, level, dataInicial, dataFinal);
+                          id!,
+                          level,
+                          dataInicial,
+                          dataFinal,
+                        );
 
-                        print('\n--- Dados de Insights Recuperados ---');
-                        insights.forEach((key, value) {
-                          print('$key: $value');
-                        });
-
+                        if (insights.isEmpty) {
+                          _handleApiError('Nenhum dado de insights encontrado.');
+                        } else {
+                          print('\n--- Dados de Insights Recuperados ---');
+                          insights.forEach((key, value) {
+                            print('$key: $value');
+                          });
+                        }
                       } catch (e) {
                         print('Erro ao buscar dados: $e');
+                        _handleApiError(e.toString());
+                      } finally {
+                        // Reativa o botão após o carregamento ou erro
+                        setState(() {
+                          _isFiltering = false;
+                        });
                       }
                     },
                   ),
@@ -572,98 +595,6 @@ class _DashboardPageState extends State<DashboardPage> {
       }
     }
     return '—'; // Valor padrão se não houver dados
-  }
-
-  Widget _buildGroupedCards() {
-    final List<Map<String, dynamic>> metrics = [
-      {
-        'title': 'Cliques no Link',
-        'key': 'inline_link_clicks',
-        'icon': FontAwesomeIcons.link
-      },
-      {
-        'title': 'Custo por Clique no Link',
-        'key': 'cost_per_inline_link_click',
-        'icon': FontAwesomeIcons.circleDollarToSlot
-      },
-      {
-        'title': 'Cliques (Todos)',
-        'key': 'clicks',
-        'icon': FontAwesomeIcons.computerMouse
-      },
-      {
-        'title': 'Custo por Clique (CPC - Todos)',
-        'key': 'cpc',
-        'icon': FontAwesomeIcons.coins
-      },
-    ];
-
-    final currencyFormatter =
-    NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
-    final formatter = NumberFormat('#,##0', 'pt_BR');
-
-    return Card(
-      elevation: 6,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      color: Theme.of(context).colorScheme.secondary,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Column(
-              children: [
-                // Primeira linha de cards
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: _buildMetricCard(
-                        metrics[0]['title'],
-                        _getFormattedValue(metrics[0]['key']),
-                        metrics[0]['icon'],
-                      ),
-                    ),
-                    const SizedBox(width: 16), // Espaço entre os cards
-                    Expanded(
-                      child: _buildMetricCard(
-                        metrics[1]['title'],
-                        _getFormattedValue(metrics[1]['key']),
-                        metrics[1]['icon'],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16), // Espaço entre as linhas
-                // Segunda linha de cards
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: _buildMetricCard(
-                        metrics[2]['title'],
-                        _getFormattedValue(metrics[2]['key']),
-                        metrics[2]['icon'],
-                      ),
-                    ),
-                    const SizedBox(width: 16), // Espaço entre os cards
-                    Expanded(
-                      child: _buildMetricCard(
-                        metrics[3]['title'],
-                        _getFormattedValue(metrics[3]['key']),
-                        metrics[3]['icon'],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Widget _buildMetricCards() {
@@ -697,6 +628,16 @@ class _DashboardPageState extends State<DashboardPage> {
         'title': 'Custo por Mil Pessoas Alcançadas (CPM)',
         'key': 'cpm',
         'icon': FontAwesomeIcons.sackDollar
+      },
+      {
+        'title': 'Cliques no Link',
+        'key': 'inline_link_clicks',
+        'icon': FontAwesomeIcons.link
+      },
+      {
+        'title': 'Custo por Clique no Link',
+        'key': 'cost_per_inline_link_click',
+        'icon': FontAwesomeIcons.circleDollarToSlot
       },
     ];
 
@@ -1184,8 +1125,13 @@ class _DashboardPageState extends State<DashboardPage> {
 
         for (var doc in gruposAnunciosSnapshot.docs) {
           var data = doc.data();
+          // Verifique se 'id' e 'name' não são nulos
+          if (data['id'] == null || data['name'] == null) {
+            print('Grupo de anúncio com dados faltando: ${doc.id}');
+            continue; // Pule este item
+          }
           allGruposAnuncios.add({
-            'id': data['id'],
+            'id': data['id'].toString(),
             'name': data['name'],
             'bmId': bmId,
             'contaAnuncioDocId': contaAnuncioDocId,
@@ -1207,6 +1153,12 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<Map<String, dynamic>> _fetchMetaInsights(
       String id, String level, String startDate, String endDate) async {
     try {
+      // Nova validação de parâmetros
+      if (id.isEmpty) throw Exception('ID não pode ser vazio');
+      if (!['account', 'campaign', 'adset'].contains(level.toLowerCase())) {
+        throw Exception('Nível inválido');
+      }
+
       final response = await http.post(
         Uri.parse(apiUrl),
         headers: {"Content-Type": "application/json"},
@@ -1221,20 +1173,56 @@ class _DashboardPageState extends State<DashboardPage> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
-          setState(() {
-            initialInsightsData = data['data']['insights'][0] ?? {};
-          });
-          return initialInsightsData;
+          // Verifique se 'insights' não está vazio
+          if (data['data']['insights'] != null && data['data']['insights'].isNotEmpty) {
+            setState(() {
+              initialInsightsData = data['data']['insights'][0];
+            });
+            return initialInsightsData;
+          } else {
+            throw Exception('Nenhum insight encontrado para os parâmetros fornecidos.');
+          }
         } else {
-          throw Exception('Erro: ${data['data']}');
+          throw Exception('Erro: ${data['message']}');
         }
       } else {
-        throw Exception(
-            'Erro na API: ${response.statusCode} - ${response.body}');
+        throw Exception('Erro na Cloud Function: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
-      print('Erro ao buscar insights da API: $e');
+      print('Erro ao buscar insights: $e');
       throw e;
     }
+  }
+
+  void _handleApiError(dynamic error) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Erro', style: TextStyle(color: Colors.red)),
+        content: Text(
+          error.toString(),
+          style: TextStyle(fontSize: 16),
+        ),
+        actions: [
+          TextButton(
+            child: Text('OK'),
+            onPressed: () => Navigator.of(ctx).pop(),
+          )
+        ],
+      ),
+    );
+  }
+
+  void _updateMetrics(Map<String, dynamic> newData) {
+    setState(() {
+      initialInsightsData = newData;
+
+      // Atualize outras variáveis de estado se necessário
+      selectedCampaigns = [];
+      selectedGruposAnuncios = [];
+    });
+
+    // Forçar reconstrução dos widgets
+    _buildMetricCards();
   }
 }

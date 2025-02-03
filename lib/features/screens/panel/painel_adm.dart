@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:app_io/auth/providers/auth_provider.dart';
+import 'package:app_io/features/screens/apis/manage_apis.dart';
 import 'package:app_io/features/screens/campaign/manage_campaigns.dart';
 import 'package:app_io/features/screens/collaborator/manage_collaborators.dart';
 import 'package:app_io/features/screens/company/manage_companies.dart';
@@ -21,6 +22,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   final FirestoreService _firestoreService = FirestoreService();
   bool hasGerenciarParceirosAccess = false;
   bool hasGerenciarColaboradoresAccess = false;
+  bool hasIsDevAccount = false;
   bool hasConfigurarDashAccess = false;
   bool hasCriarFormAccess = false; // Atualizado
   bool hasCriarCampanhaAccess = false; // Atualizado
@@ -108,6 +110,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       hasConfigurarDashAccess = userData?['configurarDash'] ?? false;
       hasCriarFormAccess = userData?['criarForm'] ?? false; // Atualizado
       hasCriarCampanhaAccess = userData?['criarCampanha'] ?? false; // Atualizado
+      hasIsDevAccount = userData?['isDevAccount'] ?? false; // Atualizado
       isLoading = false;
     });
 
@@ -116,6 +119,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         !hasGerenciarColaboradoresAccess &&
         !hasConfigurarDashAccess &&
         !hasCriarFormAccess &&
+        !hasIsDevAccount &&
         !hasCriarCampanhaAccess) {
       if (!_hasShownPermissionRevokedDialog) {
         _hasShownPermissionRevokedDialog = true;
@@ -234,6 +238,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         !hasGerenciarColaboradoresAccess &&
         !hasConfigurarDashAccess &&
         !hasCriarFormAccess &&
+        !hasIsDevAccount &&
         !hasCriarCampanhaAccess) {
       // Opcionalmente, você pode retornar uma tela vazia ou uma mensagem
       return ConnectivityBanner(
@@ -295,6 +300,16 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                             _navigateWithFade(context, ManageCampaigns()); // Navega para a nova página
                           },
                         ),
+                      if (hasIsDevAccount)
+                        _buildCardOption(
+                          context,
+                          title: 'Gerenciar APIs',
+                          subtitle: 'Gerenciar, criar, editar e executar APIs',
+                          icon: Icons.api_rounded,
+                          onTap: () async {
+                            _navigateWithFade(context, ManageApis()); // Navega para a nova página
+                          },
+                        ),
                       if (hasConfigurarDashAccess)
                         _buildCardOption(
                           context,
@@ -311,6 +326,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                       !hasGerenciarColaboradoresAccess &&
                       !hasConfigurarDashAccess &&
                       !hasCriarFormAccess &&
+                      !hasIsDevAccount &&
                       !hasCriarCampanhaAccess)
                     Center(
                       child: Container(
