@@ -27,6 +27,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
     'criarForm': false,
     'criarCampanha': false,
     'copiarTelefones': false,
+    'executarAPIs': false,
   };
 
   @override
@@ -863,6 +864,34 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                             onChanged: (bool? value) {
                               setState(() {
                                 accessRights['copiarTelefones'] = value ?? false;
+                              });
+                            },
+                            controlAffinity: ListTileControlAffinity.leading,
+                            activeColor: Theme.of(context).colorScheme.tertiary,
+                            checkColor: Theme.of(context).colorScheme.outline,
+                            side: BorderSide(
+                              color: Theme.of(context).colorScheme.tertiary,
+                              width: 2,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(5.0),
+                            ),
+                            dense: true,
+                          ),
+                          CheckboxListTile(
+                            title: Text(
+                              "Executar APIs",
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w500,
+                                fontSize: 14,
+                                color: Theme.of(context).colorScheme.onSecondary,
+                              ),
+                            ),
+                            value: accessRights['executarAPIs'],
+                            onChanged: (bool? value) {
+                              setState(() {
+                                accessRights['executarAPIs'] = value ?? false;
                               });
                             },
                             controlAffinity: ListTileControlAffinity.leading,

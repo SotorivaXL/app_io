@@ -1037,6 +1037,30 @@ class _AddCompanyState extends State<AddCompany> {
                             ),
                             dense: true,
                           ),
+                          CheckboxListTile(
+                            title: Text(
+                              "Executar APIs",
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w500,
+                                fontSize: 14,
+                                color: Theme.of(context).colorScheme.onSecondary,
+                              ),
+                            ),
+                            value: accessRights['executarAPIs'],
+                            onChanged: (bool? value) {
+                              setState(() {
+                                accessRights['executarAPIs'] = value ?? false;
+                              });
+                            },
+                            controlAffinity: ListTileControlAffinity.leading,
+                            activeColor: Theme.of(context).primaryColor,
+                            checkColor: Theme.of(context).colorScheme.outline,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(5.0),
+                            ),
+                            dense: true,
+                          ),
                         ],
                       ),
                     ),

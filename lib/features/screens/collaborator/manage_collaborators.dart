@@ -504,6 +504,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                                     criarCampanha: collaborator['criarCampanha'] ?? false,
                                     criarForm: collaborator['criarForm'] ?? false,
                                     copiarTelefones: collaborator['copiarTelefones'] ?? false,
+                                    executarAPIs: collaborator['executarAPIs'] ?? false,
                                   ),
                                 );
                               },

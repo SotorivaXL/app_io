@@ -22,7 +22,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   final FirestoreService _firestoreService = FirestoreService();
   bool hasGerenciarParceirosAccess = false;
   bool hasGerenciarColaboradoresAccess = false;
-  bool hasIsDevAccount = false;
+  bool hasExecutarAPIs = false;
   bool hasConfigurarDashAccess = false;
   bool hasCriarFormAccess = false; // Atualizado
   bool hasCriarCampanhaAccess = false; // Atualizado
@@ -110,7 +110,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       hasConfigurarDashAccess = userData?['configurarDash'] ?? false;
       hasCriarFormAccess = userData?['criarForm'] ?? false; // Atualizado
       hasCriarCampanhaAccess = userData?['criarCampanha'] ?? false; // Atualizado
-      hasIsDevAccount = userData?['isDevAccount'] ?? false; // Atualizado
+      hasExecutarAPIs = userData?['executarAPIs'] ?? false; // Atualizado
       isLoading = false;
     });
 
@@ -119,7 +119,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         !hasGerenciarColaboradoresAccess &&
         !hasConfigurarDashAccess &&
         !hasCriarFormAccess &&
-        !hasIsDevAccount &&
+        !hasExecutarAPIs &&
         !hasCriarCampanhaAccess) {
       if (!_hasShownPermissionRevokedDialog) {
         _hasShownPermissionRevokedDialog = true;
@@ -238,7 +238,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         !hasGerenciarColaboradoresAccess &&
         !hasConfigurarDashAccess &&
         !hasCriarFormAccess &&
-        !hasIsDevAccount &&
+        !hasExecutarAPIs &&
         !hasCriarCampanhaAccess) {
       // Opcionalmente, você pode retornar uma tela vazia ou uma mensagem
       return ConnectivityBanner(
@@ -300,7 +300,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                             _navigateWithFade(context, ManageCampaigns()); // Navega para a nova página
                           },
                         ),
-                      if (hasIsDevAccount)
+                      if (hasExecutarAPIs)
                         _buildCardOption(
                           context,
                           title: 'Gerenciar APIs',
@@ -326,7 +326,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                       !hasGerenciarColaboradoresAccess &&
                       !hasConfigurarDashAccess &&
                       !hasCriarFormAccess &&
-                      !hasIsDevAccount &&
+                      !hasExecutarAPIs &&
                       !hasCriarCampanhaAccess)
                     Center(
                       child: Container(

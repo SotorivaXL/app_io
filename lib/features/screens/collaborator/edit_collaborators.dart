@@ -20,6 +20,7 @@ class EditCollaborators extends StatefulWidget {
   final bool criarCampanha;
   final bool criarForm;
   final bool copiarTelefones;
+  final bool executarAPIs;
 
   EditCollaborators({
     required this.collaboratorId,
@@ -33,6 +34,7 @@ class EditCollaborators extends StatefulWidget {
     required this.criarCampanha,
     required this.criarForm,
     required this.copiarTelefones,
+    required this.executarAPIs,
   });
 
   @override
@@ -52,6 +54,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
     'criarCampanha': false,
     'criarForm': false,
     'copiarTelefones': false,
+    'executarAPIs': false,
   };
 
   late TextEditingController _nameController;
@@ -79,6 +82,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
     accessRights['criarCampanha'] = widget.criarCampanha;
     accessRights['criarForm'] = widget.criarForm;
     accessRights['copiarTelefones'] = widget.copiarTelefones;
+    accessRights['executarAPIs'] = widget.executarAPIs;
   }
 
   @override
@@ -743,6 +747,30 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                           onChanged: (bool? value) {
                             setState(() {
                               accessRights['copiarTelefones'] = value ?? false;
+                            });
+                          },
+                          controlAffinity: ListTileControlAffinity.leading,
+                          activeColor: Theme.of(context).primaryColor,
+                          checkColor: Theme.of(context).colorScheme.outline,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(5.0),
+                          ),
+                          dense: true,
+                        ),
+                        CheckboxListTile(
+                          title: Text(
+                            "Executar APIs",
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontWeight: FontWeight.w500,
+                              fontSize: 14,
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                          value: accessRights['executarAPIs'],
+                          onChanged: (bool? value) {
+                            setState(() {
+                              accessRights['executarAPIs'] = value ?? false;
                             });
                           },
                           controlAffinity: ListTileControlAffinity.leading,

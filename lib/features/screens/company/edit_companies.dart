@@ -26,6 +26,7 @@ class EditCompanies extends StatefulWidget {
   final bool criarForm;
   final bool copiarTelefones;
   final bool alterarSenha;
+  final bool executarAPIs;
 
   EditCompanies({
     required this.companyId,
@@ -44,6 +45,7 @@ class EditCompanies extends StatefulWidget {
     required this.criarForm,
     required this.copiarTelefones,
     required this.alterarSenha,
+    required this.executarAPIs,
   });
 
   @override
@@ -66,6 +68,7 @@ class _EditCompaniesState extends State<EditCompanies> {
     'criarForm': false,
     'copiarTelefones': false,
     'alterarSenha': false,
+    'executarAPIs': false,
   };
 
   bool _isChangingPassword = false;
@@ -94,6 +97,7 @@ class _EditCompaniesState extends State<EditCompanies> {
     accessRights['criarForm'] = widget.criarForm;
     accessRights['copiarTelefones'] = widget.copiarTelefones;
     accessRights['alterarSenha'] = widget.alterarSenha;
+    accessRights['executarAPIs'] = widget.executarAPIs;
   }
 
   @override
@@ -143,6 +147,7 @@ class _EditCompaniesState extends State<EditCompanies> {
         'criarForm': accessRights['criarForm'],
         'copiarTelefones': accessRights['copiarTelefones'],
         'alterarSenha': accessRights['alterarSenha'],
+        'executarAPIs': accessRights['executarAPIs'],
       });
 
       // Volta para a tela anterior
@@ -957,6 +962,35 @@ class _EditCompaniesState extends State<EditCompanies> {
                           onChanged: (bool? value) {
                             setState(() {
                               accessRights['alterarSenha'] =
+                                  value ?? false;
+                            });
+                          },
+                          controlAffinity:
+                          ListTileControlAffinity.leading,
+                          activeColor: Theme.of(context).primaryColor,
+                          checkColor:
+                          Theme.of(context).colorScheme.outline,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(5.0),
+                          ),
+                          dense: true,
+                        ),
+                        CheckboxListTile(
+                          title: Text(
+                            "Executar APIs",
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontWeight: FontWeight.w500,
+                              fontSize: 14,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSecondary,
+                            ),
+                          ),
+                          value: accessRights['executarAPIs'],
+                          onChanged: (bool? value) {
+                            setState(() {
+                              accessRights['executarAPIs'] =
                                   value ?? false;
                             });
                           },

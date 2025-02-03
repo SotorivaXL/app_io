@@ -910,7 +910,7 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
         switch (level.toUpperCase()) {
             case 'BM':
                 // Retorna as opções de Business Managers
-                const bmsSnapshot = await admin.firestore().collection('teste').get();
+                const bmsSnapshot = await admin.firestore().collection('dashboard').get();
                 return bmsSnapshot.docs.map(doc => ({
                     label: doc.data().name,
                     value: doc.data().id // Usando o verdadeiro ID da BM
@@ -919,14 +919,14 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
             case 'CONTA_ANUNCIO':
                 if (!bmId) {
                     // bmId ausente, retorna opções de BM
-                    const bmsForAdSnapshot = await admin.firestore().collection('teste').get();
+                    const bmsForAdSnapshot = await admin.firestore().collection('dashboard').get();
                     return bmsForAdSnapshot.docs.map(doc => ({
                         label: doc.data().name,
                         value: doc.data().id
                     }));
                 }
                 // Fetch Ad Accounts para o bmId fornecido
-                const accountsSnapshot = await admin.firestore().collection('teste')
+                const accountsSnapshot = await admin.firestore().collection('dashboard')
                     .where('id', '==', bmId).get();
 
                 if (accountsSnapshot.empty) {
@@ -936,7 +936,7 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
                 const bmDoc = accountsSnapshot.docs[0];
                 const bmDocId = bmDoc.id; // Nome do documento (nome da BM)
 
-                const adAccounts = await admin.firestore().collection('teste')
+                const adAccounts = await admin.firestore().collection('dashboard')
                     .doc(bmDocId).collection('contasAnuncio').get();
 
                 return adAccounts.docs.map(doc => ({
@@ -947,14 +947,14 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
             case 'CAMPANHA':
                 if (!bmId) {
                     // bmId ausente, retorna opções de BM
-                    const bmsForCampaignSnapshot = await admin.firestore().collection('teste').get();
+                    const bmsForCampaignSnapshot = await admin.firestore().collection('dashboard').get();
                     return bmsForCampaignSnapshot.docs.map(doc => ({
                         label: doc.data().name,
                         value: doc.data().id
                     }));
                 } else if (bmId && !adAccountId) {
                     // adAccountId ausente, retorna Contas de Anúncio
-                    const accountsSnapshotCamp = await admin.firestore().collection('teste')
+                    const accountsSnapshotCamp = await admin.firestore().collection('dashboard')
                         .where('id', '==', bmId).get();
 
                     if (accountsSnapshotCamp.empty) {
@@ -964,7 +964,7 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
                     const bmDocCamp = accountsSnapshotCamp.docs[0];
                     const bmDocIdCamp = bmDocCamp.id; // Nome do documento (nome da BM)
 
-                    const adAccountsCamp = await admin.firestore().collection('teste')
+                    const adAccountsCamp = await admin.firestore().collection('dashboard')
                         .doc(bmDocIdCamp).collection('contasAnuncio').get();
 
                     return adAccountsCamp.docs.map(doc => ({
@@ -973,7 +973,7 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
                     }));
                 } else if (bmId && adAccountId && !campaignId) {
                     // Retorna opções de Campanhas
-                    const campaignsSnapshot = await admin.firestore().collection('teste')
+                    const campaignsSnapshot = await admin.firestore().collection('dashboard')
                         .where('id', '==', bmId).get();
 
                     if (campaignsSnapshot.empty) {
@@ -984,7 +984,7 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
                     const bmCampaignDocId = bmCampaignDoc.id;
 
                     // Buscar o documento da Conta de Anúncio pelo nome para obter o 'id'
-                    const adAccountDoc = await admin.firestore().collection('teste')
+                    const adAccountDoc = await admin.firestore().collection('dashboard')
                         .doc(bmCampaignDocId).collection('contasAnuncio')
                         .where('name', '==', adAccountId).get();
 
@@ -995,7 +995,7 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
                     const adAccountRealId = adAccountDoc.docs[0].data().id;
                     const adAccountFirestoreId = adAccountDoc.docs[0].id; // Nome da Conta de Anúncio
 
-                    const campaignsFirestoreSnapshot = await admin.firestore().collection('teste')
+                    const campaignsFirestoreSnapshot = await admin.firestore().collection('dashboard')
                         .doc(bmCampaignDocId).collection('contasAnuncio')
                         .doc(adAccountFirestoreId).collection('campanhas').get();
 
@@ -1011,14 +1011,14 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
             case 'GRUPO_ANUNCIO':
                 if (!bmId) {
                     // bmId ausente, retorna opções de BM
-                    const bmsForGrupoSnapshot = await admin.firestore().collection('teste').get();
+                    const bmsForGrupoSnapshot = await admin.firestore().collection('dashboard').get();
                     return bmsForGrupoSnapshot.docs.map(doc => ({
                         label: doc.data().name,
                         value: doc.data().id
                     }));
                 } else if (bmId && !adAccountId) {
                     // adAccountId ausente, retorna Contas de Anúncio
-                    const accountsSnapshotGrupo = await admin.firestore().collection('teste')
+                    const accountsSnapshotGrupo = await admin.firestore().collection('dashboard')
                         .where('id', '==', bmId).get();
 
                     if (accountsSnapshotGrupo.empty) {
@@ -1028,7 +1028,7 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
                     const bmDocGrupo = accountsSnapshotGrupo.docs[0];
                     const bmDocIdGrupo = bmDocGrupo.id; // Nome do documento (nome da BM)
 
-                    const adAccountsGrupo = await admin.firestore().collection('teste')
+                    const adAccountsGrupo = await admin.firestore().collection('dashboard')
                         .doc(bmDocIdGrupo).collection('contasAnuncio').get();
 
                     return adAccountsGrupo.docs.map(doc => ({
@@ -1037,7 +1037,7 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
                     }));
                 } else if (bmId && adAccountId && !campaignId) {
                     // campaignId ausente, retorna Campanhas
-                    const campaignsSnapshotGrupo = await admin.firestore().collection('teste')
+                    const campaignsSnapshotGrupo = await admin.firestore().collection('dashboard')
                         .where('id', '==', bmId).get();
 
                     if (campaignsSnapshotGrupo.empty) {
@@ -1048,7 +1048,7 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
                     const bmCampaignDocIdGrupo = bmCampaignDocGrupo.id;
 
                     // Buscar o documento da Conta de Anúncio pelo nome para obter o 'id'
-                    const adAccountDocGrupo = await admin.firestore().collection('teste')
+                    const adAccountDocGrupo = await admin.firestore().collection('dashboard')
                         .doc(bmCampaignDocIdGrupo).collection('contasAnuncio')
                         .where('name', '==', adAccountId).get();
 
@@ -1060,7 +1060,7 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
                     const adAccountFirestoreIdGrupo = adAccountDocGrupo.docs[0].id;
 
                     // Buscar Campanhas
-                    const campaignsFirestoreSnapshotGrupo = await admin.firestore().collection('teste')
+                    const campaignsFirestoreSnapshotGrupo = await admin.firestore().collection('dashboard')
                         .doc(bmCampaignDocIdGrupo).collection('contasAnuncio')
                         .doc(adAccountFirestoreIdGrupo).collection('campanhas').get();
 
@@ -1070,7 +1070,7 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
                     }));
                 } else if (bmId && adAccountId && campaignId) {
                     // Retorna opções de Grupos de Anúncio
-                    const gruposAnuncioSnapshot = await admin.firestore().collection('teste')
+                    const gruposAnuncioSnapshot = await admin.firestore().collection('dashboard')
                         .where('id', '==', bmId).get();
 
                     if (gruposAnuncioSnapshot.empty) {
@@ -1081,7 +1081,7 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
                     const bmGrupoDocId = bmGrupoDoc.id;
 
                     // Buscar o documento da Conta de Anúncio pelo nome para obter o 'id'
-                    const adAccountGrupoDoc = await admin.firestore().collection('teste')
+                    const adAccountGrupoDoc = await admin.firestore().collection('dashboard')
                         .doc(bmGrupoDocId).collection('contasAnuncio')
                         .where('name', '==', adAccountId).get();
 
@@ -1093,7 +1093,7 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
                     const adAccountGrupoFirestoreId = adAccountGrupoDoc.docs[0].id; // Nome da Conta de Anúncio
 
                     // Buscar a Campanha pelo nome para obter o 'id'
-                    const campaignDocSnapshot = await admin.firestore().collection('teste')
+                    const campaignDocSnapshot = await admin.firestore().collection('dashboard')
                         .doc(bmGrupoDocId).collection('contasAnuncio')
                         .doc(adAccountGrupoFirestoreId).collection('campanhas')
                         .where('name', '==', campaignId).get();
@@ -1107,7 +1107,7 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
                     const campaignGrupoFirestoreId = campaignGrupoDoc.id; // Nome da Campanha
 
                     // Buscar Grupos de Anúncio
-                    const gruposAnuncioFirestoreSnapshot = await admin.firestore().collection('teste')
+                    const gruposAnuncioFirestoreSnapshot = await admin.firestore().collection('dashboard')
                         .doc(bmGrupoDocId).collection('contasAnuncio')
                         .doc(adAccountGrupoFirestoreId).collection('campanhas')
                         .doc(campaignGrupoFirestoreId).collection('gruposAnuncio').get();
@@ -1121,14 +1121,14 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
             case 'INSIGHTS':
                 if (!bmId) {
                     // bmId ausente, retorna opções de BM
-                    const bmsForInsightsSnapshot = await admin.firestore().collection('teste').get();
+                    const bmsForInsightsSnapshot = await admin.firestore().collection('dashboard').get();
                     return bmsForInsightsSnapshot.docs.map(doc => ({
                         label: doc.data().name,
                         value: doc.data().id
                     }));
                 } else if (bmId && !adAccountId) {
                     // adAccountId ausente, retorna Contas de Anúncio
-                    const accountsSnapshotInsights = await admin.firestore().collection('teste')
+                    const accountsSnapshotInsights = await admin.firestore().collection('dashboard')
                         .where('id', '==', bmId).get();
 
                     if (accountsSnapshotInsights.empty) {
@@ -1138,7 +1138,7 @@ exports.getSyncOptions = functions.https.onCall(async (data, context) => {
                     const bmDocInsights = accountsSnapshotInsights.docs[0];
                     const bmDocIdInsights = bmDocInsights.id; // Nome do documento (nome da BM)
 
-                    const adAccountsInsights = await admin.firestore().collection('teste')
+                    const adAccountsInsights = await admin.firestore().collection('dashboard')
                         .doc(bmDocIdInsights).collection('contasAnuncio').get();
 
                     return adAccountsInsights.docs.map(doc => ({
@@ -1243,11 +1243,11 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
         switch (level.toUpperCase()) {
             case 'BM':
                 console.log('Sincronizando Business Managers...');
-                const bms = await makeMetaRequest(`${metaData[META_CONFIG.fields.baseUrl]}/me/businesses`, {
+                const bms = await makeMetaRequest(`${metaData[META_CONFIG.fields.baseUrl]}/me/businesses?limit=10000000000000`, {
                     fields: 'id,name,created_time,vertical'
                 });
                 console.log(`Recebidos ${bms.length} Business Managers.`);
-                await refreshFirestoreData('teste', bms, 'id', 'name');
+                await refreshFirestoreData('dashboard', bms, 'id', 'name');
                 result = { message: `${bms.length} BMs sincronizadas` };
                 break;
 
@@ -1272,12 +1272,12 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
 
                 console.log(`Sincronizando Contas de Anúncio para BM ID: ${bmId}`);
 
-                // Consultar a coleção 'teste' para encontrar o documento com 'id' igual a 'bmId'
-                const bmQuerySnapshot = await admin.firestore().collection('teste')
+                // Consultar a coleção 'dashboard' para encontrar o documento com 'id' igual a 'bmId'
+                const bmQuerySnapshot = await admin.firestore().collection('dashboard')
                     .where('id', '==', bmId).get();
 
                 if (bmQuerySnapshot.empty) {
-                    console.error(`Nenhum documento encontrado na coleção 'teste' com id: ${bmId}`);
+                    console.error(`Nenhum documento encontrado na coleção 'dashboard' com id: ${bmId}`);
                     throw new functions.https.HttpsError(
                         'not-found',
                         `Nenhum documento encontrado para BM ID: ${bmId}`
@@ -1285,7 +1285,7 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
                 }
 
                 if (bmQuerySnapshot.size > 1) {
-                    console.warn(`Mais de um documento encontrado na coleção 'teste' com id: ${bmId}`);
+                    console.warn(`Mais de um documento encontrado na coleção 'dashboard' com id: ${bmId}`);
                 }
 
                 // Obter o primeiro documento encontrado
@@ -1301,7 +1301,7 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
                 console.log(`Recebidas ${adAccounts.length} Contas de Anúncio.`);
 
                 // Acessar a subcoleção 'contasAnuncio' dentro do documento BM existente
-                const adAccountsRef = admin.firestore().collection('teste').doc(bmDocId).collection('contasAnuncio');
+                const adAccountsRef = admin.firestore().collection('dashboard').doc(bmDocId).collection('contasAnuncio');
 
                 // Preparar o batch para deletar contas existentes e adicionar novas
                 const adBatch = admin.firestore().batch();
@@ -1343,7 +1343,7 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
                 console.log(`Sincronizando Campanhas para Ad Account Name: ${adAccountId}`);
 
                 // Consultar o BM document para obter o ID do BM
-                const bmCampaignSnapshot = await admin.firestore().collection('teste')
+                const bmCampaignSnapshot = await admin.firestore().collection('dashboard')
                     .where('id', '==', bmId).get();
 
                 if (bmCampaignSnapshot.empty) {
@@ -1358,7 +1358,7 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
                 const bmCampaignDocId = bmCampaignDoc.id;
 
                 // Buscar o documento da Conta de Anúncio pelo nome para obter o 'id'
-                const adAccountCampaignSnapshot = await admin.firestore().collection('teste')
+                const adAccountCampaignSnapshot = await admin.firestore().collection('dashboard')
                     .doc(bmCampaignDocId).collection('contasAnuncio')
                     .where('name', '==', adAccountId).get();
 
@@ -1382,7 +1382,7 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
                 console.log(`Recebidas ${campaigns.length} campanhas.`);
 
                 // Acessar a subcoleção 'campanhas' dentro da Conta de Anúncio existente
-                const campanhasRef = admin.firestore().collection('teste').doc(bmCampaignDocId)
+                const campanhasRef = admin.firestore().collection('dashboard').doc(bmCampaignDocId)
                     .collection('contasAnuncio').doc(adAccountCampaignFirestoreId).collection('campanhas');
 
                 // Preparar o batch para deletar campanhas existentes e adicionar novas
@@ -1417,7 +1417,7 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
                 console.log(`Sincronizando Grupos de Anúncio para Campanha Name: ${campaignId}`);
 
                 // Consultar o BM document para obter o ID do BM
-                const bmGrupoSnapshot = await admin.firestore().collection('teste')
+                const bmGrupoSnapshot = await admin.firestore().collection('dashboard')
                     .where('id', '==', bmId).get();
 
                 if (bmGrupoSnapshot.empty) {
@@ -1432,7 +1432,7 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
                 const bmGrupoDocId = bmGrupoDoc.id;
 
                 // Buscar o documento da Conta de Anúncio pelo nome para obter o 'id'
-                const adAccountGrupoSnapshot = await admin.firestore().collection('teste')
+                const adAccountGrupoSnapshot = await admin.firestore().collection('dashboard')
                     .doc(bmGrupoDocId).collection('contasAnuncio')
                     .where('name', '==', adAccountId).get();
 
@@ -1449,7 +1449,7 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
                 const adAccountGrupoFirestoreId = adAccountGrupoDoc.id; // Nome da Conta de Anúncio
 
                 // Buscar o documento da Campanha pelo nome para obter o 'id'
-                const campaignGrupoSnapshot = await admin.firestore().collection('teste')
+                const campaignGrupoSnapshot = await admin.firestore().collection('dashboard')
                     .doc(bmGrupoDocId).collection('contasAnuncio')
                     .doc(adAccountGrupoFirestoreId).collection('campanhas')
                     .where('name', '==', campaignId).get();
@@ -1474,7 +1474,7 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
                 console.log(`Recebidas ${adGroups.length} grupos de anúncio.`);
 
                 // Acessar a subcoleção 'gruposAnuncio' dentro da Campanha existente
-                const gruposAnuncioRef = admin.firestore().collection('teste').doc(bmGrupoDocId)
+                const gruposAnuncioRef = admin.firestore().collection('dashboard').doc(bmGrupoDocId)
                     .collection('contasAnuncio').doc(adAccountGrupoFirestoreId)
                     .collection('campanhas').doc(campaignGrupoFirestoreId)
                     .collection('gruposAnuncio');
@@ -1525,7 +1525,7 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
                 }
 
                 // 3. Restante do código de busca...
-                const bmSnapshot = await admin.firestore().collection('teste')
+                const bmSnapshot = await admin.firestore().collection('dashboard')
                     .where('id', '==', bmId).get();
 
                 if (bmSnapshot.empty) {
@@ -1534,7 +1534,7 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
                 const bmDocInsights = bmSnapshot.docs[0]; // Renomeado para evitar conflito
 
                 // 3. Buscar a Conta de Anúncio pelo nome
-                const adAccountsSnapshot = await admin.firestore().collection('teste')
+                const adAccountsSnapshot = await admin.firestore().collection('dashboard')
                     .doc(bmDocInsights.id).collection('contasAnuncio')
                     .where('name', '==', adAccountId).get();
 
@@ -1554,7 +1554,7 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
                     });
 
                 // 6. Salvar no Firestore
-                const insightsRef = admin.firestore().collection('teste').doc(bmDocInsights.id)
+                const insightsRef = admin.firestore().collection('dashboard').doc(bmDocInsights.id)
                     .collection('contasAnuncio').doc(adAccountsSnapshot.docs[0].id)
                     .collection('insights');
 
