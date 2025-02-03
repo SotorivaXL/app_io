@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:app_io/features/screens/configurations/configurations.dart';
 import 'package:app_io/features/screens/dasboard/dashboard_page.dart';
 import 'package:app_io/features/screens/leads/leads_page.dart';
@@ -35,6 +36,9 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   bool hasCriarCampanhaAccess = false;
   bool hasAdmPanelAccess = true;
 
+  // Controle para expandir/recolher a barra lateral no desktop
+  bool _isSidebarExpanded = true;
+
   @override
   void initState() {
     super.initState();
@@ -66,6 +70,10 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
         },
       );
     }
+  }
+
+  int getPageIndexByType(Type pageType) {
+    return _pages.indexWhere((page) => page.runtimeType == pageType);
   }
 
   void _listenToPermissionsChanges() {
@@ -175,7 +183,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
       if (_pages[_currentIndex] is AdminPanelPage) {
         return 'Painel Administrativo';
       } else if (_pages[_currentIndex] is DashboardPage) {
-        return 'Dashboard';
+        return 'início';
       } else if (_pages[_currentIndex] is LeadsPage) {
         return 'Leads';
       } else if (_pages[_currentIndex] is SettingsPage) {
@@ -258,25 +266,19 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
 
   @override
   Widget build(BuildContext context) {
-    double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
-    double tabBarHeight = Platform.isIOS
-        ? (111 - (_scrollOffset / 2)).clamp(0.0, 111).ceilToDouble()
-        : (79 - (_scrollOffset / 2)).clamp(0.0, 79).ceilToDouble();
-    double opacity = (1.0 - (_scrollOffset / 40)).clamp(0.0, 1.0);
-
-    final pageViewPhysics = (appBarHeight > 0 && tabBarHeight > 0)
-        ? AlwaysScrollableScrollPhysics()
-        : NeverScrollableScrollPhysics();
+    final bool isDesktop = MediaQuery.of(context).size.width > 1024;
 
     return ConnectivityBanner(
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.background,
-        appBar: PreferredSize(
-          preferredSize: Size.fromHeight(appBarHeight),
+        appBar: isDesktop
+            ? null // Remove o AppBar no desktop
+            : PreferredSize(
+          preferredSize: Size.fromHeight((100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0)),
           child: Opacity(
-            opacity: opacity,
+            opacity: (1.0 - (_scrollOffset / 40)).clamp(0.0, 1.0),
             child: AppBar(
-              toolbarHeight: appBarHeight,
+              toolbarHeight: (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0),
               title: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -304,7 +306,6 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                       ),
                     ],
                   ),
-                  // Ícone de notificações omitido
                 ],
               ),
               centerTitle: false,
@@ -314,30 +315,38 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
             ),
           ),
         ),
-        body: NotificationListener<ScrollNotification>(
-          onNotification: (ScrollNotification scrollInfo) {
-            // Removendo completamente o setState ou postFrameCallback aqui
-            // para não chamar setState durante o layout.
-            // Assim, o erro será evitado e o PageView continuará navegável por arraste.
-            return false; // Apenas retornamos false para não interromper a notificação
-          },
-          child: PageView(
-            controller: _pageController,
-            onPageChanged: (index) {
-              if (mounted) {
-                setState(() {
-                  _currentIndex = index;
-                });
-              }
-            },
-            physics: pageViewPhysics,
-            children: _pages,
-          ),
+        body: Row(
+          children: [
+            if (isDesktop) _buildDesktopSidebar(),
+            Expanded(
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (ScrollNotification scrollInfo) {
+                  return false;
+                },
+                child: PageView(
+                  controller: _pageController,
+                  onPageChanged: (index) {
+                    if (mounted) {
+                      setState(() {
+                        _currentIndex = index;
+                      });
+                    }
+                  },
+                  physics: AlwaysScrollableScrollPhysics(),
+                  children: _pages,
+                ),
+              ),
+            ),
+          ],
         ),
-        bottomNavigationBar: SizedBox(
-          height: tabBarHeight,
+        bottomNavigationBar: isDesktop
+            ? null // Remove a barra de navegação inferior no desktop
+            : SizedBox(
+          height: (!kIsWeb && Platform.isIOS)
+              ? (111 - (_scrollOffset / 2)).clamp(0.0, 111).ceilToDouble()
+              : (79 - (_scrollOffset / 2)).clamp(0.0, 79).ceilToDouble(),
           child: Opacity(
-            opacity: opacity,
+            opacity: (1.0 - (_scrollOffset / 40)).clamp(0.0, 1.0),
             child: BottomNavyBar(
               backgroundColor: Theme.of(context).colorScheme.secondary,
               showInactiveTitle: false,
@@ -362,6 +371,134 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     );
   }
 
+  // Barra lateral para desktop
+  Widget _buildDesktopSidebar() {
+    return Container(
+      padding: _isSidebarExpanded ? EdgeInsets.only(left: 15) : EdgeInsets.zero, // Padding condicional
+      width: _isSidebarExpanded ? 300 : 80, // Largura da barra lateral
+      color: Theme.of(context).colorScheme.secondary,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch, // Garante que os itens ocupem toda a largura
+        children: [
+          // Botão para expandir/recolher a barra lateral
+          IconButton(
+            icon: Icon(
+              _isSidebarExpanded ? Icons.chevron_left : Icons.chevron_right,
+              color: Theme.of(context).colorScheme.onSecondary,
+            ),
+            onPressed: () {
+              setState(() {
+                _isSidebarExpanded = !_isSidebarExpanded;
+              });
+            },
+          ),
+          // Espaçamento entre o botão e os ícones
+          SizedBox(height: 20),
+          // Ícones e nomes das páginas
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch, // Garante que os itens ocupem toda a largura
+              children: _buildDesktopSidebarItems(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildDesktopSidebarItems() {
+    List<Widget> items = [];
+
+    // Função para criar um item da barra lateral
+    Widget buildSidebarItem(IconData icon, String title, Type pageType) {
+      // Determina se este item está selecionado
+      bool isSelected = _pages.isNotEmpty && _pages[_currentIndex].runtimeType == pageType;
+
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5), // Ajuste o espaçamento conforme necessário
+        child: Tooltip(
+          message: title, // Exibe o título como dica ao passar o mouse
+          child: InkWell(
+            onTap: () {
+              int pageIndex = getPageIndexByType(pageType);
+              if (pageIndex != -1) {
+                setState(() {
+                  _currentIndex = pageIndex;
+                  _pageController.jumpToPage(pageIndex);
+                });
+              } else {
+                print('Página do tipo $pageType não encontrada.');
+              }
+            },
+            child: Container(
+              decoration: isSelected
+                  ? BoxDecoration(
+                color: Theme.of(context).colorScheme.primary, // Fundo roxo com opacidade ajustável
+                borderRadius: BorderRadius.only(
+                  topRight: Radius.circular(8),
+                  bottomRight: Radius.circular(8),
+                  bottomLeft: Radius.circular(8),
+                  topLeft: Radius.circular(8),
+                ), // Bordas arredondadas no lado direito
+              )
+                  : null,
+              padding: _isSidebarExpanded
+                  ? EdgeInsets.only(left: 15, right: 15, top: 20, bottom: 20) // Padding para barra expandida
+                  : EdgeInsets.symmetric(horizontal: 0, vertical: 20), // Padding para barra recolhida
+              margin: _isSidebarExpanded
+                  ? EdgeInsets.only(right: 16) // Margem à direita para barra expandida
+                  : EdgeInsets.only(right: 8, left: 8), // Margem à direita para barra recolhida
+              child: Row(
+                mainAxisAlignment: _isSidebarExpanded
+                    ? MainAxisAlignment.start // Alinha ícone e texto à esquerda
+                    : MainAxisAlignment.center, // Centraliza ícone quando recolhido
+                children: [
+                  Icon(
+                    icon,
+                    color: isSelected
+                        ? Colors.white
+                        : Theme.of(context).colorScheme.onSecondary,
+                    size: 32, // Tamanho aumentado dos ícones
+                  ),
+                  if (_isSidebarExpanded)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 15), // Espaçamento entre ícone e texto
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          color: isSelected
+                              ? Colors.white
+                              : Theme.of(context).colorScheme.onSecondary,
+                          fontSize: 17, // Tamanho da fonte aumentado
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Adiciona os itens com base nas permissões
+    if (hasDashboardAccess) {
+      items.add(buildSidebarItem(Icons.dashboard, 'Início', DashboardPage));
+    }
+
+    if (hasLeadsAccess) {
+      items.add(buildSidebarItem(Icons.people, 'Leads', LeadsPage));
+    }
+
+    if (hasAdmPanelAccess) {
+      items.add(buildSidebarItem(Icons.admin_panel_settings, 'Painel Adm', AdminPanelPage));
+    }
+
+    items.add(buildSidebarItem(Icons.settings, 'Configurações', SettingsPage));
+
+    return items;
+  }
+
   List<BottomNavyBarItem> _buildBottomNavyBarItems() {
     List<BottomNavyBarItem> items = [];
 
@@ -369,7 +506,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
       items.add(
         BottomNavyBarItem(
           icon: Icon(Icons.dashboard),
-          title: Text('Dashboard'),
+          title: Text('Início'),
           inactiveColor: Theme.of(context).colorScheme.onSecondary,
           activeColor: Theme.of(context).colorScheme.tertiary,
           textAlign: TextAlign.center,

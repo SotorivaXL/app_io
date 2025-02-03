@@ -229,7 +229,9 @@ class _LeadsPageState extends State<LeadsPage> {
     });
   }
 
-  void _showLeadDetails(BuildContext context, Map<String, dynamic> leadData,
+  void _showLeadDetails(
+      BuildContext context,
+      Map<String, dynamic> leadData,
       Function(String) onStatusChanged) {
     print('Exibindo detalhes do lead: ${leadData['leadId']}');
 
@@ -282,172 +284,220 @@ class _LeadsPageState extends State<LeadsPage> {
           entry.key: entry.value
     };
 
+    // Detecta se o dispositivo é desktop
+    final bool isDesktop = MediaQuery.of(context).size.width > 1024;
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return StatefulBuilder(
           builder: (context, setState) {
-            return AlertDialog(
+            return Dialog(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(15),
               ),
               backgroundColor: Theme.of(context).colorScheme.secondary,
-              titlePadding: EdgeInsets.zero,
-              contentPadding: const EdgeInsets.all(16.0),
-              title: Stack(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(
-                        top: 20.0, left: 20.0, right: 20.0),
+              child: ConstrainedBox(
+                constraints: isDesktop
+                    ? BoxConstraints(
+                  maxWidth: 600, // Define a largura máxima para desktop
+                  maxHeight: 600, // Define a altura máxima para desktop
+                )
+                    : BoxConstraints(
+                  maxWidth: double.infinity,
+                  maxHeight: double.infinity,
+                ),
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Detalhes do Lead',
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontWeight: FontWeight.w700,
-                            fontSize: 20,
-                            color: Theme.of(context).colorScheme.onBackground,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          maxLines: 1,
-                        ),
-                        if (formattedDate != null)
-                          Text(
-                            formattedDate,
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 12,
-                              color: Theme.of(context).colorScheme.onSecondary,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            maxLines: 1,
-                          ),
-                        const SizedBox(height: 20),
-                        GestureDetector(
-                          onTap: () {
-                            _showStatusSelectionDialog(
-                              context,
-                              leadId,
-                              empresaId,
-                              campaignId,
-                                  (newStatus) {
-                                FirebaseFirestore.instance
-                                    .collection('empresas')
-                                    .doc(empresaId)
-                                    .collection('campanhas')
-                                    .doc(campaignId)
-                                    .collection('leads')
-                                    .doc(leadId)
-                                    .update({'status': newStatus}).then((_) {
-                                  Navigator.of(context)
-                                      .pop(); // Fecha o popup automaticamente
-                                  onStatusChanged(
-                                      newStatus); // Atualiza o card sem recarregar
-                                }).catchError((e) {
-                                  showErrorDialog(context,
-                                      'Erro ao atualizar status: $e', 'Erro');
-                                });
-                              },
-                            );
-                          },
-                          child: Chip(
-                            label: Text(
-                              status,
+                        // Título e Data
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Detalhes do Lead',
                               style: TextStyle(
-                                color: Theme.of(context).colorScheme.outline,
                                 fontFamily: 'Poppins',
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 24, // Aumentado para desktop
+                                color: Theme.of(context).colorScheme.onSecondary,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               maxLines: 1,
                             ),
-                            backgroundColor: _getStatusColor(status),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(25),
-                              side: BorderSide(
-                                color: _getStatusColor(status),
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              content: SingleChildScrollView(
-                child: Padding(
-                  padding: EdgeInsetsDirectional.only(start: 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (nome != null)
-                        _buildDetailRow('Nome', nome, context, maxLines: 1),
-                      if (email != null)
-                        _buildDetailRow('E-mail', email, context, maxLines: 1),
-                      if (whatsapp != null)
-                        _buildDetailRow('WhatsApp', whatsapp, context,
-                            maxLines: 1),
-                      ...filteredLeadData.entries.map((entry) {
-                        return _buildDetailRow(
-                            entry.key, entry.value.toString(), context);
-                      }).toList(),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                ElevatedButton(
-                  onPressed: () {
-                    print(
-                        'Botão "Deletar Lead" pressionado para o lead: $leadId');
-                    showDialog(
-                      context: context,
-                      builder: (BuildContext dialogContext) {
-                        return AlertDialog(
-                          title: Text('Confirmar Deleção'),
-                          content: Text(
-                            'Tem certeza de que deseja deletar este lead?',
-                            style:
-                            TextStyle(fontFamily: 'Poppins', fontSize: 16),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () {
-                                print(
-                                    'Deleção cancelada para o lead: $leadId');
-                                Navigator.pop(
-                                    dialogContext); // Fecha o popup de confirmação
-                              },
-                              child: Text(
-                                'Cancelar',
+                            if (formattedDate != null)
+                              Text(
+                                formattedDate,
                                 style: TextStyle(
                                   fontFamily: 'Poppins',
-                                  color: Theme.of(context).colorScheme.onSecondary,
+                                  fontSize: 14, // Aumentado para desktop
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSecondary
+                                      .withOpacity(0.8),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                maxLines: 1,
+                              ),
+                            const SizedBox(height: 20),
+                            // Status com opção de mudança
+                            GestureDetector(
+                              onTap: () {
+                                _showStatusSelectionDialog(
+                                  context,
+                                  leadId,
+                                  empresaId,
+                                  campaignId,
+                                      (newStatus) {
+                                    FirebaseFirestore.instance
+                                        .collection('empresas')
+                                        .doc(empresaId)
+                                        .collection('campanhas')
+                                        .doc(campaignId)
+                                        .collection('leads')
+                                        .doc(leadId)
+                                        .update({'status': newStatus}).then((_) {
+                                      Navigator.of(context)
+                                          .pop(); // Fecha o popup automaticamente
+                                      onStatusChanged(newStatus); // Atualiza o card sem recarregar
+                                    }).catchError((e) {
+                                      showErrorDialog(
+                                          context,
+                                          'Erro ao atualizar status: $e',
+                                          'Erro');
+                                    });
+                                  },
+                                );
+                              },
+                              child: Chip(
+                                label: Text(
+                                  status,
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.outline,
+                                    fontFamily: 'Poppins',
+                                    fontSize: 16, // Aumentado para desktop
+                                    fontWeight: FontWeight.w500,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  maxLines: 1,
+                                ),
+                                backgroundColor: _getStatusColor(status),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(25),
+                                  side: BorderSide(
+                                    color: _getStatusColor(status),
+                                    width: 2,
+                                  ),
                                 ),
                               ),
                             ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        // Conteúdo do Lead
+                        SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (nome != null)
+                                _buildDetailRow(
+                                    'Nome', nome, context,
+                                    maxLines: isDesktop ? 1 : 2,
+                                    fontSize: isDesktop ? 18 : 16),
+                              if (email != null)
+                                _buildDetailRow(
+                                    'E-mail', email, context,
+                                    maxLines: isDesktop ? 1 : 2,
+                                    fontSize: isDesktop ? 18 : 16),
+                              if (whatsapp != null)
+                                _buildDetailRow(
+                                    'WhatsApp', whatsapp, context,
+                                    maxLines: isDesktop ? 1 : 2,
+                                    fontSize: isDesktop ? 18 : 16),
+                              ...filteredLeadData.entries.map((entry) {
+                                return _buildDetailRow(
+                                    entry.key, entry.value.toString(), context,
+                                    maxLines: isDesktop ? 2 : 1,
+                                    fontSize: isDesktop ? 18 : 16);
+                              }).toList(),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        // Ações
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
                             ElevatedButton(
                               onPressed: () {
                                 print(
-                                    'Usuário confirmou deleção para o lead: $leadId');
-                                Navigator.pop(
-                                    dialogContext); // Fecha o popup de confirmação
-                                Navigator.pop(
-                                    context); // Fecha o popup de detalhes
-                                _deleteLead(context, empresaId, campaignId,
-                                    leadId, originalLeadData);
+                                    'Botão "Deletar Lead" pressionado para o lead: $leadId');
+                                showDialog(
+                                  context: context,
+                                  builder: (BuildContext dialogContext) {
+                                    return AlertDialog(
+                                      title: Text('Confirmar Deleção'),
+                                      content: Text(
+                                        'Tem certeza de que deseja deletar este lead?',
+                                        style: TextStyle(
+                                            fontFamily: 'Poppins', fontSize: 16),
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () {
+                                            print(
+                                                'Deleção cancelada para o lead: $leadId');
+                                            Navigator.pop(dialogContext);
+                                          },
+                                          child: Text(
+                                            'Cancelar',
+                                            style: TextStyle(
+                                              fontFamily: 'Poppins',
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSecondary,
+                                            ),
+                                          ),
+                                        ),
+                                        ElevatedButton(
+                                          onPressed: () {
+                                            print(
+                                                'Usuário confirmou deleção para o lead: $leadId');
+                                            Navigator.pop(dialogContext);
+                                            Navigator.pop(context); // Fecha o popup de detalhes
+                                            _deleteLead(context, empresaId, campaignId,
+                                                leadId, originalLeadData);
+                                          },
+                                          child: Text(
+                                            'Deletar',
+                                            style: TextStyle(
+                                              fontFamily: 'Poppins',
+                                              fontWeight: FontWeight.bold,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onError,
+                                            ),
+                                          ),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor:
+                                            Theme.of(context).colorScheme.error,
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                );
                               },
                               child: Text(
-                                'Deletar',
+                                'Deletar Lead',
                                 style: TextStyle(
                                   fontFamily: 'Poppins',
-                                  fontWeight: FontWeight.bold,
-                                  color: Theme.of(context).colorScheme.onError,
+                                  fontSize: 16, // Aumentado para desktop
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context).colorScheme.outline,
                                 ),
                               ),
                               style: ElevatedButton.styleFrom(
@@ -455,39 +505,28 @@ class _LeadsPageState extends State<LeadsPage> {
                                 Theme.of(context).colorScheme.error,
                               ),
                             ),
+                            const SizedBox(width: 10),
+                            TextButton(
+                              onPressed: () {
+                                print('Botão "Fechar" pressionado para o lead: $leadId');
+                                Navigator.pop(context);
+                              },
+                              child: Text(
+                                'Fechar',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 16, // Aumentado para desktop
+                                  color: Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                            ),
                           ],
-                        );
-                      },
-                    );
-                  },
-                  child: Text(
-                    'Deletar Lead',
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.error,
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    print('Botão "Fechar" pressionado para o lead: $leadId');
-                    Navigator.pop(context);
-                  },
-                  child: Text(
-                    'Fechar',
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 14,
-                      color: Theme.of(context).colorScheme.onSecondary,
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ],
+              ),
             );
           },
         );
@@ -495,8 +534,14 @@ class _LeadsPageState extends State<LeadsPage> {
     );
   }
 
-  Widget _buildDetailRow(String label, String value, BuildContext context,
-      {int maxLines = 2}) {
+
+  Widget _buildDetailRow(
+      String label,
+      String value,
+      BuildContext context, {
+        int maxLines = 2,
+        double fontSize = 16, // Novo parâmetro para tamanho da fonte
+      }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
       child: Column(
@@ -506,7 +551,7 @@ class _LeadsPageState extends State<LeadsPage> {
             '$label:',
             style: TextStyle(
               fontFamily: 'Poppins',
-              fontSize: 12,
+              fontSize: 14, // Tamanho fixo para o label
               color: Theme.of(context).colorScheme.onSecondary,
               overflow: TextOverflow.ellipsis,
             ),
@@ -516,7 +561,7 @@ class _LeadsPageState extends State<LeadsPage> {
             value,
             style: TextStyle(
               fontFamily: 'Poppins',
-              fontSize: 18,
+              fontSize: fontSize, // Tamanho variável para o valor
               fontWeight: FontWeight.w700,
               color: Theme.of(context).colorScheme.onSecondary,
               overflow: TextOverflow.ellipsis,
@@ -528,20 +573,54 @@ class _LeadsPageState extends State<LeadsPage> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
+    // Detecta se o dispositivo é desktop com base na largura da tela
+    final bool isDesktop = MediaQuery.of(context).size.width > 1024;
+
     return ConnectivityBanner(
       child: Scaffold(
-        body: isLoading
-            ? CustomScrollView(
-          slivers: [
-            _buildShimmerEffect(),
-          ],
-        )
-            : (empresaId == null
-            ? Center(child: Text('Erro: Empresa não encontrada.'))
-            : _buildCampanhasStream(empresaId!)),
+        body: Padding(
+          padding: EdgeInsetsDirectional.fromSTEB(10, 20, 10, 0),
+          child: isDesktop
+              ? Container(
+            constraints: BoxConstraints(
+              maxWidth: 1850, // Define a largura máxima para desktop
+            ),
+            padding: EdgeInsets.symmetric(horizontal: 50), // 50px de padding nas laterais
+            child: isLoading
+                ? CustomScrollView(
+              slivers: [
+                _buildShimmerEffect(),
+              ],
+            )
+                : (empresaId == null
+                ? Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 20.0),
+                child: Text(
+                  'Erro: Empresa não encontrada.',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            )
+                : _buildCampanhasStream(empresaId!)),
+          )
+              : isLoading
+              ? CustomScrollView(
+            slivers: [
+              _buildShimmerEffect(),
+            ],
+          )
+              : (empresaId == null
+              ? Center(child: Text('Erro: Empresa não encontrada.'))
+              : _buildCampanhasStream(empresaId!)),
+        ),
       ),
     );
   }

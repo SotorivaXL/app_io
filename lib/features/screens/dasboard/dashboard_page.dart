@@ -202,6 +202,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDesktop = MediaQuery.of(context).size.width > 1024;
+
     return ConnectivityBanner(
       child: Scaffold(
         body: Padding(
@@ -210,6 +212,24 @@ class _DashboardPageState extends State<DashboardPage> {
               ? Center(
             child: CircularProgressIndicator(),
           )
+              : isDesktop
+              ? Container(
+              constraints: BoxConstraints(
+                maxWidth: 1850, // Defina a largura máxima desejada
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 50), // 50px de padding nas laterais
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildFilters(),
+                    const SizedBox(height: 20),
+                    _buildMetricCards(),
+                    const SizedBox(height: 50),
+                  ],
+                ),
+              ),
+            )
               : SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -217,8 +237,6 @@ class _DashboardPageState extends State<DashboardPage> {
                 _buildFilters(),
                 const SizedBox(height: 20),
                 _buildMetricCards(),
-                const SizedBox(height: 20),
-                _buildGroupedCards(),
                 const SizedBox(height: 50),
               ],
             ),
@@ -574,98 +592,6 @@ class _DashboardPageState extends State<DashboardPage> {
     return '—'; // Valor padrão se não houver dados
   }
 
-  Widget _buildGroupedCards() {
-    final List<Map<String, dynamic>> metrics = [
-      {
-        'title': 'Cliques no Link',
-        'key': 'inline_link_clicks',
-        'icon': FontAwesomeIcons.link
-      },
-      {
-        'title': 'Custo por Clique no Link',
-        'key': 'cost_per_inline_link_click',
-        'icon': FontAwesomeIcons.circleDollarToSlot
-      },
-      {
-        'title': 'Cliques (Todos)',
-        'key': 'clicks',
-        'icon': FontAwesomeIcons.computerMouse
-      },
-      {
-        'title': 'Custo por Clique (CPC - Todos)',
-        'key': 'cpc',
-        'icon': FontAwesomeIcons.coins
-      },
-    ];
-
-    final currencyFormatter =
-    NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
-    final formatter = NumberFormat('#,##0', 'pt_BR');
-
-    return Card(
-      elevation: 6,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      color: Theme.of(context).colorScheme.secondary,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Column(
-              children: [
-                // Primeira linha de cards
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: _buildMetricCard(
-                        metrics[0]['title'],
-                        _getFormattedValue(metrics[0]['key']),
-                        metrics[0]['icon'],
-                      ),
-                    ),
-                    const SizedBox(width: 16), // Espaço entre os cards
-                    Expanded(
-                      child: _buildMetricCard(
-                        metrics[1]['title'],
-                        _getFormattedValue(metrics[1]['key']),
-                        metrics[1]['icon'],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16), // Espaço entre as linhas
-                // Segunda linha de cards
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: _buildMetricCard(
-                        metrics[2]['title'],
-                        _getFormattedValue(metrics[2]['key']),
-                        metrics[2]['icon'],
-                      ),
-                    ),
-                    const SizedBox(width: 16), // Espaço entre os cards
-                    Expanded(
-                      child: _buildMetricCard(
-                        metrics[3]['title'],
-                        _getFormattedValue(metrics[3]['key']),
-                        metrics[3]['icon'],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildMetricCards() {
     final List<Map<String, dynamic>> metrics = [
       {
@@ -697,6 +623,16 @@ class _DashboardPageState extends State<DashboardPage> {
         'title': 'Custo por Mil Pessoas Alcançadas (CPM)',
         'key': 'cpm',
         'icon': FontAwesomeIcons.sackDollar
+      },
+      {
+        'title': 'Cliques no Link',
+        'key': 'inline_link_clicks',
+        'icon': FontAwesomeIcons.link
+      },
+      {
+        'title': 'Custo por Clique no Link',
+        'key': 'cost_per_inline_link_click',
+        'icon': FontAwesomeIcons.circleDollarToSlot
       },
     ];
 

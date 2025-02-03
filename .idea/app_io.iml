@@ -255,6 +255,9 @@
       <excludeFolder url="file://$MODULE_DIR$/windows/flutter/ephemeral/.plugin_symlinks/share_plus/example/.dart_tool" />
       <excludeFolder url="file://$MODULE_DIR$/windows/flutter/ephemeral/.plugin_symlinks/share_plus/example/.pub" />
       <excludeFolder url="file://$MODULE_DIR$/windows/flutter/ephemeral/.plugin_symlinks/share_plus/example/build" />
+      <excludeFolder url="file://$MODULE_DIR$/linux/flutter/ephemeral" />
+      <excludeFolder url="file://$MODULE_DIR$/macos/Flutter/ephemeral" />
+      <excludeFolder url="file://$MODULE_DIR$/windows/flutter/ephemeral" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

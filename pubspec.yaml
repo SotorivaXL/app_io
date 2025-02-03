@@ -35,8 +35,8 @@ dependencies:
   modal_side_sheet: ^0.0.1
   async: ^2.11.0
   flutter_holo_date_picker: ^2.0.0
-  fl_chart: ^0.69.0
-  syncfusion_flutter_datepicker: ^27.2.4
+  fl_chart: ^0.70.2
+  syncfusion_flutter_datepicker: ^28.1.41
   bottom_navy_bar: ^6.1.0
   file_picker: ^8.1.4
   flutter_secure_storage: ^9.2.2

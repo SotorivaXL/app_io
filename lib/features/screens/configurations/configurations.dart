@@ -37,6 +37,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadUserName();
     _listenToUserData();
     _loadPreferences();
+    _getUserData(); // Carrega os dados do usuário inicialmente
   }
 
   Future<void> _loadUserName() async {
@@ -217,7 +218,8 @@ class _SettingsPageState extends State<SettingsPage> {
                         style: TextStyle(
                             color: Theme.of(context).colorScheme.outline)),
                     style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.primary),
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                    ),
                   ),
                 ],
               ),
@@ -228,7 +230,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildNotificationToggle() {
+  Widget _buildNotificationToggle(bool isDesktop) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.start,
       children: [
@@ -237,7 +239,7 @@ class _SettingsPageState extends State<SettingsPage> {
             "Ativar/Desativar Notificações",
             style: TextStyle(
               fontFamily: 'Poppins',
-              fontSize: 16,
+              fontSize: isDesktop ? 20 : 16, // Aumenta para desktop
               color: Theme.of(context).colorScheme.surfaceVariant,
               fontWeight: FontWeight.w600,
             ),
@@ -252,13 +254,13 @@ class _SettingsPageState extends State<SettingsPage> {
           },
           child: AnimatedContainer(
             duration: Duration(milliseconds: 300),
-            width: 90,
-            height: 45,
+            width: isDesktop ? 110 : 90,
+            height: isDesktop ? 55 : 45,
             decoration: BoxDecoration(
               color: notificationsEnabled
                   ? Theme.of(context).colorScheme.primary
                   : Theme.of(context).colorScheme.onPrimary,
-              borderRadius: BorderRadius.circular(25),
+              borderRadius: BorderRadius.circular(isDesktop ? 30 : 25),
               border: Border.all(
                   color: Theme.of(context).colorScheme.primary, width: 2),
               boxShadow: [
@@ -277,7 +279,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       ? Alignment.centerRight
                       : Alignment.centerLeft,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 5.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
                     child: Icon(
                       notificationsEnabled
                           ? Icons.notifications
@@ -285,7 +287,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       color: notificationsEnabled
                           ? Theme.of(context).colorScheme.outline
                           : Theme.of(context).colorScheme.primary,
-                      size: 30,
+                      size: isDesktop ? 32 : 25,
                     ),
                   ),
                 ),
@@ -312,7 +314,7 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
-  void _showCampaignsSheet(BuildContext context) async {
+  void _showCampaignsSheet(BuildContext context, bool isDesktop) async {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
@@ -343,7 +345,7 @@ class _SettingsPageState extends State<SettingsPage> {
             final campaignsSnapshot =
                 await companyDoc.reference.collection('campanhas').get();
 
-            // Popula a variável `campaignDocs`
+            // Popula a variável campaignDocs
             setState(() {
               campaignDocs = campaignsSnapshot.docs;
             });
@@ -360,7 +362,7 @@ class _SettingsPageState extends State<SettingsPage> {
           final campaignsSnapshot =
               await companyDoc.reference.collection('campanhas').get();
 
-          // Popula a variável `campaignDocs`
+          // Popula a variável campaignDocs
           setState(() {
             campaignDocs = campaignsSnapshot.docs;
           });
@@ -398,11 +400,12 @@ class _SettingsPageState extends State<SettingsPage> {
                     'Selecione uma Campanha',
                     style: TextStyle(
                       fontFamily: 'Poppins',
-                      fontSize: 20,
+                      fontSize: isDesktop ? 24 : 20,
                       fontWeight: FontWeight.w700,
                       color: Theme.of(context).colorScheme.onSecondary,
                     ),
                   ),
+                  SizedBox(height: isDesktop ? 20 : 16),
                   DropdownButton<String>(
                     isExpanded: true,
                     value: selectedCampaign,
@@ -410,7 +413,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       'Selecione',
                       style: TextStyle(
                         fontFamily: 'Poppins',
-                        fontSize: 16,
+                        fontSize: isDesktop ? 18 : 16,
                         fontWeight: FontWeight.w400,
                         color: Theme.of(context).colorScheme.onSecondary,
                       ),
@@ -422,7 +425,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           doc.data()['nome_campanha'] as String,
                           style: TextStyle(
                             fontFamily: 'Poppins',
-                            fontSize: 16,
+                            fontSize: isDesktop ? 18 : 16,
                             fontWeight: FontWeight.w500,
                             color: Theme.of(context).colorScheme.onSecondary,
                           ),
@@ -438,7 +441,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     },
                     dropdownColor: Theme.of(context).colorScheme.background,
                   ),
-                  SizedBox(height: 20),
+                  SizedBox(height: isDesktop ? 30 : 20),
                   Center(
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
@@ -455,6 +458,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       onPressed: selectedCampaign == null
                           ? null
                           : () async {
+                              setState(() {
+                                _isLoading = true;
+                              });
                               try {
                                 final selectedDoc = campaignDocs.firstWhere(
                                     (doc) => doc.id == selectedCampaign,
@@ -471,7 +477,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                         doc.data()['whatsapp'] as String?)
                                     .where((phone) => phone != null)
                                     .map((phone) => phone!
-                                        .replaceAll(RegExp(r'\s|-|\(|\)'), '')
+                                        .replaceAll(RegExp(r'\s|-|👦|👦'), '')
                                         .replaceAll(RegExp(r'^'), '55'))
                                     .toList();
 
@@ -480,6 +486,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                       context,
                                       'Nenhum número de telefone encontrado.',
                                       'Atenção');
+                                  setState(() {
+                                    _isLoading = false;
+                                  });
                                   return;
                                 }
 
@@ -489,17 +498,31 @@ class _SettingsPageState extends State<SettingsPage> {
                               } catch (e) {
                                 showErrorDialog(context,
                                     'Erro ao processar campanha: $e', 'Erro');
+                              } finally {
+                                setState(() {
+                                  _isLoading = false;
+                                });
                               }
                             },
-                      child: Text(
-                        'Copiar Telefones',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
-                      ),
+                      child: _isLoading
+                          ? SizedBox(
+                              width: isDesktop ? 24 : 20,
+                              height: isDesktop ? 24 : 20,
+                              child: CircularProgressIndicator(
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.white),
+                                strokeWidth: 2.0,
+                              ),
+                            )
+                          : Text(
+                              'Copiar Telefones',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: isDesktop ? 20 : 18,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context).colorScheme.outline,
+                              ),
+                            ),
                     ),
                   ),
                 ],
@@ -513,299 +536,624 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Detecta se o dispositivo é desktop com base na largura da tela
+    final bool isDesktop = MediaQuery.of(context).size.width > 1024;
+
     return ConnectivityBanner(
       child: Scaffold(
-        body: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: userName == null
-                ? Center(child: CircularProgressIndicator())
-                : Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start, // Alinha tudo à esquerda
+        bottomNavigationBar: isDesktop
+            ? null // Sem bottomNavBar no desktop
+            : Container(
+                color: Theme.of(context).colorScheme.error,
+                padding: EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                child: InkWell(
+                  onTap: _showLogoutConfirmationDialog,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Avatar e Nome do Usuário
-                      Center(
-                        child: Column(
-                          children: [
-                            CircleAvatar(
-                              radius: 55,
-                              backgroundColor:
-                                  Theme.of(context).colorScheme.primary,
-                              child: Icon(
-                                Icons.camera_alt,
-                                color: Theme.of(context).colorScheme.outline,
-                                size: 40,
-                              ),
-                            ),
-                            SizedBox(height: 20),
-                            Text(
-                              '$userName',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 22,
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .surfaceVariant,
-                              ),
-                            ),
-                            SizedBox(height: 20),
-                          ],
-                        ),
-                      ),
-
-                      // Formulário com Labels Separadas
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Campo de Email
-                          // Label para Email
-                          Text(
-                            'Email',
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Theme.of(context).colorScheme.onSecondary,
-                            ),
-                          ),
-                          SizedBox(height: 8),
-                          // Campo de Email
-                          TextField(
-                            readOnly: true,
-                            enableInteractiveSelection: false,
-                            controller: TextEditingController(
-                              text: userEmail ?? 'Email não disponível',
-                            ),
-                            decoration: InputDecoration(
-                              filled: true,
-                              fillColor:
-                                  Theme.of(context).colorScheme.secondary,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
-                          ),
-
-                          SizedBox(height: 20),
-
-                          // Campo de CNPJ (se existir)
-                          if (cnpj != null) ...[
-                            // Label para CNPJ
-                            Text(
-                              'CNPJ',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color:
-                                    Theme.of(context).colorScheme.onSecondary,
-                              ),
-                            ),
-                            SizedBox(height: 8),
-                            // Campo de CNPJ
-                            TextField(
-                              readOnly: true,
-                              enableInteractiveSelection: false,
-                              controller: TextEditingController(
-                                  text: cnpj ?? 'CNPJ não disponível'),
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor:
-                                    Theme.of(context).colorScheme.secondary,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide.none,
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: 20),
-
-                            // Label para Final do Contrato
-                            Text(
-                              'Final do Contrato',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color:
-                                    Theme.of(context).colorScheme.onSecondary,
-                              ),
-                            ),
-                            SizedBox(height: 8),
-                            // Campo de Final do Contrato
-                            TextField(
-                              readOnly: true,
-                              enableInteractiveSelection: false,
-                              controller: TextEditingController(
-                                  text: contract ?? 'Contrato não disponível'),
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor:
-                                    Theme.of(context).colorScheme.secondary,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide.none,
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: 20),
-                          ],
-
-                          // Campo de Função (se existir)
-                          if (role != null) ...[
-                            // Label para Função
-                            Text(
-                              'Função',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color:
-                                    Theme.of(context).colorScheme.onSecondary,
-                              ),
-                            ),
-                            SizedBox(height: 8),
-                            // Campo de Função
-                            TextField(
-                              readOnly: true,
-                              enableInteractiveSelection: false,
-                              controller: TextEditingController(
-                                  text: role ?? 'Função não disponível'),
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor:
-                                    Theme.of(context).colorScheme.secondary,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide.none,
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: 20),
-                          ],
-                          SizedBox(height: 30),
-                          _buildNotificationToggle(),
-                          SizedBox(height: 30),
-                          if (copiarTelefones == true)
-                            Align(
-                              alignment: AlignmentDirectional(0, 0),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.max,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Align(
-                                    alignment: AlignmentDirectional(0, 0),
-                                    child: Padding(
-                                      padding:
-                                      EdgeInsetsDirectional.fromSTEB(0, 20, 20, 0),
-                                      child:
-                                      _isLoading // Exibe a barra de progresso se estiver carregando
-                                          ? ElevatedButton(
-                                        onPressed: null,
-                                        // Botão desabilitado durante o carregamento
-                                        style: ElevatedButton.styleFrom(
-                                          padding: EdgeInsets.symmetric(
-                                              horizontal: 25, vertical: 15),
-                                          backgroundColor: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                            BorderRadius.circular(25),
-                                          ),
-                                        ),
-                                        child: SizedBox(
-                                          width: 20,
-                                          height:
-                                          20, // Define o tamanho da ProgressBar
-                                          child: CircularProgressIndicator(
-                                            valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                                Colors.white),
-                                            strokeWidth: 2.0,
-                                          ),
-                                        ),
-                                      )
-                                          : ElevatedButton.icon(
-                                        onPressed: () => _showCampaignsSheet(context),
-                                        icon: Icon(
-                                          Icons.copy_all,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .outline,
-                                          size: 25,
-                                        ),
-                                        label: Text(
-                                          'Copiar telefones',
-                                          style: TextStyle(
-                                            fontFamily: 'Poppins',
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w600,
-                                            letterSpacing: 0,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .outline,
-                                          ),
-                                        ),
-                                        style: ElevatedButton.styleFrom(
-                                          padding:
-                                          EdgeInsetsDirectional.fromSTEB(
-                                              30, 15, 30, 15),
-                                          backgroundColor: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
-                                          elevation: 3,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                            BorderRadius.circular(25),
-                                          ),
-                                          side: BorderSide(
-                                            color: Colors.transparent,
-                                            width: 1,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          // Adicione mais campos seguindo o mesmo padrão acima
-                        ],
+                      Icon(Icons.exit_to_app, color: Colors.white),
+                      SizedBox(width: 8),
+                      Text(
+                        'Logout',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
-          ),
-        ),
-        bottomNavigationBar: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              color: Theme.of(context).colorScheme.error,
-              padding: EdgeInsets.symmetric(vertical: 10, horizontal: 20),
-              child: InkWell(
-                onTap: _showLogoutConfirmationDialog,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.exit_to_app, color: Colors.white),
-                    SizedBox(width: 8),
-                    Text(
-                      'Logout',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold),
-                    ),
-                  ],
                 ),
               ),
-            ),
-          ],
-        ),
+        body: isDesktop
+            ? Center(
+                child: Container(
+                  constraints: BoxConstraints(
+                    maxWidth: 1850, // Define a largura máxima para desktop
+                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 50),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Avatar e Nome do Usuário
+                        Center(
+                          child: Column(
+                            children: [
+                              CircleAvatar(
+                                radius: 65,
+                                backgroundColor:
+                                    Theme.of(context).colorScheme.primary,
+                                child: Icon(
+                                  Icons.camera_alt,
+                                  color: Theme.of(context).colorScheme.outline,
+                                  size: 50,
+                                ),
+                              ),
+                              SizedBox(height: 30),
+                              Text(
+                                '$userName',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .surfaceVariant,
+                                ),
+                              ),
+                              SizedBox(height: 30),
+                            ],
+                          ),
+                        ),
+
+                        // Formulário com Labels Separadas
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Campo de Email
+                            Text(
+                              'Email',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    Theme.of(context).colorScheme.onSecondary,
+                              ),
+                            ),
+                            SizedBox(height: 12),
+                            TextField(
+                              readOnly: true,
+                              enableInteractiveSelection: false,
+                              controller: TextEditingController(
+                                text: userEmail ?? 'Email não disponível',
+                              ),
+                              style: TextStyle(
+                                fontSize: 18,
+                              ),
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor:
+                                    Theme.of(context).colorScheme.secondary,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                            ),
+                            SizedBox(height: 30),
+
+                            // Campo de CNPJ (se existir)
+                            if (cnpj != null) ...[
+                              Text(
+                                'CNPJ',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                  color:
+                                      Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                              SizedBox(height: 12),
+                              TextField(
+                                readOnly: true,
+                                enableInteractiveSelection: false,
+                                controller: TextEditingController(
+                                    text: cnpj ?? 'CNPJ não disponível'),
+                                style: TextStyle(
+                                  fontSize: 18,
+                                ),
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor:
+                                      Theme.of(context).colorScheme.secondary,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(height: 30),
+                              Text(
+                                'Final do Contrato',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                  color:
+                                      Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                              SizedBox(height: 12),
+                              TextField(
+                                readOnly: true,
+                                enableInteractiveSelection: false,
+                                controller: TextEditingController(
+                                    text:
+                                        contract ?? 'Contrato não disponível'),
+                                style: TextStyle(
+                                  fontSize: 18,
+                                ),
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor:
+                                      Theme.of(context).colorScheme.secondary,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(height: 30),
+                            ],
+
+                            // Campo de Função (se existir)
+                            if (role != null) ...[
+                              Text(
+                                'Função',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                  color:
+                                      Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                              SizedBox(height: 12),
+                              TextField(
+                                readOnly: true,
+                                enableInteractiveSelection: false,
+                                controller: TextEditingController(
+                                    text: role ?? 'Função não disponível'),
+                                style: TextStyle(
+                                  fontSize: 18,
+                                ),
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor:
+                                      Theme.of(context).colorScheme.secondary,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(height: 30),
+                            ],
+                            SizedBox(height: 40),
+                            _buildNotificationToggle(isDesktop),
+                            SizedBox(height: 40),
+
+                            if (copiarTelefones == true)
+                              Align(
+                                alignment: AlignmentDirectional.center,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Padding(
+                                      padding: EdgeInsetsDirectional.fromSTEB(
+                                          0, 0, 20, 0),
+                                      child: _isLoading
+                                          ? ElevatedButton(
+                                              onPressed: null,
+                                              style: ElevatedButton.styleFrom(
+                                                padding: EdgeInsets.symmetric(
+                                                  horizontal: 35,
+                                                  vertical: 20,
+                                                ),
+                                                backgroundColor:
+                                                    Theme.of(context)
+                                                        .colorScheme
+                                                        .primary,
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(25),
+                                                ),
+                                              ),
+                                              child: SizedBox(
+                                                width: 24,
+                                                height: 24,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  valueColor:
+                                                      AlwaysStoppedAnimation<
+                                                          Color>(
+                                                    Colors.white,
+                                                  ),
+                                                  strokeWidth: 2.0,
+                                                ),
+                                              ),
+                                            )
+                                          : ElevatedButton.icon(
+                                              onPressed: () =>
+                                                  _showCampaignsSheet(
+                                                      context, isDesktop),
+                                              icon: Icon(
+                                                Icons.copy_all,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .outline,
+                                                size: 30,
+                                              ),
+                                              label: Text(
+                                                'Copiar telefones',
+                                                style: TextStyle(
+                                                  fontFamily: 'Poppins',
+                                                  fontSize: 20,
+                                                  fontWeight: FontWeight.w600,
+                                                  letterSpacing: 0,
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .outline,
+                                                ),
+                                              ),
+                                              style: ElevatedButton.styleFrom(
+                                                padding: EdgeInsetsDirectional
+                                                    .fromSTEB(35, 20, 35, 20),
+                                                backgroundColor:
+                                                    Theme.of(context)
+                                                        .colorScheme
+                                                        .primary,
+                                                elevation: 3,
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(25),
+                                                ),
+                                                side: BorderSide(
+                                                  color: Colors.transparent,
+                                                  width: 1,
+                                                ),
+                                              ),
+                                            ),
+                                    ),
+
+                                    ElevatedButton.icon(
+                                      onPressed: _showLogoutConfirmationDialog,
+                                      icon: Icon(
+                                        Icons.exit_to_app,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .outline,
+                                        size: 30,
+                                      ),
+                                      label: Text(
+                                        'Logout',
+                                        style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.w600,
+                                          letterSpacing: 0,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .outline,
+                                        ),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        padding: EdgeInsetsDirectional.fromSTEB(
+                                            35, 20, 35, 20),
+                                        backgroundColor: Theme.of(context)
+                                            .colorScheme
+                                            .error,
+                                        elevation: 3,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(25),
+                                        ),
+                                        side: BorderSide(
+                                          color: Colors.transparent,
+                                          width: 1,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            : SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: userName == null
+                      ? Center(child: CircularProgressIndicator())
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Avatar e Nome do Usuário
+                            Center(
+                              child: Column(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 55,
+                                    backgroundColor:
+                                        Theme.of(context).colorScheme.primary,
+                                    child: Icon(
+                                      Icons.camera_alt,
+                                      color:
+                                          Theme.of(context).colorScheme.outline,
+                                      size: 40,
+                                    ),
+                                  ),
+                                  SizedBox(height: 20),
+                                  Text(
+                                    '$userName',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .surfaceVariant,
+                                    ),
+                                  ),
+                                  SizedBox(height: 20),
+                                ],
+                              ),
+                            ),
+
+                            // Formulário com Labels Separadas
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Campo de Email
+                                Text(
+                                  'Email',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
+                                  ),
+                                ),
+                                SizedBox(height: 8),
+                                TextField(
+                                  readOnly: true,
+                                  enableInteractiveSelection: false,
+                                  controller: TextEditingController(
+                                    text: userEmail ?? 'Email não disponível',
+                                  ),
+                                  decoration: InputDecoration(
+                                    filled: true,
+                                    fillColor:
+                                        Theme.of(context).colorScheme.secondary,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                  ),
+                                ),
+
+                                SizedBox(height: 20),
+
+                                // Campo de CNPJ (se existir)
+                                if (cnpj != null) ...[
+                                  Text(
+                                    'CNPJ',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSecondary,
+                                    ),
+                                  ),
+                                  SizedBox(height: 8),
+                                  TextField(
+                                    readOnly: true,
+                                    enableInteractiveSelection: false,
+                                    controller: TextEditingController(
+                                        text: cnpj ?? 'CNPJ não disponível'),
+                                    decoration: InputDecoration(
+                                      filled: true,
+                                      fillColor: Theme.of(context)
+                                          .colorScheme
+                                          .secondary,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(height: 20),
+                                  Text(
+                                    'Final do Contrato',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSecondary,
+                                    ),
+                                  ),
+                                  SizedBox(height: 8),
+                                  TextField(
+                                    readOnly: true,
+                                    enableInteractiveSelection: false,
+                                    controller: TextEditingController(
+                                        text: contract ??
+                                            'Contrato não disponível'),
+                                    decoration: InputDecoration(
+                                      filled: true,
+                                      fillColor: Theme.of(context)
+                                          .colorScheme
+                                          .secondary,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(height: 20),
+                                ],
+
+                                // Campo de Função (se existir)
+                                if (role != null) ...[
+                                  Text(
+                                    'Função',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSecondary,
+                                    ),
+                                  ),
+                                  SizedBox(height: 8),
+                                  TextField(
+                                    readOnly: true,
+                                    enableInteractiveSelection: false,
+                                    controller: TextEditingController(
+                                        text: role ?? 'Função não disponível'),
+                                    decoration: InputDecoration(
+                                      filled: true,
+                                      fillColor: Theme.of(context)
+                                          .colorScheme
+                                          .secondary,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(height: 20),
+                                ],
+                                SizedBox(height: 30),
+                                _buildNotificationToggle(false),
+                                SizedBox(height: 30),
+                                // Botão de copiar telefones
+                                if (copiarTelefones == true)
+                                  Align(
+                                    alignment: AlignmentDirectional.center,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.max,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Padding(
+                                          padding:
+                                              EdgeInsetsDirectional.fromSTEB(
+                                                  0, 20, 20, 0),
+                                          child: _isLoading
+                                              ? ElevatedButton(
+                                                  onPressed: null,
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                    padding:
+                                                        EdgeInsets.symmetric(
+                                                            horizontal: 25,
+                                                            vertical: 20),
+                                                    backgroundColor:
+                                                        Theme.of(context)
+                                                            .colorScheme
+                                                            .primary,
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              25),
+                                                    ),
+                                                  ),
+                                                  child: SizedBox(
+                                                    width: 20,
+                                                    height: 20,
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                      valueColor:
+                                                          AlwaysStoppedAnimation<
+                                                              Color>(
+                                                        Colors.white,
+                                                      ),
+                                                      strokeWidth: 2.0,
+                                                    ),
+                                                  ),
+                                                )
+                                              : ElevatedButton.icon(
+                                                  onPressed: () =>
+                                                      _showCampaignsSheet(
+                                                          context, false),
+                                                  icon: Icon(
+                                                    Icons.copy_all,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .outline,
+                                                    size: 25,
+                                                  ),
+                                                  label: Text(
+                                                    'Copiar telefones',
+                                                    style: TextStyle(
+                                                      fontFamily: 'Poppins',
+                                                      fontSize: 18,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      letterSpacing: 0,
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .outline,
+                                                    ),
+                                                  ),
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                    padding:
+                                                        EdgeInsetsDirectional
+                                                            .fromSTEB(
+                                                                30, 15, 30, 15),
+                                                    backgroundColor:
+                                                        Theme.of(context)
+                                                            .colorScheme
+                                                            .primary,
+                                                    elevation: 3,
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              25),
+                                                    ),
+                                                    side: BorderSide(
+                                                      color: Colors.transparent,
+                                                      width: 1,
+                                                    ),
+                                                  ),
+                                                ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                ),
+              ),
       ),
     );
   }

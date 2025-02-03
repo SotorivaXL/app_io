@@ -340,6 +340,8 @@ class _ManageCampaignsState extends State<ManageCampaigns> {
 
   @override
   Widget build(BuildContext context) {
+    bool isDesktop = MediaQuery.of(context).size.width > 1024;
+
     double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
     double opacity = (1.0 - (_scrollOffset / 100)).clamp(0.0, 1.0);
 
@@ -455,92 +457,190 @@ class _ManageCampaignsState extends State<ManageCampaigns> {
               ),
             ),
             body: SafeArea(
-              child: Column(
-                children: [
-                  const SizedBox(height: 10),
-                  Expanded(
-                    child: campanhas.isEmpty
-                        ? Center(
-                      child: Text(
-                        'Nenhuma campanha encontrada.',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 16,
-                          color: Theme.of(context).colorScheme.onSecondary,
-                        ),
-                      ),
-                    )
-                        : ListView.builder(
-                      controller: _scrollController,
-                      itemCount: campanhas.length,
-                      itemBuilder: (context, index) {
-                        final campanha = campanhas[index];
-                        return Card(
-                          elevation: 4,
-                          color: Theme.of(context).colorScheme.secondary,
-                          margin: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                          child: ListTile(
-                            title: Text(
-                              campanha['nome_campanha'] ?? 'Campanha sem nome',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context).colorScheme.onSecondary,
-                              ),
-                            ),
-                            subtitle: Text(
-                              campanha['descricao'] ?? 'Descrição não disponível',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontWeight: FontWeight.w400,
-                                fontSize: 14,
-                                color: Theme.of(context).colorScheme.onSecondary,
-                              ),
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.edit,
-                                    color: Theme.of(context).colorScheme.onSecondary,
-                                  ),
-                                  onPressed: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => EditCampaignPage(
-                                          empresaId: companyId!,
-                                          campanhaId: campanha['id'],
-                                        ),
-                                      ),
-                                    ).then((value) {
-                                      if (value == true) {
-                                        setState(() {});
-                                      }
-                                    });
-                                  },
-                                  tooltip: 'Editar Campanha',
-                                ),
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.delete,
-                                    color: Colors.red,
-                                  ),
-                                  onPressed: () {
-                                    _showDeleteConfirmationDialog(campanha['id']);
-                                  },
-                                  tooltip: 'Excluir Campanha',
-                                ),
-                              ],
+              child: isDesktop
+                  ? Align(
+                alignment: Alignment.topCenter,
+                child: Container(
+                  constraints: BoxConstraints(maxWidth: 1850),
+                  padding: EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 20),
+                      Expanded(
+                        child: campanhas.isEmpty
+                            ? Center(
+                          child: Text(
+                            'Nenhuma campanha encontrada.',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 18,
+                              color: Theme.of(context).colorScheme.onSecondary,
                             ),
                           ),
-                        );
-                      },
-                    ),
+                        )
+                            : ListView.builder(
+                          controller: _scrollController,
+                          itemCount: campanhas.length,
+                          itemBuilder: (context, index) {
+                            final campanha = campanhas[index];
+                            return Card(
+                              elevation: 4,
+                              color: Theme.of(context).colorScheme.secondary,
+                              margin: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                              child: ListTile(
+                                title: Text(
+                                  campanha['nome_campanha'] ?? 'Campanha sem nome',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    color: Theme.of(context).colorScheme.onSecondary,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  campanha['descricao'] ?? 'Descrição não disponível',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontWeight: FontWeight.w400,
+                                    fontSize: 16,
+                                    color: Theme.of(context).colorScheme.onSecondary,
+                                  ),
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.edit,
+                                        color: Theme.of(context).colorScheme.onSecondary,
+                                      ),
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => EditCampaignPage(
+                                              empresaId: companyId!,
+                                              campanhaId: campanha['id'],
+                                            ),
+                                          ),
+                                        ).then((value) {
+                                          if (value == true) {
+                                            setState(() {});
+                                          }
+                                        });
+                                      },
+                                      tooltip: 'Editar Campanha',
+                                    ),
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.delete,
+                                        color: Colors.red,
+                                      ),
+                                      onPressed: () {
+                                        _showDeleteConfirmationDialog(campanha['id']);
+                                      },
+                                      tooltip: 'Excluir Campanha',
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
+              )
+                  : Container(
+                padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: campanhas.isEmpty
+                          ? Center(
+                        child: Text(
+                          'Nenhuma campanha encontrada.',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 16,
+                            color: Theme.of(context).colorScheme.onSecondary,
+                          ),
+                        ),
+                      )
+                          : ListView.builder(
+                        controller: _scrollController,
+                        itemCount: campanhas.length,
+                        itemBuilder: (context, index) {
+                          final campanha = campanhas[index];
+                          return Card(
+                            elevation: 4,
+                            color: Theme.of(context).colorScheme.secondary,
+                            margin: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                            child: ListTile(
+                              title: Text(
+                                campanha['nome_campanha'] ?? 'Campanha sem nome',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                              subtitle: Text(
+                                campanha['descricao'] ?? 'Descrição não disponível',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.w400,
+                                  fontSize: 14,
+                                  color: Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.edit,
+                                      color: Theme.of(context).colorScheme.onSecondary,
+                                    ),
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => EditCampaignPage(
+                                            empresaId: companyId!,
+                                            campanhaId: campanha['id'],
+                                          ),
+                                        ),
+                                      ).then((value) {
+                                        if (value == true) {
+                                          setState(() {});
+                                        }
+                                      });
+                                    },
+                                    tooltip: 'Editar Campanha',
+                                  ),
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.delete,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed: () {
+                                      _showDeleteConfirmationDialog(campanha['id']);
+                                    },
+                                    tooltip: 'Excluir Campanha',
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
