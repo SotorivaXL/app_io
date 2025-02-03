@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:app_io/auth/providers/auth_provider.dart';
-import 'package:app_io/features/screens/apis/manage_apis.dart';
 import 'package:app_io/features/screens/campaign/manage_campaigns.dart';
 import 'package:app_io/features/screens/collaborator/manage_collaborators.dart';
 import 'package:app_io/features/screens/company/manage_companies.dart';
@@ -28,8 +27,10 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   bool hasCriarCampanhaAccess = false; // Atualizado
   bool isLoading = true;
 
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userDocSubscription;
-  bool _hasShownPermissionRevokedDialog = false; // Flag para controlar a exibição do modal
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+      _userDocSubscription;
+  bool _hasShownPermissionRevokedDialog =
+      false; // Flag para controlar a exibição do modal
 
   @override
   void initState() {
@@ -48,7 +49,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
     if (user != null) {
       try {
         // Verifica se o documento do usuário existe na coleção 'empresas'
-        DocumentSnapshot<Map<String, dynamic>> userDoc = await FirebaseFirestore.instance
+        DocumentSnapshot<Map<String, dynamic>> userDoc = await FirebaseFirestore
+            .instance
             .collection('empresas')
             .doc(user.uid)
             .get();
@@ -65,7 +67,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           if (userDoc.exists) {
             _listenToUserDocument('users', user.uid);
           } else {
-            print("Documento do usuário não encontrado nas coleções 'empresas' ou 'users'.");
+            print(
+                "Documento do usuário não encontrado nas coleções 'empresas' ou 'users'.");
             setState(() {
               isLoading = false;
             });
@@ -94,7 +97,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       if (userDoc.exists) {
         _updatePermissions(userDoc);
       } else {
-        print("Documento do usuário não encontrado na coleção '$collectionName'.");
+        print(
+            "Documento do usuário não encontrado na coleção '$collectionName'.");
       }
     });
   }
@@ -106,7 +110,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
 
     setState(() {
       hasGerenciarParceirosAccess = userData?['gerenciarParceiros'] ?? false;
-      hasGerenciarColaboradoresAccess = userData?['gerenciarColaboradores'] ?? false;
+      hasGerenciarColaboradoresAccess =
+          userData?['gerenciarColaboradores'] ?? false;
       hasConfigurarDashAccess = userData?['configurarDash'] ?? false;
       hasCriarFormAccess = userData?['criarForm'] ?? false; // Atualizado
       hasCriarCampanhaAccess = userData?['criarCampanha'] ?? false; // Atualizado
@@ -138,7 +143,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                 padding: EdgeInsets.all(16.0),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.background,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
+                  borderRadius:
+                      BorderRadius.vertical(top: Radius.circular(20.0)),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -169,7 +175,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).colorScheme.primary,
-                        padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20.0),
                         ),
@@ -199,7 +206,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         });
       }
     } else {
-      _hasShownPermissionRevokedDialog = false; // Reseta a flag se as permissões forem restauradas
+      _hasShownPermissionRevokedDialog =
+          false; // Reseta a flag se as permissões forem restauradas
     }
   }
 
@@ -228,10 +236,23 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
 
+    // Detecta se o dispositivo é desktop com base na largura da tela
+    final bool isDesktop = MediaQuery.of(context).size.width > 1024;
+
     if (isLoading) {
       return ConnectivityBanner(
         child: Scaffold(
-          body: Center(child: CircularProgressIndicator()),
+          body: isDesktop
+              ? Center(
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: 1850, // Define a largura máxima para desktop
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 50), // 50px de padding nas laterais
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          )
+              : Center(child: CircularProgressIndicator()),
         ),
       );
     } else if (!hasGerenciarParceirosAccess &&
@@ -243,126 +264,287 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       // Opcionalmente, você pode retornar uma tela vazia ou uma mensagem
       return ConnectivityBanner(
         child: Scaffold(
-          body: Container(),
+          body: isDesktop
+              ? Container(
+            constraints: BoxConstraints(
+              maxWidth: 1850, // Define a largura máxima para desktop
+            ),
+            padding: EdgeInsets.symmetric(horizontal: 50), // 50px de padding nas laterais
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 20.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.lock,
+                      size: isDesktop ? 120 : 100, // Aumentado para desktop
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    SizedBox(height: isDesktop ? 30 : 20), // Aumentado para desktop
+                    Text(
+                      'Você não tem nenhuma permissão nesta tela.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: isDesktop ? 22 : 18, // Aumentado para desktop
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          )
+              : Center(child: Container()), // Mantém o comportamento original para mobile
         ),
       );
     } else {
       return ConnectivityBanner(
-        child: Scaffold(
-          body: SafeArea(
-            top: true,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.max,
-                children: [
-                  ListView(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    scrollDirection: Axis.vertical,
+          child: Scaffold(
+            body: Padding(
+              padding: EdgeInsetsDirectional.fromSTEB(10, 20, 10, 0),
+              child: isDesktop
+                  ? Container(
+                constraints: BoxConstraints(
+                  maxWidth: 1800, // Define a largura máxima para desktop
+                ),
+                padding:
+                EdgeInsets.symmetric(horizontal: 50), // 50px de padding nas laterais
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.max,
                     children: [
-                      if (hasGerenciarParceirosAccess)
-                        _buildCardOption(
-                          context,
-                          title: 'Gerenciar Parceiros',
-                          subtitle: 'Gerenciar empresas parceiras',
-                          icon: Icons.business,
-                          onTap: () async {
-                            _navigateWithFade(context, ManageCompanies());
-                          },
-                        ),
-                      if (hasGerenciarColaboradoresAccess)
-                        _buildCardOption(
-                          context,
-                          title: 'Gerenciar Colaboradores',
-                          subtitle: 'Gerenciar colaboradores da empresa',
-                          icon: Icons.group,
-                          onTap: () async {
-                            _navigateWithFade(context, ManageCollaborators());
-                          },
-                        ),
-                      if (hasCriarFormAccess)
-                        _buildCardOption(
-                          context,
-                          title: 'Gerenciar Formulários',
-                          subtitle: 'Gerenciar formulários personalizados',
-                          icon: Icons.article,
-                          onTap: () async {
-                            _navigateWithFade(context, ManageForms()); // Navega para a nova página
-                          },
-                        ),
-                      if (hasCriarCampanhaAccess)
-                        _buildCardOption(
-                          context,
-                          title: 'Gerenciar Campanhas',
-                          subtitle: 'Gerenciar campanhas da empresa',
-                          icon: Icons.campaign,
-                          onTap: () async {
-                            _navigateWithFade(context, ManageCampaigns()); // Navega para a nova página
-                          },
-                        ),
-                      if (hasExecutarAPIs)
-                        _buildCardOption(
-                          context,
-                          title: 'Gerenciar APIs',
-                          subtitle: 'Gerenciar, criar, editar e executar APIs',
-                          icon: Icons.api_rounded,
-                          onTap: () async {
-                            _navigateWithFade(context, ManageApis()); // Navega para a nova página
-                          },
-                        ),
-                      if (hasConfigurarDashAccess)
-                        _buildCardOption(
-                          context,
-                          title: 'Configurações de Dashboard',
-                          subtitle: 'Configurações de BMs, anúncios e campanhas',
-                          icon: Icons.dashboard_customize,
-                          onTap: () async {
-                            _navigateWithFade(context, DashboardConfigurations());
-                          },
+                      ListView(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        scrollDirection: Axis.vertical,
+                        children: [
+                          if (hasGerenciarParceirosAccess)
+                            _buildCardOption(
+                              context,
+                              title: 'Gerenciar Parceiros',
+                              subtitle: 'Gerenciar empresas parceiras',
+                              icon: Icons.business,
+                              onTap: () async {
+                                _navigateWithFade(context, ManageCompanies());
+                              },
+                              isDesktop: isDesktop, // Passa isDesktop
+                            ),
+                          if (hasGerenciarColaboradoresAccess)
+                            _buildCardOption(
+                              context,
+                              title: 'Gerenciar Colaboradores',
+                              subtitle: 'Gerenciar colaboradores da empresa',
+                              icon: Icons.group,
+                              onTap: () async {
+                                _navigateWithFade(
+                                    context, ManageCollaborators());
+                              },
+                              isDesktop: isDesktop, // Passa isDesktop
+                            ),
+                          if (hasCriarFormAccess)
+                            _buildCardOption(
+                              context,
+                              title: 'Gerenciar Formulários',
+                              subtitle: 'Gerenciar formulários personalizados',
+                              icon: Icons.article,
+                              onTap: () async {
+                                _navigateWithFade(context, ManageForms()); // Navega para a nova página
+                              },
+                              isDesktop: isDesktop, // Passa isDesktop
+                            ),
+                          if (hasCriarCampanhaAccess)
+                            _buildCardOption(
+                              context,
+                              title: 'Gerenciar Campanhas',
+                              subtitle: 'Gerenciar campanhas da empresa',
+                              icon: Icons.campaign,
+                              onTap: () async {
+                                _navigateWithFade(context, ManageCampaigns()); // Navega para a nova página
+                              },
+                              isDesktop: isDesktop, // Passa isDesktop
+                            ),
+                          if (hasExecutarAPIs)
+                            _buildCardOption(
+                              context,
+                              title: 'Gerenciar APIs',
+                              subtitle: 'Gerenciar, criar, editar e executar APIs',
+                              icon: Icons.api_rounded,
+                              onTap: () async {
+                                _navigateWithFade(context, ManageApis()); // Navega para a nova página
+                              },
+                            ),
+                          if (hasConfigurarDashAccess)
+                            _buildCardOption(
+                              context,
+                              title: 'Configurações de Dashboard',
+                              subtitle:
+                              'Configurações de BMs, anúncios e campanhas',
+                              icon: Icons.dashboard_customize,
+                              onTap: () async {
+                                _navigateWithFade(context,
+                                    DashboardConfigurations());
+                              },
+                              isDesktop: isDesktop, // Passa isDesktop
+                            ),
+                        ],
+                      ),
+                      if (!hasGerenciarParceirosAccess &&
+                          !hasGerenciarColaboradoresAccess &&
+                          !hasConfigurarDashAccess &&
+                          !hasCriarFormAccess &&
+                          !hasCriarCampanhaAccess)
+                        Align(
+                          alignment: Alignment.topCenter, // Alinha ao topo
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 20.0),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.lock,
+                                  size: isDesktop ? 120 : 100, // Aumentado para desktop
+                                  color:
+                                  Theme.of(context).colorScheme.primary,
+                                ),
+                                SizedBox(height: isDesktop ? 30 : 20), // Aumentado para desktop
+                                Text(
+                                  'Você não tem nenhuma permissão nesta tela.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: isDesktop ? 22 : 18, // Aumentado para desktop
+                                    fontWeight: FontWeight.w600,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                     ],
                   ),
-                  if (!hasGerenciarParceirosAccess &&
-                      !hasGerenciarColaboradoresAccess &&
-                      !hasConfigurarDashAccess &&
-                      !hasCriarFormAccess &&
-                      !hasExecutarAPIs &&
-                      !hasCriarCampanhaAccess)
-                    Center(
-                      child: Container(
-                        width: double.infinity,
-                        height: MediaQuery.of(context).size.height,
-                        child: Center(
+                ),
+              )
+                  : SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.max,
+                  children: [
+                    ListView(
+                      padding: EdgeInsets.zero,
+                      shrinkWrap: true,
+                      scrollDirection: Axis.vertical,
+                      children: [
+                        if (hasGerenciarParceirosAccess)
+                          _buildCardOption(
+                            context,
+                            title: 'Gerenciar Parceiros',
+                            subtitle: 'Gerenciar empresas parceiras',
+                            icon: Icons.business,
+                            onTap: () async {
+                              _navigateWithFade(context, ManageCompanies());
+                            },
+                            isDesktop: isDesktop, // Passa isDesktop
+                          ),
+                        if (hasGerenciarColaboradoresAccess)
+                          _buildCardOption(
+                            context,
+                            title: 'Gerenciar Colaboradores',
+                            subtitle: 'Gerenciar colaboradores da empresa',
+                            icon: Icons.group,
+                            onTap: () async {
+                              _navigateWithFade(
+                                  context, ManageCollaborators());
+                            },
+                            isDesktop: isDesktop, // Passa isDesktop
+                          ),
+                        if (hasCriarFormAccess)
+                          _buildCardOption(
+                            context,
+                            title: 'Gerenciar Formulários',
+                            subtitle: 'Gerenciar formulários personalizados',
+                            icon: Icons.article,
+                            onTap: () async {
+                              _navigateWithFade(
+                                  context, ManageForms()); // Navega para a nova página
+                            },
+                            isDesktop: isDesktop, // Passa isDesktop
+                          ),
+                        if (hasCriarCampanhaAccess)
+                          _buildCardOption(
+                            context,
+                            title: 'Gerenciar Campanhas',
+                            subtitle: 'Gerenciar campanhas da empresa',
+                            icon: Icons.campaign,
+                            onTap: () async {
+                              _navigateWithFade(
+                                  context, ManageCampaigns()); // Navega para a nova página
+                            },
+                            isDesktop: isDesktop, // Passa isDesktop
+                          ),
+                        if (hasConfigurarDashAccess)
+                          _buildCardOption(
+                            context,
+                            title: 'Configurações de Dashboard',
+                            subtitle:
+                            'Configurações de BMs, anúncios e campanhas',
+                            icon: Icons.dashboard_customize,
+                            onTap: () async {
+                              _navigateWithFade(
+                                  context, DashboardConfigurations());
+                            },
+                            isDesktop: isDesktop, // Passa isDesktop
+                          ),
+                      ],
+                    ),
+                    if (!hasGerenciarParceirosAccess &&
+                        !hasGerenciarColaboradoresAccess &&
+                        !hasConfigurarDashAccess &&
+                        !hasCriarFormAccess &&
+                        !hasCriarCampanhaAccess)
+                      Align(
+                        alignment: Alignment.topCenter, // Alinha ao topo
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 20.0),
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
                                 Icons.lock,
-                                size: 100,
-                                color: Theme.of(context).colorScheme.primary,
+                                size: isDesktop ? 120 : 100,
+                                // Aumentado para desktop
+                                color:
+                                Theme.of(context).colorScheme.primary,
                               ),
-                              SizedBox(height: 20),
+                              SizedBox(height: isDesktop ? 30 : 20),
+                              // Aumentado para desktop
                               Text(
                                 'Você não tem nenhuma permissão nesta tela.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontFamily: 'Poppins',
-                                  fontSize: 18,
+                                  fontSize: isDesktop ? 22 : 18,
+                                  // Aumentado para desktop
                                   fontWeight: FontWeight.w600,
-                                  color: Theme.of(context).colorScheme.onSecondary,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSecondary,
                                 ),
                               ),
                             ],
                           ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        ),
-      );
+          ));
     }
   }
 
@@ -370,10 +552,12 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       {required String title,
         required String subtitle,
         required IconData icon,
-        required VoidCallback onTap}) {
+        required VoidCallback onTap,
+        required bool isDesktop}) { // Adicionado o parâmetro isDesktop
     return Card(
       color: Theme.of(context).colorScheme.secondary, // Cor secundária
-      margin: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      margin: EdgeInsets.symmetric(
+          horizontal: isDesktop ? 24.0 : 16.0, vertical: isDesktop ? 12.0 : 8.0), // Ajuste de margin
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12.0),
       ),
@@ -381,14 +565,14 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         leading: Icon(
           icon,
           color: Theme.of(context).colorScheme.onSecondary,
-          size: 30,
+          size: isDesktop ? 40 : 30, // Aumentado para desktop
         ),
         title: Text(
           title,
           textAlign: TextAlign.start,
           style: TextStyle(
             fontFamily: 'Poppins',
-            fontSize: 19,
+            fontSize: isDesktop ? 22 : 19, // Aumentado para desktop
             fontWeight: FontWeight.w600,
             letterSpacing: 0,
             color: Theme.of(context).colorScheme.onSecondary,
@@ -400,7 +584,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           style: TextStyle(
             fontFamily: 'Poppins',
             fontWeight: FontWeight.w500,
-            fontSize: 12,
+            fontSize: isDesktop ? 16 : 12, // Aumentado para desktop
             letterSpacing: 0,
             color: Theme.of(context).colorScheme.primaryContainer,
           ),
@@ -408,7 +592,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         trailing: Icon(
           Icons.arrow_forward_ios,
           color: Theme.of(context).colorScheme.onBackground,
-          size: 20,
+          size: isDesktop ? 24 : 20, // Aumentado para desktop
         ),
         onTap: onTap,
       ),

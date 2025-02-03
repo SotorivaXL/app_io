@@ -140,8 +140,7 @@ class _EditCompaniesState extends State<EditCompanies> {
         'countVideosValue': _model.countVideosValue,
         'dashboard': accessRights['dashboard'] ?? false,
         'leads': accessRights['leads'] ?? false,
-        'gerenciarColaboradores':
-        accessRights['gerenciarColaboradores'] ?? false,
+        'gerenciarColaboradores': accessRights['gerenciarColaboradores'] ?? false,
         'configurarDash': accessRights['configurarDash'] ?? false,
         'criarCampanha': accessRights['criarCampanha'],
         'criarForm': accessRights['criarForm'],
@@ -188,6 +187,9 @@ class _EditCompaniesState extends State<EditCompanies> {
 
   @override
   Widget build(BuildContext context) {
+    // 1) Detecta se é desktop pela largura, por exemplo > 1024
+    final bool isDesktop = MediaQuery.of(context).size.width > 1024;
+
     double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
 
     String uid = FirebaseAuth.instance.currentUser?.uid ?? ''; // Obtenha o UID do usuário logado.
@@ -257,11 +259,11 @@ class _EditCompaniesState extends State<EditCompanies> {
                         _isLoading
                             ? CircularProgressIndicator()
                             : IconButton(
-                          icon: Icon(Icons.save_as_sharp,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onBackground,
-                              size: 30),
+                          icon: Icon(
+                            Icons.save_as_sharp,
+                            color: Theme.of(context).colorScheme.onBackground,
+                            size: 30,
+                          ),
                           onPressed: _isLoading ? null : _saveCompany,
                         ),
                       ],
@@ -273,814 +275,518 @@ class _EditCompaniesState extends State<EditCompanies> {
             surfaceTintColor: Colors.transparent,
             backgroundColor: Theme.of(context).colorScheme.secondary,
           ),
-          body: SafeArea(
-            top: true,
-            child: SingleChildScrollView(
-              child: Column(
+          // 2) Se for desktop, envolvemos em Center + Container(maxWidth: 1850)
+          body: isDesktop
+              ? Center(
+            child: Container(
+              constraints: BoxConstraints(maxWidth: 1850),
+              child: _buildMainContent(context, uid),
+            ),
+          )
+              : _buildMainContent(context, uid),
+        ),
+      ),
+    );
+  }
+
+  /// 3) Extraímos todo o conteúdo principal para este método,
+  ///    para não duplicar código entre desktop e mobile.
+  Widget _buildMainContent(BuildContext context, String uid) {
+    return SafeArea(
+      top: true,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.max,
+          children: [
+            // Campo de texto para o nome da empresa
+            Padding(
+              padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+              child: Row(
                 mainAxisSize: MainAxisSize.max,
                 children: [
-                  // Exibição da imagem da empresa
-                  /*Align(
-                    alignment: AlignmentDirectional(0, 0),
-                    child: Padding(
-                      padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
-                      child: GestureDetector(
-                        onTap: _selectImage,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.max,
-                          children: [
-                            Flexible(
-                              child: Align(
-                                alignment: AlignmentDirectional(0, 0),
-                                child: Container(
-                                  width: 120,
-                                  height: 120,
-                                  clipBehavior: Clip.antiAlias,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: _selectedImage != null
-                                      ? Image.file(
-                                    _selectedImage!,
-                                    fit: BoxFit.cover,
-                                  )
-                                      : _imageUrl != null
-                                      ? Image.network(
-                                    _imageUrl!,
-                                    fit: BoxFit.cover,
-                                  )
-                                      : Image.asset(
-                                    'images/icons/icon camera.png',
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                              ),
+                  Expanded(
+                    child: Align(
+                      alignment: AlignmentDirectional(0, 0),
+                      child: Padding(
+                        padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                        child: TextFormField(
+                          controller: _model.tfCompanyTextController,
+                          focusNode: _model.tfCompanyFocusNode,
+                          autofocus: true,
+                          obscureText: false,
+                          decoration: InputDecoration(
+                            hintText: 'Digite o nome da empresa',
+                            hintStyle: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontWeight: FontWeight.w500,
+                              fontSize: 12,
+                              letterSpacing: 0,
+                              color: Theme.of(context).colorScheme.onSecondary,
                             ),
-                          ],
+                            filled: true,
+                            fillColor: Theme.of(context).colorScheme.secondary,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.corporate_fare,
+                              color: Theme.of(context).colorScheme.tertiary,
+                              size: 20,
+                            ),
+                          ),
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0,
+                            color: Theme.of(context).colorScheme.onSecondary,
+                          ),
+                          textAlign: TextAlign.start,
                         ),
                       ),
                     ),
-                  ),*/
-                  // Campo de texto para o nome da empresa
-                  Padding(
-                    padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.max,
-                      children: [
-                        Expanded(
-                          child: Align(
-                            alignment: AlignmentDirectional(0, 0),
-                            child: Padding(
-                              padding:
-                              EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
-                              child: TextFormField(
-                                controller: _model.tfCompanyTextController,
-                                focusNode: _model.tfCompanyFocusNode,
-                                autofocus: true,
-                                obscureText: false,
-                                decoration: InputDecoration(
-                                  hintText: 'Digite o nome da empresa',
-                                  hintStyle: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary,
-                                  ),
-                                  filled: true,
-                                  fillColor: Theme.of(context).colorScheme.secondary,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  prefixIcon: Icon(
-                                    Icons.corporate_fare,
-                                    color:
-                                    Theme.of(context).colorScheme.tertiary,
-                                    size: 20,
-                                  ),
-                                ),
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSecondary,
-                                ),
-                                textAlign: TextAlign.start,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
-                  // Campo de texto para o email
-                  Padding(
-                    padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.max,
-                      children: [
-                        Expanded(
-                          child: Align(
-                            alignment: AlignmentDirectional(0, 0),
-                            child: Padding(
-                              padding:
-                              EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
-                              child: TextFormField(
-                                controller: _model.tfEmailTextController,
-                                focusNode: _model.tfEmailFocusNode,
-                                autofocus: true,
-                                obscureText: false,
-                                enabled: false,
-                                decoration: InputDecoration(
-                                  hintText: 'Digite o email da empresa',
-                                  hintStyle: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary,
-                                  ),
-                                  filled: true,
-                                  fillColor: Theme.of(context).colorScheme.secondary,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  prefixIcon: Icon(
-                                    Icons.mail,
-                                    color:
-                                    Theme.of(context).colorScheme.tertiary,
-                                    size: 20,
-                                  ),
-                                ),
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSecondary,
-                                ),
-                                textAlign: TextAlign.start,
-                                keyboardType: TextInputType.emailAddress,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Campo de texto para o contrato
-                  Padding(
-                    padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.max,
-                      children: [
-                        Expanded(
-                          child: Align(
-                            alignment: AlignmentDirectional(0, 0),
-                            child: Padding(
-                              padding:
-                              EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
-                              child: TextFormField(
-                                controller: _model.tfContractTextController,
-                                focusNode: _model.tfContractFocusNode,
-                                autofocus: true,
-                                obscureText: false,
-                                decoration: InputDecoration(
-                                  hintText: 'Digite a data final do contrato',
-                                  hintStyle: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary,
-                                  ),
-                                  filled: true,
-                                  fillColor: Theme.of(context).colorScheme.secondary,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  prefixIcon: Icon(
-                                    Icons.import_contacts,
-                                    color:
-                                    Theme.of(context).colorScheme.tertiary,
-                                    size: 20,
-                                  ),
-                                ),
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSecondary,
-                                ),
-                                textAlign: TextAlign.start,
-                                inputFormatters: [_model.tfContractMask],
-                                keyboardType: TextInputType.number,
-                              ),
-                            ),
-                          ),
-                        )
-                      ],
-                    ),
-                  ),
-                  // Campo de texto para o CNPJ
-                  Padding(
-                    padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.max,
-                      children: [
-                        Expanded(
-                          child: Align(
-                            alignment: AlignmentDirectional(0, 0),
-                            child: Padding(
-                              padding:
-                              EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
-                              child: TextFormField(
-                                controller: _model.tfCnpjTextController,
-                                focusNode: _model.tfCnpjFocusNode,
-                                autofocus: true,
-                                obscureText: false,
-                                enabled: false,
-                                decoration: InputDecoration(
-                                  hintText: 'Digite o CNPJ da empresa',
-                                  hintStyle: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary,
-                                  ),
-                                  filled: true,
-                                  fillColor: Theme.of(context).colorScheme.secondary,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  prefixIcon: Icon(
-                                    Icons.contact_emergency_sharp,
-                                    color:
-                                    Theme.of(context).colorScheme.tertiary,
-                                    size: 20,
-                                  ),
-                                ),
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSecondary,
-                                ),
-                                textAlign: TextAlign.start,
-                                inputFormatters: [_model.tfCnpjMask],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Campo de texto para a data de fundação
-                  Padding(
-                    padding:
-                    EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.max,
-                      children: [
-                        Expanded(
-                          child: Align(
-                            alignment: AlignmentDirectional(0, 0),
-                            child: Padding(
-                              padding: EdgeInsetsDirectional.fromSTEB(
-                                  20, 0, 20, 0),
-                              child: TextFormField(
-                                controller: _model.tfBirthTextController,
-                                autofocus: true,
-                                obscureText: false,
-                                enabled: false,
-                                decoration: InputDecoration(
-                                  filled: true,
-                                  fillColor: Theme.of(context).colorScheme.secondary,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  prefixIcon: Icon(
-                                    Icons.calendar_month,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .tertiary,
-                                    size: 20,
-                                  ),
-                                ),
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSecondary,
-                                ),
-                                textAlign: TextAlign.start,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Quantidade de conteúdo semanal: Artes e Vídeos
-                  Padding(
-                    padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding:
-                          EdgeInsetsDirectional.fromSTEB(20, 10, 20, 10),
-                          child: Text(
-                            'Quantidade de conteúdo semanal:',
-                            textAlign: TextAlign.start,
-                            style: TextStyle(
+                ],
+              ),
+            ),
+            // Campo de texto para o email
+            Padding(
+              padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+              child: Row(
+                mainAxisSize: MainAxisSize.max,
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: AlignmentDirectional(0, 0),
+                      child: Padding(
+                        padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                        child: TextFormField(
+                          controller: _model.tfEmailTextController,
+                          focusNode: _model.tfEmailFocusNode,
+                          autofocus: true,
+                          obscureText: false,
+                          enabled: false,
+                          decoration: InputDecoration(
+                            hintText: 'Digite o email da empresa',
+                            hintStyle: TextStyle(
                               fontFamily: 'Poppins',
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 12,
                               letterSpacing: 0,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSecondary,
+                              color: Theme.of(context).colorScheme.onSecondary,
                             ),
-                            overflow: TextOverflow.visible,
-                            maxLines: null,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Campo de incremento para Artes
-                  Padding(
-                    padding: EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.max,
-                      mainAxisAlignment:
-                      MainAxisAlignment.spaceBetween,
-                      children: [
-                        Align(
-                          alignment: AlignmentDirectional(-1, 0),
-                          child: Padding(
-                            padding:
-                            EdgeInsetsDirectional.fromSTEB(20, 0, 0, 0),
-                            child: Text(
-                              'Artes',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontWeight: FontWeight.w500,
-                                fontSize: 14,
-                                letterSpacing: 0,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSecondary,
-                              ),
+                            filled: true,
+                            fillColor: Theme.of(context).colorScheme.secondary,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.mail,
+                              color: Theme.of(context).colorScheme.tertiary,
+                              size: 20,
                             ),
                           ),
-                        ),
-                        Padding(
-                          padding: EdgeInsetsDirectional.fromSTEB(
-                              0, 0, 20, 0),
-                          child: CustomCountController(
-                            count: _model.countArtsValue,
-                            updateCount: updateCountArts,
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0,
+                            color: Theme.of(context).colorScheme.onSecondary,
                           ),
+                          textAlign: TextAlign.start,
+                          keyboardType: TextInputType.emailAddress,
                         ),
-                      ],
+                      ),
                     ),
                   ),
-                  // Campo de incremento para Vídeos
-                  Padding(
-                    padding: EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.max,
-                      mainAxisAlignment:
-                      MainAxisAlignment.spaceBetween,
-                      children: [
-                        Align(
-                          alignment: AlignmentDirectional(-1, 0),
-                          child: Padding(
-                            padding:
-                            EdgeInsetsDirectional.fromSTEB(20, 0, 0, 0),
-                            child: Text(
-                              'Vídeos',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontWeight: FontWeight.w500,
-                                fontSize: 14,
-                                letterSpacing: 0,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSecondary,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Padding(
-                          padding: EdgeInsetsDirectional.fromSTEB(
-                              0, 0, 20, 0),
-                          child: CustomCountController(
-                            count: _model.countVideosValue,
-                            updateCount: updateCountVideos,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Acessos da Empresa: Dashboard, Leads, Gerenciar Colaboradores
-                  Padding(
-                    padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding:
-                          EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
-                          child: Text(
-                            'Marque os acessos da empresa:',
-                            textAlign: TextAlign.start,
-                            style: TextStyle(
+                ],
+              ),
+            ),
+            // Campo de texto para o contrato
+            Padding(
+              padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+              child: Row(
+                mainAxisSize: MainAxisSize.max,
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: AlignmentDirectional(0, 0),
+                      child: Padding(
+                        padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                        child: TextFormField(
+                          controller: _model.tfContractTextController,
+                          focusNode: _model.tfContractFocusNode,
+                          autofocus: true,
+                          obscureText: false,
+                          decoration: InputDecoration(
+                            hintText: 'Digite a data final do contrato',
+                            hintStyle: TextStyle(
                               fontFamily: 'Poppins',
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 12,
                               letterSpacing: 0,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSecondary,
+                              color: Theme.of(context).colorScheme.onSecondary,
                             ),
-                            overflow: TextOverflow.visible,
-                            maxLines: null,
+                            filled: true,
+                            fillColor: Theme.of(context).colorScheme.secondary,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.import_contacts,
+                              color: Theme.of(context).colorScheme.tertiary,
+                              size: 20,
+                            ),
                           ),
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0,
+                            color: Theme.of(context).colorScheme.onSecondary,
+                          ),
+                          textAlign: TextAlign.start,
+                          inputFormatters: [_model.tfContractMask],
+                          keyboardType: TextInputType.number,
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                  // Checkbox para os acessos
-                  Padding(
-                    padding: EdgeInsetsDirectional.zero,
-                    child: Column(
-                      children: [
-                        CheckboxListTile(
-                          title: Text(
-                            "Dashboard",
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontWeight: FontWeight.w500,
-                              fontSize: 14,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSecondary,
-                            ),
-                          ),
-                          value: accessRights['dashboard'],
-                          onChanged: (bool? value) {
-                            setState(() {
-                              accessRights['dashboard'] = value ?? false;
-                            });
-                          },
-                          controlAffinity:
-                          ListTileControlAffinity.leading,
-                          activeColor: Theme.of(context).primaryColor,
-                          checkColor:
-                          Theme.of(context).colorScheme.outline,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(5.0),
-                          ),
-                          dense: true,
-                        ),
-                        CheckboxListTile(
-                          title: Text(
-                            "Leads",
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontWeight: FontWeight.w500,
-                              fontSize: 14,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSecondary,
-                            ),
-                          ),
-                          value: accessRights['leads'],
-                          onChanged: (bool? value) {
-                            setState(() {
-                              accessRights['leads'] = value ?? false;
-                            });
-                          },
-                          controlAffinity:
-                          ListTileControlAffinity.leading,
-                          activeColor: Theme.of(context).primaryColor,
-                          checkColor:
-                          Theme.of(context).colorScheme.outline,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(5.0),
-                          ),
-                          dense: true,
-                        ),
-                        CheckboxListTile(
-                          title: Text(
-                            "Gerenciar Colaboradores",
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontWeight: FontWeight.w500,
-                              fontSize: 14,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSecondary,
-                            ),
-                          ),
-                          value: accessRights['gerenciarColaboradores'],
-                          onChanged: (bool? value) {
-                            setState(() {
-                              accessRights['gerenciarColaboradores'] =
-                                  value ?? false;
-                            });
-                          },
-                          controlAffinity:
-                          ListTileControlAffinity.leading,
-                          activeColor: Theme.of(context).primaryColor,
-                          checkColor:
-                          Theme.of(context).colorScheme.outline,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(5.0),
-                          ),
-                          dense: true,
-                        ),
-                        CheckboxListTile(
-                          title: Text(
-                            "Configurar Dashboard",
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontWeight: FontWeight.w500,
-                              fontSize: 14,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSecondary,
-                            ),
-                          ),
-                          value: accessRights['configurarDash'],
-                          onChanged: (bool? value) {
-                            setState(() {
-                              accessRights['configurarDash'] =
-                                  value ?? false;
-                            });
-                          },
-                          controlAffinity:
-                          ListTileControlAffinity.leading,
-                          activeColor: Theme.of(context).primaryColor,
-                          checkColor:
-                          Theme.of(context).colorScheme.outline,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(5.0),
-                          ),
-                          dense: true,
-                        ),
-                        CheckboxListTile(
-                          title: Text(
-                            "Criar Formulário",
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontWeight: FontWeight.w500,
-                              fontSize: 14,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSecondary,
-                            ),
-                          ),
-                          value: accessRights['criarForm'],
-                          onChanged: (bool? value) {
-                            setState(() {
-                              accessRights['criarForm'] = value ?? false;
-                            });
-                          },
-                          controlAffinity:
-                          ListTileControlAffinity.leading,
-                          activeColor: Theme.of(context).primaryColor,
-                          checkColor:
-                          Theme.of(context).colorScheme.outline,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(5.0),
-                          ),
-                          dense: true,
-                        ),
-                        CheckboxListTile(
-                          title: Text(
-                            "Criar Campanha",
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontWeight: FontWeight.w500,
-                              fontSize: 14,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSecondary,
-                            ),
-                          ),
-                          value: accessRights['criarCampanha'],
-                          onChanged: (bool? value) {
-                            setState(() {
-                              accessRights['criarCampanha'] =
-                                  value ?? false;
-                            });
-                          },
-                          controlAffinity:
-                          ListTileControlAffinity.leading,
-                          activeColor: Theme.of(context).primaryColor,
-                          checkColor:
-                          Theme.of(context).colorScheme.outline,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(5.0),
-                          ),
-                          dense: true,
-                        ),
-                        CheckboxListTile(
-                          title: Text(
-                            "Copiar telefones dos Leads",
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontWeight: FontWeight.w500,
-                              fontSize: 14,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSecondary,
-                            ),
-                          ),
-                          value: accessRights['copiarTelefones'],
-                          onChanged: (bool? value) {
-                            setState(() {
-                              accessRights['copiarTelefones'] =
-                                  value ?? false;
-                            });
-                          },
-                          controlAffinity:
-                          ListTileControlAffinity.leading,
-                          activeColor: Theme.of(context).primaryColor,
-                          checkColor:
-                          Theme.of(context).colorScheme.outline,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(5.0),
-                          ),
-                          dense: true,
-                        ),
-                        CheckboxListTile(
-                          title: Text(
-                            "Alterar senha",
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontWeight: FontWeight.w500,
-                              fontSize: 14,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSecondary,
-                            ),
-                          ),
-                          value: accessRights['alterarSenha'],
-                          onChanged: (bool? value) {
-                            setState(() {
-                              accessRights['alterarSenha'] =
-                                  value ?? false;
-                            });
-                          },
-                          controlAffinity:
-                          ListTileControlAffinity.leading,
-                          activeColor: Theme.of(context).primaryColor,
-                          checkColor:
-                          Theme.of(context).colorScheme.outline,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(5.0),
-                          ),
-                          dense: true,
-                        ),
-                        CheckboxListTile(
-                          title: Text(
-                            "Executar APIs",
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontWeight: FontWeight.w500,
-                              fontSize: 14,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSecondary,
-                            ),
-                          ),
-                          value: accessRights['executarAPIs'],
-                          onChanged: (bool? value) {
-                            setState(() {
-                              accessRights['executarAPIs'] =
-                                  value ?? false;
-                            });
-                          },
-                          controlAffinity:
-                          ListTileControlAffinity.leading,
-                          activeColor: Theme.of(context).primaryColor,
-                          checkColor:
-                          Theme.of(context).colorScheme.outline,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(5.0),
-                          ),
-                          dense: true,
-                        ),
-                      ],
-                    ),
-                  ),
-                  StreamBuilder<DocumentSnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('empresas')
-                        .doc(uid)
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return CircularProgressIndicator();
-                      }
-
-                      if (snapshot.hasError) {
-                        return Text('Erro ao carregar dados');
-                      }
-
-                      if (snapshot.hasData &&
-                          snapshot.data != null &&
-                          snapshot.data!.exists) {
-                        final data = snapshot.data!.data() as Map<String, dynamic>?;
-
-                        bool canChangePassword = data?['alterarSenha'] ?? false;
-
-                        if (canChangePassword) {
-                          return Align(
-                            alignment: AlignmentDirectional(0, 0),
-                            child: Padding(
-                              padding:
-                              EdgeInsetsDirectional.fromSTEB(20, 20, 20, 20),
-                              child: ElevatedButton.icon(
-                                onPressed: _isChangingPassword
-                                    ? null
-                                    : _showChangePasswordSheet,
-                                icon: Icon(
-                                  Icons.settings_backup_restore_rounded,
-                                  color: Theme.of(context).colorScheme.outline,
-                                  size: 20,
-                                ),
-                                label: Text(
-                                  'Alterar senha',
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.outline,
-                                  ),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  padding: EdgeInsetsDirectional.fromSTEB(
-                                      30, 15, 30, 15),
-                                  backgroundColor:
-                                  Theme.of(context).colorScheme.primary,
-                                  elevation: 3,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(25),
-                                  ),
-                                  side: BorderSide(
-                                    color: Colors.transparent,
-                                    width: 1,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        }
-                      }
-                      return SizedBox.shrink(); // Não exibe nada se não tiver permissão ou se o documento não existir.
-                    },
                   )
                 ],
               ),
             ),
-          ),
+            // Campo de texto para o CNPJ
+            Padding(
+              padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+              child: Row(
+                mainAxisSize: MainAxisSize.max,
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: AlignmentDirectional(0, 0),
+                      child: Padding(
+                        padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                        child: TextFormField(
+                          controller: _model.tfCnpjTextController,
+                          focusNode: _model.tfCnpjFocusNode,
+                          autofocus: true,
+                          obscureText: false,
+                          enabled: false,
+                          decoration: InputDecoration(
+                            hintText: 'Digite o CNPJ da empresa',
+                            hintStyle: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontWeight: FontWeight.w500,
+                              fontSize: 12,
+                              letterSpacing: 0,
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                            filled: true,
+                            fillColor: Theme.of(context).colorScheme.secondary,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.contact_emergency_sharp,
+                              color: Theme.of(context).colorScheme.tertiary,
+                              size: 20,
+                            ),
+                          ),
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0,
+                            color: Theme.of(context).colorScheme.onSecondary,
+                          ),
+                          textAlign: TextAlign.start,
+                          inputFormatters: [_model.tfCnpjMask],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Campo de texto para a data de fundação
+            Padding(
+              padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+              child: Row(
+                mainAxisSize: MainAxisSize.max,
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: AlignmentDirectional(0, 0),
+                      child: Padding(
+                        padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                        child: TextFormField(
+                          controller: _model.tfBirthTextController,
+                          autofocus: true,
+                          obscureText: false,
+                          enabled: false,
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Theme.of(context).colorScheme.secondary,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.calendar_month,
+                              color: Theme.of(context).colorScheme.tertiary,
+                              size: 20,
+                            ),
+                          ),
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0,
+                            color: Theme.of(context).colorScheme.onSecondary,
+                          ),
+                          textAlign: TextAlign.start,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Quantidade de conteúdo semanal: Artes e Vídeos
+            Padding(
+              padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: EdgeInsetsDirectional.fromSTEB(20, 10, 20, 10),
+                    child: Text(
+                      'Quantidade de conteúdo semanal:',
+                      textAlign: TextAlign.start,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0,
+                        color: Theme.of(context).colorScheme.onSecondary,
+                      ),
+                      overflow: TextOverflow.visible,
+                      maxLines: null,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Campo de incremento para Artes
+            Padding(
+              padding: EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
+              child: Row(
+                mainAxisSize: MainAxisSize.max,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Align(
+                    alignment: AlignmentDirectional(-1, 0),
+                    child: Padding(
+                      padding: EdgeInsetsDirectional.fromSTEB(20, 0, 0, 0),
+                      child: Text(
+                        'Artes',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                          letterSpacing: 0,
+                          color: Theme.of(context).colorScheme.onSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: EdgeInsetsDirectional.fromSTEB(0, 0, 20, 0),
+                    child: CustomCountController(
+                      count: _model.countArtsValue,
+                      updateCount: updateCountArts,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Campo de incremento para Vídeos
+            Padding(
+              padding: EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
+              child: Row(
+                mainAxisSize: MainAxisSize.max,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Align(
+                    alignment: AlignmentDirectional(-1, 0),
+                    child: Padding(
+                      padding: EdgeInsetsDirectional.fromSTEB(20, 0, 0, 0),
+                      child: Text(
+                        'Vídeos',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                          letterSpacing: 0,
+                          color: Theme.of(context).colorScheme.onSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: EdgeInsetsDirectional.fromSTEB(0, 0, 20, 0),
+                    child: CustomCountController(
+                      count: _model.countVideosValue,
+                      updateCount: updateCountVideos,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Acessos da Empresa: Dashboard, Leads, Gerenciar Colaboradores etc.
+            Padding(
+              padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                    child: Text(
+                      'Marque os acessos da empresa:',
+                      textAlign: TextAlign.start,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0,
+                        color: Theme.of(context).colorScheme.onSecondary,
+                      ),
+                      overflow: TextOverflow.visible,
+                      maxLines: null,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Checkbox para os acessos
+            Padding(
+              padding: EdgeInsetsDirectional.zero,
+              child: Column(
+                children: [
+                  _buildCheckboxTile("Dashboard", 'dashboard', 14),
+                  _buildCheckboxTile("Leads", 'leads', 14),
+                  _buildCheckboxTile("Gerenciar Colaboradores",
+                      'gerenciarColaboradores', 14),
+                  _buildCheckboxTile("Configurar Dashboard",
+                      'configurarDash', 14),
+                  _buildCheckboxTile("Criar Formulário", 'criarForm', 14),
+                  _buildCheckboxTile("Criar Campanha", 'criarCampanha', 14),
+                  _buildCheckboxTile(
+                      "Copiar telefones dos Leads", 'copiarTelefones', 14),
+                  _buildCheckboxTile("Alterar senha", 'alterarSenha', 14),
+                ],
+              ),
+            ),
+            // Stream para verificar se pode alterar senha
+            StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('empresas')
+                  .doc(uid)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return CircularProgressIndicator();
+                }
+
+                if (snapshot.hasError) {
+                  return Text('Erro ao carregar dados');
+                }
+
+                if (snapshot.hasData &&
+                    snapshot.data != null &&
+                    snapshot.data!.exists) {
+                  final data = snapshot.data!.data() as Map<String, dynamic>?;
+
+                  bool canChangePassword = data?['alterarSenha'] ?? false;
+
+                  if (canChangePassword) {
+                    return Align(
+                      alignment: AlignmentDirectional(0, 0),
+                      child: Padding(
+                        padding: EdgeInsetsDirectional.fromSTEB(20, 20, 20, 20),
+                        child: ElevatedButton.icon(
+                          onPressed:
+                          _isChangingPassword ? null : _showChangePasswordSheet,
+                          icon: Icon(
+                            Icons.settings_backup_restore_rounded,
+                            color: Theme.of(context).colorScheme.outline,
+                            size: 20,
+                          ),
+                          label: Text(
+                            'Alterar senha',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0,
+                              color: Theme.of(context).colorScheme.outline,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            padding: EdgeInsetsDirectional.fromSTEB(30, 15, 30, 15),
+                            backgroundColor: Theme.of(context).colorScheme.primary,
+                            elevation: 3,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(25),
+                            ),
+                            side: BorderSide(
+                              color: Colors.transparent,
+                              width: 1,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+                }
+                return SizedBox.shrink(); // Não exibe nada se não tiver permissão ou se o documento não existir.
+              },
+            )
+          ],
         ),
       ),
+    );
+  }
+
+  // Helper para criar um checkbox
+  Widget _buildCheckboxTile(String title, String keyMap, double fontSize) {
+    return CheckboxListTile(
+      title: Text(
+        title,
+        style: TextStyle(
+          fontFamily: 'Poppins',
+          fontWeight: FontWeight.w500,
+          fontSize: fontSize,
+          color: Theme.of(context).colorScheme.onSecondary,
+        ),
+      ),
+      value: accessRights[keyMap],
+      onChanged: (bool? value) {
+        setState(() {
+          accessRights[keyMap] = value ?? false;
+        });
+      },
+      controlAffinity: ListTileControlAffinity.leading,
+      activeColor: Theme.of(context).primaryColor,
+      checkColor: Theme.of(context).colorScheme.outline,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(5.0),
+      ),
+      dense: true,
     );
   }
 }

@@ -22,7 +22,6 @@ class _ManageFormsState extends State<ManageForms> {
   ScrollController _scrollController = ScrollController();
   double _scrollOffset = 0.0;
 
-
   String? selectedEmpresaId;
   String? selectedEmpresaName;
   String? selectedCampaignId;
@@ -455,6 +454,9 @@ class _ManageFormsState extends State<ManageForms> {
 
   @override
   Widget build(BuildContext context) {
+    // Definição de 'isDesktop' com base na largura da tela
+    bool isDesktop = MediaQuery.of(context).size.width > 1024;
+
     double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
     double opacity = (1.0 - (_scrollOffset / 100)).clamp(0.0, 1.0);
 
@@ -565,185 +567,69 @@ class _ManageFormsState extends State<ManageForms> {
               ),
             ),
             body: SafeArea(
-              child: Column(
-                children: [
-                  const SizedBox(height: 10),
-                  // Dropdown de Empresas
-                  Padding(
-                    padding:
-                    EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
-                    child: DropdownButtonFormField<String>(
-                      isExpanded:
-                      true, // Permite que o dropdown ocupe toda a largura disponível
-                      alignment:
-                      Alignment.center, // Alinha o conteúdo centralmente
-                      value: selectedEmpresaId,
-                      onChanged: (val) async {
-                        if (val != null) {
-                          setState(() {
-                            selectedEmpresaId = val;
-                            selectedEmpresaName = empresas
-                                .firstWhere((empresa) => empresa['id'] == val)['NomeEmpresa'];
-                            selectedCampaignId = null;
-                            selectedCampaignName = null;
-                            campanhas.clear();
-                            forms.clear();
-                          });
-                          _loadCampanhasListener(val);
-                        }
-                      },
-                      items: empresas.map((empresa) {
-                        return DropdownMenuItem<String>(
-                          value: empresa['id'],
-                          child: Center(
-                            child: Text(
-                              empresa['NomeEmpresa'],
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 16,
-                                color:
-                                Theme.of(context).colorScheme.onSecondary,
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Theme.of(context).colorScheme.secondary,
-                        contentPadding:
-                        EdgeInsets.symmetric(vertical: 10.0),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
-                        ),
-                        hintText: 'Selecione a empresa...',
-                        hintStyle: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          color:
-                          Theme.of(context).colorScheme.onSecondary,
-                        ),
-                      ),
-                      dropdownColor:
-                      Theme.of(context).colorScheme.background,
-                      selectedItemBuilder: (BuildContext context) {
-                        return empresas.map((empresa) {
-                          return Center(
-                            child: Text(
-                              empresa['NomeEmpresa'],
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 16,
-                                color:
-                                Theme.of(context).colorScheme.onSecondary,
-                              ),
-                            ),
-                          );
-                        }).toList();
-                      },
-                      hint: Center(
-                        child: Text(
-                          'Selecione a empresa...',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color:
-                            Theme.of(context).colorScheme.onSecondary,
-                          ),
-                        ),
-                      ),
-                      icon: SizedBox
-                          .shrink(), // Remove o ícone de seta
-                      iconSize:
-                      0, // Garante que nenhum espaço seja reservado para o ícone
-                    ),
-                  ),
-
-                  // Filtro de Campanhas
-                  if (selectedEmpresaId != null && campanhas.isNotEmpty)
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16.0),
-                      child: SizedBox(
-                        height: 50,
+              child: isDesktop
+                  ? Align(
+                alignment: Alignment.topCenter,
+                child: Container(
+                  constraints: BoxConstraints(maxWidth: 1850),
+                  padding: EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 20),
+                      // Dropdown de Empresas
+                      Padding(
+                        padding:
+                        EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
                         child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          alignment: Alignment.center,
-                          value: selectedCampaignId ?? 'Todas',
-                          onChanged: (val) {
-                            if (val == 'Todas') {
+                          isExpanded:
+                          true, // Permite que o dropdown ocupe toda a largura disponível
+                          alignment:
+                          Alignment.center, // Alinha o conteúdo centralmente
+                          value: selectedEmpresaId,
+                          onChanged: (val) async {
+                            if (val != null) {
                               setState(() {
+                                selectedEmpresaId = val;
+                                selectedEmpresaName = empresas
+                                    .firstWhere((empresa) => empresa['id'] == val)['NomeEmpresa'];
                                 selectedCampaignId = null;
                                 selectedCampaignName = null;
+                                campanhas.clear();
                                 forms.clear();
                               });
-                              _setupAllFormsListeners();
-                            } else {
-                              final campanha = campanhas.firstWhere((campanha) => campanha['id'] == val);
-                              setState(() {
-                                selectedCampaignId = campanha['id'];
-                                selectedCampaignName = campanha['nome_campanha'];
-                                forms.clear();
-                              });
-                              _setupSingleFormListener(campanha['id']);
+                              _loadCampanhasListener(val);
                             }
                           },
-                          items: [
-                            // Opção "Todas as Campanhas"
-                            DropdownMenuItem<String>(
-                              value: 'Todas',
+                          items: empresas.map((empresa) {
+                            return DropdownMenuItem<String>(
+                              value: empresa['id'],
                               child: Center(
                                 child: Text(
-                                  'Todas as Campanhas',
+                                  empresa['NomeEmpresa'],
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontFamily: 'Poppins',
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w500,
+                                    fontSize: isDesktop ? 18 : 16, // Aumento da fonte
                                     color:
                                     Theme.of(context).colorScheme.onSecondary,
                                   ),
                                 ),
                               ),
-                            ),
-                            // Itens das campanhas
-                            ...campanhas.map((campanha) {
-                              return DropdownMenuItem<String>(
-                                value: campanha['id'] as String,
-                                child: Center(
-                                  child: Text(
-                                    campanha['nome_campanha'],
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w500,
-                                      color:
-                                      Theme.of(context).colorScheme.onSecondary,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ],
+                            );
+                          }).toList(),
                           decoration: InputDecoration(
                             filled: true,
                             fillColor: Theme.of(context).colorScheme.secondary,
-                            contentPadding: EdgeInsets.symmetric(
-                                vertical: 10.0, horizontal: 0),
+                            contentPadding:
+                            EdgeInsets.symmetric(vertical: isDesktop ? 20.0 : 10.0, horizontal: 16.0), // Aumento da altura
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
                               borderSide: BorderSide.none,
                             ),
-                            hintText: 'Selecione a campanha',
+                            hintText: 'Selecione a empresa...',
                             hintStyle: TextStyle(
                               fontFamily: 'Poppins',
-                              fontSize: 15,
+                              fontSize: isDesktop ? 18 : 15, // Aumento da fonte
                               fontWeight: FontWeight.w500,
                               color:
                               Theme.of(context).colorScheme.onSecondary,
@@ -752,26 +638,428 @@ class _ManageFormsState extends State<ManageForms> {
                           dropdownColor:
                           Theme.of(context).colorScheme.background,
                           selectedItemBuilder: (BuildContext context) {
-                            return [
-                              // Opção "Todas as Campanhas"
-                              Center(
+                            return empresas.map((empresa) {
+                              return Center(
                                 child: Text(
-                                  'Todas as Campanhas',
+                                  empresa['NomeEmpresa'],
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontFamily: 'Poppins',
-                                    fontSize: 15,
+                                    fontSize: isDesktop ? 18 : 16, // Aumento da fonte
+                                    color:
+                                    Theme.of(context).colorScheme.onSecondary,
+                                  ),
+                                ),
+                              );
+                            }).toList();
+                          },
+                          hint: Center(
+                            child: Text(
+                              'Selecione a empresa...',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: isDesktop ? 18 : 15, // Aumento da fonte
+                                fontWeight: FontWeight.w600,
+                                color:
+                                Theme.of(context).colorScheme.onSecondary,
+                              ),
+                            ),
+                          ),
+                          icon: SizedBox
+                              .shrink(), // Remove o ícone de seta
+                          iconSize:
+                          0, // Garante que nenhum espaço seja reservado para o ícone
+                        ),
+                      ),
+
+                      // Filtro de Campanhas
+                      if (selectedEmpresaId != null && campanhas.isNotEmpty)
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16.0),
+                          child: SizedBox(
+                            height: isDesktop ? 60 : 50, // Aumento da altura
+                            child: DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              alignment: Alignment.center,
+                              value: selectedCampaignId ?? 'Todas',
+                              onChanged: (val) {
+                                if (val == 'Todas') {
+                                  setState(() {
+                                    selectedCampaignId = null;
+                                    selectedCampaignName = null;
+                                    forms.clear();
+                                  });
+                                  _setupAllFormsListeners();
+                                } else {
+                                  final campanha = campanhas.firstWhere((campanha) => campanha['id'] == val);
+                                  setState(() {
+                                    selectedCampaignId = campanha['id'];
+                                    selectedCampaignName = campanha['nome_campanha'];
+                                    forms.clear();
+                                  });
+                                  _setupSingleFormListener(campanha['id']);
+                                }
+                              },
+                              items: [
+                                // Opção "Todas as Campanhas"
+                                DropdownMenuItem<String>(
+                                  value: 'Todas',
+                                  child: Center(
+                                    child: Text(
+                                      'Todas as Campanhas',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontSize: isDesktop ? 18 : 15, // Aumento da fonte
+                                        fontWeight: FontWeight.w500,
+                                        color:
+                                        Theme.of(context).colorScheme.onSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Itens das campanhas
+                                ...campanhas.map((campanha) {
+                                  return DropdownMenuItem<String>(
+                                    value: campanha['id'] as String,
+                                    child: Center(
+                                      child: Text(
+                                        campanha['nome_campanha'],
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: isDesktop ? 18 : 15, // Aumento da fonte
+                                          fontWeight: FontWeight.w500,
+                                          color:
+                                          Theme.of(context).colorScheme.onSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ],
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor: Theme.of(context).colorScheme.secondary,
+                                contentPadding: EdgeInsets.symmetric(
+                                    vertical: isDesktop ? 20.0 : 10.0, horizontal: 0), // Aumento da altura
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
+                                ),
+                                hintText: 'Selecione a campanha',
+                                hintStyle: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: isDesktop ? 18 : 15, // Aumento da fonte
+                                  fontWeight: FontWeight.w500,
+                                  color:
+                                  Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                              dropdownColor:
+                              Theme.of(context).colorScheme.background,
+                              selectedItemBuilder: (BuildContext context) {
+                                return [
+                                  // Opção "Todas as Campanhas"
+                                  Center(
+                                    child: Text(
+                                      'Todas as Campanhas',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontSize: isDesktop ? 18 : 15, // Aumento da fonte
+                                        fontWeight: FontWeight.w500,
+                                        color:
+                                        Theme.of(context).colorScheme.onSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                  // Itens das campanhas
+                                  ...campanhas.map((campanha) {
+                                    return Center(
+                                      child: Text(
+                                        campanha['nome_campanha'],
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: isDesktop ? 18 : 15, // Aumento da fonte
+                                          fontWeight: FontWeight.w500,
+                                          color:
+                                          Theme.of(context).colorScheme.onSecondary,
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ];
+                              },
+                              hint: Center(
+                                child: Text(
+                                  'Selecione a campanha',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: isDesktop ? 18 : 15, // Aumento da fonte
                                     fontWeight: FontWeight.w500,
                                     color:
                                     Theme.of(context).colorScheme.onSecondary,
                                   ),
                                 ),
                               ),
-                              // Itens das campanhas
-                              ...campanhas.map((campanha) {
-                                return Center(
+                              icon: SizedBox.shrink(),
+                              iconSize: 0,
+                            ),
+                          ),
+                        ),
+
+                      // Espaçamento adicional entre os selects e a lista de formulários
+                      SizedBox(height: isDesktop ? 30.0 : 20.0),
+
+                      // Lista de Formulários
+                      Expanded(
+                        child: selectedEmpresaId == null
+                            ? Center(
+                          child: Text(
+                            'Selecione uma empresa para ver os formulários.',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: isDesktop ? 18 : 16, // Aumento da fonte
+                              color:
+                              Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                        )
+                            : forms.isEmpty
+                            ? Center(
+                          child: Text(
+                            'Nenhum formulário encontrado.',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: isDesktop ? 18 : 16, // Aumento da fonte
+                              color:
+                              Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                        )
+                            : ListView.builder(
+                          itemCount: forms.length,
+                          itemBuilder: (context, index) {
+                            final form = forms[index];
+                            return Card(
+                              color: Theme.of(context).colorScheme.secondary,
+                              margin: EdgeInsets.symmetric(
+                                  horizontal: 16.0, vertical: 8.0),
+                              child: ListTile(
+                                title: Text(
+                                  form['form_name'] ?? 'Formulário sem nome',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: isDesktop ? 18 : 16, // Aumento da fonte
+                                    fontWeight: FontWeight.w600,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  'Campanha: ${form['campanha_nome']}',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontWeight: FontWeight.w400,
+                                    fontSize: isDesktop ? 15 : 14, // Aumento da fonte
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
+                                  ),
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(Icons.edit,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSecondary),
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => EditFormPage(
+                                              empresaId: selectedEmpresaId!,
+                                              campanhaId: form['campanha_id'],
+                                              formId: form['id'],
+                                            ),
+                                          ),
+                                        ).then((value) {
+                                          if (value == true) {
+                                            // Atualiza a lista se retornou true
+                                            setState(() {});
+                                          }
+                                        });
+                                      },
+                                      tooltip: 'Editar Formulário',
+                                    ),
+                                    IconButton(
+                                      icon: Icon(Icons.delete,
+                                          color: Colors.red),
+                                      onPressed: () {
+                                        _showDeleteConfirmationDialog(
+                                          selectedEmpresaId!,
+                                          form['campanha_id'],
+                                          form['id'],
+                                        );
+                                      },
+                                      tooltip: 'Excluir Formulário',
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+                  : Container(
+                // Layout para dispositivos não-desktop (mobile/tablet)
+                padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 20),
+                    // Dropdown de Empresas
+                    Padding(
+                      padding:
+                      EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+                      child: DropdownButtonFormField<String>(
+                        isExpanded:
+                        true, // Permite que o dropdown ocupe toda a largura disponível
+                        alignment:
+                        Alignment.center, // Alinha o conteúdo centralmente
+                        value: selectedEmpresaId,
+                        onChanged: (val) async {
+                          if (val != null) {
+                            setState(() {
+                              selectedEmpresaId = val;
+                              selectedEmpresaName = empresas
+                                  .firstWhere((empresa) => empresa['id'] == val)['NomeEmpresa'];
+                              selectedCampaignId = null;
+                              selectedCampaignName = null;
+                              campanhas.clear();
+                              forms.clear();
+                            });
+                            _loadCampanhasListener(val);
+                          }
+                        },
+                        items: empresas.map((empresa) {
+                          return DropdownMenuItem<String>(
+                            value: empresa['id'],
+                            child: Center(
+                              child: Text(
+                                empresa['NomeEmpresa'],
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 16,
+                                  color:
+                                  Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: Theme.of(context).colorScheme.secondary,
+                          contentPadding:
+                          EdgeInsets.symmetric(vertical: 10.0, horizontal: 16.0),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide.none,
+                          ),
+                          hintText: 'Selecione a empresa...',
+                          hintStyle: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color:
+                            Theme.of(context).colorScheme.onSecondary,
+                          ),
+                        ),
+                        dropdownColor:
+                        Theme.of(context).colorScheme.background,
+                        selectedItemBuilder: (BuildContext context) {
+                          return empresas.map((empresa) {
+                            return Center(
+                              child: Text(
+                                empresa['NomeEmpresa'],
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 16,
+                                  color:
+                                  Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                            );
+                          }).toList();
+                        },
+                        hint: Center(
+                          child: Text(
+                            'Selecione a empresa...',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color:
+                              Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                        ),
+                        icon: SizedBox
+                            .shrink(), // Remove o ícone de seta
+                        iconSize:
+                        0, // Garante que nenhum espaço seja reservado para o ícone
+                      ),
+                    ),
+
+                    // Filtro de Campanhas
+                    if (selectedEmpresaId != null && campanhas.isNotEmpty)
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16.0),
+                        child: SizedBox(
+                          height: 50,
+                          child: DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            alignment: Alignment.center,
+                            value: selectedCampaignId ?? 'Todas',
+                            onChanged: (val) {
+                              if (val == 'Todas') {
+                                setState(() {
+                                  selectedCampaignId = null;
+                                  selectedCampaignName = null;
+                                  forms.clear();
+                                });
+                                _setupAllFormsListeners();
+                              } else {
+                                final campanha = campanhas.firstWhere((campanha) => campanha['id'] == val);
+                                setState(() {
+                                  selectedCampaignId = campanha['id'];
+                                  selectedCampaignName = campanha['nome_campanha'];
+                                  forms.clear();
+                                });
+                                _setupSingleFormListener(campanha['id']);
+                              }
+                            },
+                            items: [
+                              // Opção "Todas as Campanhas"
+                              DropdownMenuItem<String>(
+                                value: 'Todas',
+                                child: Center(
                                   child: Text(
-                                    campanha['nome_campanha'],
+                                    'Todas as Campanhas',
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       fontFamily: 'Poppins',
@@ -781,15 +1069,39 @@ class _ManageFormsState extends State<ManageForms> {
                                       Theme.of(context).colorScheme.onSecondary,
                                     ),
                                   ),
+                                ),
+                              ),
+                              // Itens das campanhas
+                              ...campanhas.map((campanha) {
+                                return DropdownMenuItem<String>(
+                                  value: campanha['id'] as String,
+                                  child: Center(
+                                    child: Text(
+                                      campanha['nome_campanha'],
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w500,
+                                        color:
+                                        Theme.of(context).colorScheme.onSecondary,
+                                      ),
+                                    ),
+                                  ),
                                 );
                               }).toList(),
-                            ];
-                          },
-                          hint: Center(
-                            child: Text(
-                              'Selecione a campanha',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
+                            ],
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor: Theme.of(context).colorScheme.secondary,
+                              contentPadding: EdgeInsets.symmetric(
+                                  vertical: 10.0, horizontal: 0),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide.none,
+                              ),
+                              hintText: 'Selecione a campanha',
+                              hintStyle: TextStyle(
                                 fontFamily: 'Poppins',
                                 fontSize: 15,
                                 fontWeight: FontWeight.w500,
@@ -797,118 +1109,169 @@ class _ManageFormsState extends State<ManageForms> {
                                 Theme.of(context).colorScheme.onSecondary,
                               ),
                             ),
-                          ),
-                          icon: SizedBox.shrink(),
-                          iconSize: 0,
-                        ),
-                      ),
-                    ),
-
-                  // Lista de Formulários
-                  Expanded(
-                    child: selectedEmpresaId == null
-                        ? Center(
-                      child: Text(
-                        'Selecione uma empresa para ver os formulários.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 16,
-                          color:
-                          Theme.of(context).colorScheme.onSecondary,
-                        ),
-                      ),
-                    )
-                        : forms.isEmpty
-                        ? Center(
-                      child: Text(
-                        'Nenhum formulário encontrado.',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 16,
-                          color:
-                          Theme.of(context).colorScheme.onSecondary,
-                        ),
-                      ),
-                    )
-                        : ListView.builder(
-                      itemCount: forms.length,
-                      itemBuilder: (context, index) {
-                        final form = forms[index];
-                        return Card(
-                          color: Theme.of(context).colorScheme.secondary,
-                          margin: EdgeInsets.symmetric(
-                              horizontal: 16.0, vertical: 8.0),
-                          child: ListTile(
-                            title: Text(
-                              form['form_name'] ?? 'Formulário sem nome',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSecondary,
-                              ),
-                            ),
-                            subtitle: Text(
-                              'Campanha: ${form['campanha_nome']}',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontWeight: FontWeight.w400,
-                                fontSize: 14,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSecondary,
-                              ),
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: Icon(Icons.edit,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSecondary),
-                                  onPressed: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => EditFormPage(
-                                          empresaId: selectedEmpresaId!,
-                                          campanhaId: form['campanha_id'],
-                                          formId: form['id'],
-                                        ),
+                            dropdownColor:
+                            Theme.of(context).colorScheme.background,
+                            selectedItemBuilder: (BuildContext context) {
+                              return [
+                                // Opção "Todas as Campanhas"
+                                Center(
+                                  child: Text(
+                                    'Todas as Campanhas',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                      color:
+                                      Theme.of(context).colorScheme.onSecondary,
+                                    ),
+                                  ),
+                                ),
+                                // Itens das campanhas
+                                ...campanhas.map((campanha) {
+                                  return Center(
+                                    child: Text(
+                                      campanha['nome_campanha'],
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w500,
+                                        color:
+                                        Theme.of(context).colorScheme.onSecondary,
                                       ),
-                                    ).then((value) {
-                                      if (value == true) {
-                                        // Atualiza a lista se retornou true
-                                        setState(() {});
-                                      }
-                                    });
-                                  },
-                                  tooltip: 'Editar Formulário',
+                                    ),
+                                  );
+                                }).toList(),
+                              ];
+                            },
+                            hint: Center(
+                              child: Text(
+                                'Selecione a campanha',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  color:
+                                  Theme.of(context).colorScheme.onSecondary,
                                 ),
-                                IconButton(
-                                  icon: Icon(Icons.delete,
-                                      color: Colors.red),
-                                  onPressed: () {
-                                    _showDeleteConfirmationDialog(
-                                      selectedEmpresaId!,
-                                      form['campanha_id'],
-                                      form['id'],
-                                    );
-                                  },
-                                  tooltip: 'Excluir Formulário',
-                                ),
-                              ],
+                              ),
                             ),
+                            icon: SizedBox.shrink(),
+                            iconSize: 0,
                           ),
-                        );
-                      },
+                        ),
+                      ),
+
+                    // Espaçamento adicional entre os selects e a lista de formulários
+                    SizedBox(height: 20.0),
+
+                    // Lista de Formulários
+                    Expanded(
+                      child: selectedEmpresaId == null
+                          ? Center(
+                        child: Text(
+                          'Selecione uma empresa para ver os formulários.',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 16,
+                            color:
+                            Theme.of(context).colorScheme.onSecondary,
+                          ),
+                        ),
+                      )
+                          : forms.isEmpty
+                          ? Center(
+                        child: Text(
+                          'Nenhum formulário encontrado.',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 16,
+                            color:
+                            Theme.of(context).colorScheme.onSecondary,
+                          ),
+                        ),
+                      )
+                          : ListView.builder(
+                        itemCount: forms.length,
+                        itemBuilder: (context, index) {
+                          final form = forms[index];
+                          return Card(
+                            color: Theme.of(context).colorScheme.secondary,
+                            margin: EdgeInsets.symmetric(
+                                horizontal: 16.0, vertical: 8.0),
+                            child: ListTile(
+                              title: Text(
+                                form['form_name'] ?? 'Formulário sem nome',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: isDesktop ? 17 : 16, // Aumento da fonte
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSecondary,
+                                ),
+                              ),
+                              subtitle: Text(
+                                'Campanha: ${form['campanha_nome']}',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.w400,
+                                  fontSize: isDesktop ? 15 : 14, // Aumento da fonte
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSecondary,
+                                ),
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: Icon(Icons.edit,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSecondary),
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => EditFormPage(
+                                            empresaId: selectedEmpresaId!,
+                                            campanhaId: form['campanha_id'],
+                                            formId: form['id'],
+                                          ),
+                                        ),
+                                      ).then((value) {
+                                        if (value == true) {
+                                          // Atualiza a lista se retornou true
+                                          setState(() {});
+                                        }
+                                      });
+                                    },
+                                    tooltip: 'Editar Formulário',
+                                  ),
+                                  IconButton(
+                                    icon: Icon(Icons.delete,
+                                        color: Colors.red),
+                                    onPressed: () {
+                                      _showDeleteConfirmationDialog(
+                                        selectedEmpresaId!,
+                                        form['campanha_id'],
+                                        form['id'],
+                                      );
+                                    },
+                                    tooltip: 'Excluir Formulário',
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

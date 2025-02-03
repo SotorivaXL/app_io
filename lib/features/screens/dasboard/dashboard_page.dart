@@ -203,6 +203,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDesktop = MediaQuery.of(context).size.width > 1024;
+
     return ConnectivityBanner(
       child: Scaffold(
         body: Padding(
@@ -211,6 +213,24 @@ class _DashboardPageState extends State<DashboardPage> {
               ? Center(
             child: CircularProgressIndicator(),
           )
+              : isDesktop
+              ? Container(
+              constraints: BoxConstraints(
+                maxWidth: 1850, // Defina a largura máxima desejada
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 50), // 50px de padding nas laterais
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildFilters(),
+                    const SizedBox(height: 20),
+                    _buildMetricCards(),
+                    const SizedBox(height: 50),
+                  ],
+                ),
+              ),
+            )
               : SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

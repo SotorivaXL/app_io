@@ -96,9 +96,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
     showModalBottomSheet(
       context: context,
       shape: RoundedRectangleBorder(
-        side: BorderSide(
-            color: Theme.of(context).primaryColor
-        ),
+        side: BorderSide(color: Theme.of(context).primaryColor),
         borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
       ),
       builder: (BuildContext context) {
@@ -361,6 +359,9 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
         ? AlwaysScrollableScrollPhysics()
         : NeverScrollableScrollPhysics();
 
+    // ADICIONADO: Verifica se é Desktop
+    final bool isDesktop = MediaQuery.of(context).size.width > 1024; // <-- ADICIONADO
+
     return ConnectivityBanner(
       child: GestureDetector(
         child: Scaffold(
@@ -441,7 +442,98 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
               ),
             ),
           ),
-          body: SafeArea(
+          // ADICIONADO: Envolvemos o SafeArea em um Container com maxWidth no modo desktop
+          body: isDesktop
+              ? Center(
+            child: Container(
+              constraints: BoxConstraints(maxWidth: 1850),
+              child: SafeArea(
+                top: true,
+                child: StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: _getUserCollaborators(userId),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Center(child: CircularProgressIndicator());
+                    }
+                    if (snapshot.hasError) {
+                      return Center(child: Text('Erro ao carregar colaboradores: ${snapshot.error}'));
+                    }
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return Center(child: Text('Nenhum colaborador encontrado'));
+                    }
+
+                    final collaborators = snapshot.data!;
+                    return ListView.builder(
+                      itemCount: collaborators.length,
+                      itemBuilder: (context, index) {
+                        final collaborator = collaborators[index];
+                        return Card(
+                          elevation: 4,
+                          margin: EdgeInsets.only(top: 20, right: 15, left: 15),
+                          // Aumentando a altura do ListTile
+                          child: ListTile(
+                            // ADICIONADO: aumenta o padding interno
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+                            title: Text(
+                              collaborator['name'] ?? 'Nome não disponível',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                                color: Theme.of(context).colorScheme.onSecondary,
+                              ),
+                            ),
+                            subtitle: Text(
+                              collaborator['role'] ?? 'Cargo não disponível',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w400,
+                                fontSize: 14,
+                                color: Theme.of(context).colorScheme.onSecondary,
+                              ),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: Icon(Icons.edit, color: Theme.of(context).colorScheme.onSecondary),
+                                  onPressed: () {
+                                    _navigateWithBottomToTopTransition(
+                                      context,
+                                      EditCollaborators(
+                                        collaboratorId: collaborator['uid'] ?? '',
+                                        name: collaborator['name'] ?? 'Nome não disponível',
+                                        email: collaborator['email'] ?? 'Email não disponível',
+                                        role: collaborator['role'] ?? 'Cargo não disponível',
+                                        birth: collaborator['birth'] ?? 'Nascimento não disponível',
+                                        dashboard: collaborator['dashboard'] ?? false,
+                                        leads: collaborator['leads'] ?? false,
+                                        configurarDash: collaborator['configurarDash'] ?? false,
+                                        criarCampanha: collaborator['criarCampanha'] ?? false,
+                                        criarForm: collaborator['criarForm'] ?? false,
+                                        copiarTelefones: collaborator['copiarTelefones'] ?? false,
+                                      ),
+                                    );
+                                  },
+                                ),
+                                IconButton(
+                                  icon: Icon(Icons.delete, color: Colors.red),
+                                  onPressed: () {
+                                    _showDeleteConfirmationDialog(collaborator['uid'] ?? '');
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ),
+          )
+              : SafeArea(
             top: true,
             child: StreamBuilder<List<Map<String, dynamic>>>(
               stream: _getUserCollaborators(userId),
@@ -450,14 +542,13 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                   return Center(child: CircularProgressIndicator());
                 }
                 if (snapshot.hasError) {
-                  return Center(child: Text('Erro ao carregar colaboradores: ${snapshot.error}')); // Mostra o erro completo
+                  return Center(child: Text('Erro ao carregar colaboradores: ${snapshot.error}'));
                 }
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return Center(child: Text('Nenhum colaborador encontrado'));
                 }
 
                 final collaborators = snapshot.data!;
-
                 return ListView.builder(
                   itemCount: collaborators.length,
                   itemBuilder: (context, index) {

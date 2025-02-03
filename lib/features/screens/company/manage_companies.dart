@@ -16,8 +16,7 @@ class ManageCompanies extends StatefulWidget {
 }
 
 class _ManageCompaniesState extends State<ManageCompanies> {
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
-  _userDocSubscription;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userDocSubscription;
   bool hasGerenciarParceirosAccess = false;
   bool isLoading = true;
   bool _hasShownPermissionRevokedDialog = false;
@@ -46,7 +45,6 @@ class _ManageCompaniesState extends State<ManageCompanies> {
 
     if (user != null) {
       try {
-        // Verifica se o documento existe na coleção 'empresas'
         DocumentSnapshot<Map<String, dynamic>> userDoc = await FirebaseFirestore
             .instance
             .collection('empresas')
@@ -56,7 +54,6 @@ class _ManageCompaniesState extends State<ManageCompanies> {
         if (userDoc.exists) {
           _listenToUserDocument('empresas', user.uid);
         } else {
-          // Se não existir em 'empresas', verifica em 'users'
           userDoc = await FirebaseFirestore.instance
               .collection('users')
               .doc(user.uid)
@@ -65,8 +62,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
           if (userDoc.exists) {
             _listenToUserDocument('users', user.uid);
           } else {
-            print(
-                "Documento do usuário não encontrado nas coleções 'empresas' ou 'users'.");
+            print("Documento do usuário não encontrado nas coleções 'empresas' ou 'users'.");
             setState(() {
               isLoading = false;
             });
@@ -95,15 +91,13 @@ class _ManageCompaniesState extends State<ManageCompanies> {
       if (userDoc.exists) {
         _updatePermissions(userDoc);
       } else {
-        print(
-            "Documento do usuário não encontrado na coleção '$collectionName'.");
+        print("Documento do usuário não encontrado na coleção '$collectionName'.");
       }
     });
   }
 
   void _updatePermissions(DocumentSnapshot<Map<String, dynamic>> userDoc) {
     final userData = userDoc.data();
-
     if (!mounted) return;
 
     setState(() {
@@ -129,8 +123,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                 padding: EdgeInsets.all(16.0),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.background,
-                  borderRadius:
-                  BorderRadius.vertical(top: Radius.circular(20.0)),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -161,8 +154,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).colorScheme.primary,
-                        padding:
-                        EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                        padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20.0),
                         ),
@@ -192,8 +184,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
         });
       }
     } else {
-      _hasShownPermissionRevokedDialog =
-      false; // Reseta a flag se a permissão voltar
+      _hasShownPermissionRevokedDialog = false; // Reseta caso a permissão volte
     }
   }
 
@@ -214,8 +205,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
           const end = Offset.zero;
           const curve = Curves.easeInOut; // Animação suave
 
-          final tween =
-          Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
           final offsetAnimation = animation.drive(tween);
 
           return SlideTransition(
@@ -300,8 +290,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Theme.of(context).colorScheme.primary,
-                      padding:
-                      EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                      padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20.0),
                       ),
@@ -322,8 +311,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red,
-                      padding:
-                      EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                      padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20.0),
                       ),
@@ -348,6 +336,11 @@ class _ManageCompaniesState extends State<ManageCompanies> {
 
   @override
   Widget build(BuildContext context) {
+    // ---------------------------------------------------------
+    // 1) Detecta se é desktop pela largura (> 1024, por exemplo)
+    // ---------------------------------------------------------
+    final bool isDesktop = MediaQuery.of(context).size.width > 1024;
+
     double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
     double tabBarHeight = (kBottomNavigationBarHeight - (_scrollOffset / 2))
         .clamp(0.0, kBottomNavigationBarHeight)
@@ -366,7 +359,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
         ),
       );
     } else if (!hasGerenciarParceirosAccess) {
-      // Opcionalmente, você pode retornar uma tela vazia ou uma mensagem
+      // Opcionalmente, você pode retornar uma tela vazia ou apenas uma mensagem
       return ConnectivityBanner(
         child: Scaffold(
           body: Container(),
@@ -377,6 +370,10 @@ class _ManageCompaniesState extends State<ManageCompanies> {
       final user = authProvider.user;
       final currentUserId = user?.uid;
 
+      // ---------------------------------------------------------
+      // 2) Retorna a tela normalmente, mas com o body adaptado:
+      //    - Se for desktop, adiciona um Container com maxWidth
+      // ---------------------------------------------------------
       return ConnectivityBanner(
         child: GestureDetector(
           child: Scaffold(
@@ -435,18 +432,16 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                               ),
                             ],
                           ),
-                          // Stack na direita
-                          Stack(
-                            children: [
-                              IconButton(
-                                icon: Icon(Icons.add_business,
-                                    color: Theme.of(context).colorScheme.onBackground,
-                                    size: 30),
-                                onPressed: () async {
-                                  _navigateWithBottomToTopTransition(context, AddCompany());
-                                },
-                              ),
-                            ],
+                          // Ícone no canto direito
+                          IconButton(
+                            icon: Icon(
+                              Icons.add_business,
+                              color: Theme.of(context).colorScheme.onBackground,
+                              size: 30,
+                            ),
+                            onPressed: () async {
+                              _navigateWithBottomToTopTransition(context, AddCompany());
+                            },
                           ),
                         ],
                       ),
@@ -457,7 +452,141 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                 ),
               ),
             ),
-            body: SafeArea(
+
+            // ----------------------------------------------------
+            // 3) Aqui aplicamos o "Container" com maxWidth para
+            //    a versão desktop. Note que o conteúdo é o mesmo,
+            //    apenas está dentro do Container caso seja desktop.
+            // ----------------------------------------------------
+            body: isDesktop
+                ? Center(
+              child: Container(
+                constraints: BoxConstraints(maxWidth: 1850),
+                child: SafeArea(
+                  top: true,
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('empresas')
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return Center(child: CircularProgressIndicator());
+                      }
+
+                      if (snapshot.hasError) {
+                        return Center(child: Text('Erro ao carregar empresas'));
+                      }
+
+                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                        return Center(child: Text('Nenhuma empresa encontrada'));
+                      }
+
+                      final companies = snapshot.data!.docs;
+
+                      // Filtrar as empresas com base em isDevAccount e currentUserId
+                      final filteredCompanies = companies.where((company) {
+                        final isDevAccount = company['isDevAccount'] ?? false;
+                        final companyId = company.id;
+                        if (isDevAccount == true) {
+                          return (companyId == currentUserId);
+                        } else {
+                          return true;
+                        }
+                      }).toList();
+
+                      return ListView.builder(
+                        controller: _scrollController,
+                        itemCount: filteredCompanies.length,
+                        itemBuilder: (context, index) {
+                          final company = filteredCompanies[index];
+                          final nomeEmpresa = company['NomeEmpresa'];
+                          final contract = company['contract'];
+
+                          return Card(
+                            elevation: 4,
+                            color: Theme.of(context).colorScheme.secondary,
+                            margin: EdgeInsets.only(left: 10, right: 10, top: 20),
+                            child: Container(
+                              padding: EdgeInsets.all(10), // Aumenta o padding para desktop
+                              child: ListTile(
+                                contentPadding: EdgeInsets.all(8), // Aumenta o padding interno do ListTile
+                                title: Text(
+                                  nomeEmpresa,
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 18, // Aumenta o tamanho da fonte para desktop
+                                    color: Theme.of(context).colorScheme.onSecondary,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  'Contrato: $contract',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontWeight: FontWeight.w400,
+                                    fontSize: 16, // Aumenta o tamanho da fonte para desktop
+                                    color: Theme.of(context).colorScheme.onSecondary,
+                                  ),
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.edit,
+                                        color: Theme.of(context).colorScheme.onSecondary,
+                                        size: 30, // Aumenta o tamanho do ícone para desktop
+                                      ),
+                                      onPressed: () {
+                                        _navigateWithBottomToTopTransition(
+                                          context,
+                                          EditCompanies(
+                                            companyId: company.id,
+                                            nomeEmpresa: nomeEmpresa,
+                                            email: company['email'],
+                                            contract: contract,
+                                            cnpj: company['cnpj'],
+                                            founded: company['founded'],
+                                            countArtsValue: company['countArtsValue'],
+                                            countVideosValue: company['countVideosValue'],
+                                            dashboard: company['dashboard'],
+                                            leads: company['leads'],
+                                            gerenciarColaboradores: company['gerenciarColaboradores'],
+                                            configurarDash: company['configurarDash'],
+                                            criarCampanha: company['criarCampanha'],
+                                            criarForm: company['criarForm'],
+                                            copiarTelefones: company['copiarTelefones'],
+                                            alterarSenha: company['alterarSenha'],
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.delete,
+                                        color: Colors.red,
+                                        size: 30, // Aumenta o tamanho do ícone para desktop
+                                      ),
+                                      onPressed: () {
+                                        _showDeleteConfirmationDialog(
+                                          company.id,
+                                          company['email'],
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ),
+            )
+                : SafeArea(
               top: true,
               child: StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
@@ -478,23 +607,18 @@ class _ManageCompaniesState extends State<ManageCompanies> {
 
                   final companies = snapshot.data!.docs;
 
-                  // Filtrar as empresas com base em isDevAccount e currentUserId
                   final filteredCompanies = companies.where((company) {
                     final isDevAccount = company['isDevAccount'] ?? false;
                     final companyId = company.id;
-
                     if (isDevAccount == true) {
-                      if (companyId == currentUserId) {
-                        return true; // Incluir a empresa
-                      } else {
-                        return false; // Excluir a empresa
-                      }
+                      return (companyId == currentUserId);
                     } else {
-                      return true; // Incluir a empresa
+                      return true;
                     }
                   }).toList();
 
                   return ListView.builder(
+                    controller: _scrollController,
                     itemCount: filteredCompanies.length,
                     itemBuilder: (context, index) {
                       final company = filteredCompanies[index];
@@ -528,10 +652,10 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
-                                icon: Icon(Icons.edit,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary),
+                                icon: Icon(
+                                  Icons.edit,
+                                  color: Theme.of(context).colorScheme.onSecondary,
+                                ),
                                 onPressed: () {
                                   _navigateWithBottomToTopTransition(
                                     context,
@@ -543,12 +667,10 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                                       cnpj: company['cnpj'],
                                       founded: company['founded'],
                                       countArtsValue: company['countArtsValue'],
-                                      countVideosValue:
-                                      company['countVideosValue'],
+                                      countVideosValue: company['countVideosValue'],
                                       dashboard: company['dashboard'],
                                       leads: company['leads'],
-                                      gerenciarColaboradores:
-                                      company['gerenciarColaboradores'],
+                                      gerenciarColaboradores: company['gerenciarColaboradores'],
                                       configurarDash: company['configurarDash'],
                                       criarCampanha: company['criarCampanha'],
                                       criarForm: company['criarForm'],
@@ -563,7 +685,9 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                                 icon: Icon(Icons.delete, color: Colors.red),
                                 onPressed: () {
                                   _showDeleteConfirmationDialog(
-                                      company.id, company['email']);
+                                    company.id,
+                                    company['email'],
+                                  );
                                 },
                               ),
                             ],
