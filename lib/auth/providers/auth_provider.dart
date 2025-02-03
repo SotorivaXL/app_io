@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -21,12 +23,28 @@ class AuthProvider with ChangeNotifier {
 
   String? _sessionId;
 
+  Timer? _activityTimer; // Adicione esta variável
+
   AuthProvider() {
-    // Evite chamar listenToAuthChanges várias vezes
     if (!_isListening) {
       listenToAuthChanges();
       _isListening = true;
     }
+  }
+
+  // Método para iniciar o timer de atividade
+  void _startActivityTimer() {
+    // Atualiza a cada 1 minuto
+    _activityTimer?.cancel();
+    _activityTimer = Timer.periodic(Duration(minutes: 1), (timer) {
+      updateLastActivity();
+    });
+  }
+
+  // Método para parar o timer de atividade
+  void _stopActivityTimer() {
+    _activityTimer?.cancel();
+    _activityTimer = null;
   }
 
   Future<void> deleteUser(String uid) async {
@@ -151,6 +169,7 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  // Modificar o listener de autenticação para iniciar/parar o timer
   void listenToAuthChanges() {
     FirebaseAuth.instance.authStateChanges().listen((User? user) {
       print('Auth state changed: ${user?.uid}');
@@ -158,8 +177,10 @@ class AuthProvider with ChangeNotifier {
 
       if (_user != null) {
         _fetchPermissions();  // Carrega as permissões quando o estado de autenticação mudar
+        _startActivityTimer(); // Inicia o timer de atividade
       } else {
         _hasLeadsAccess = false;  // Reseta as permissões se o usuário for desconectado
+        _stopActivityTimer(); // Para o timer de atividade
       }
 
       notifyListeners();
@@ -295,5 +316,37 @@ class AuthProvider with ChangeNotifier {
         }
       }
     }
+  }
+
+  // Atualizar lastActivity
+  Future<void> updateLastActivity() async {
+    if (_user != null) {
+      final userRef = FirebaseFirestore.instance.collection('users').doc(_user!.uid);
+      final empresaRef = FirebaseFirestore.instance.collection('empresas').doc(_user!.uid);
+
+      try {
+        final userDoc = await userRef.get();
+        if (userDoc.exists) {
+          await userRef.update({
+            'lastActivity': FieldValue.serverTimestamp(),
+          });
+        } else {
+          final empresaDoc = await empresaRef.get();
+          if (empresaDoc.exists) {
+            await empresaRef.update({
+              'lastActivity': FieldValue.serverTimestamp(),
+            });
+          }
+        }
+      } catch (e) {
+        print('Erro ao atualizar lastActivity: $e');
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _activityTimer?.cancel(); // Cancelar o timer quando o provider for descartado
+    super.dispose();
   }
 }

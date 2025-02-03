@@ -21,6 +21,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   final FirestoreService _firestoreService = FirestoreService();
   bool hasGerenciarParceirosAccess = false;
   bool hasGerenciarColaboradoresAccess = false;
+  bool hasExecutarAPIs = false;
   bool hasConfigurarDashAccess = false;
   bool hasCriarFormAccess = false; // Atualizado
   bool hasCriarCampanhaAccess = false; // Atualizado
@@ -113,8 +114,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           userData?['gerenciarColaboradores'] ?? false;
       hasConfigurarDashAccess = userData?['configurarDash'] ?? false;
       hasCriarFormAccess = userData?['criarForm'] ?? false; // Atualizado
-      hasCriarCampanhaAccess =
-          userData?['criarCampanha'] ?? false; // Atualizado
+      hasCriarCampanhaAccess = userData?['criarCampanha'] ?? false; // Atualizado
+      hasExecutarAPIs = userData?['executarAPIs'] ?? false; // Atualizado
       isLoading = false;
     });
 
@@ -123,6 +124,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         !hasGerenciarColaboradoresAccess &&
         !hasConfigurarDashAccess &&
         !hasCriarFormAccess &&
+        !hasExecutarAPIs &&
         !hasCriarCampanhaAccess) {
       if (!_hasShownPermissionRevokedDialog) {
         _hasShownPermissionRevokedDialog = true;
@@ -257,6 +259,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         !hasGerenciarColaboradoresAccess &&
         !hasConfigurarDashAccess &&
         !hasCriarFormAccess &&
+        !hasExecutarAPIs &&
         !hasCriarCampanhaAccess) {
       // Opcionalmente, você pode retornar uma tela vazia ou uma mensagem
       return ConnectivityBanner(
@@ -363,6 +366,16 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                                 _navigateWithFade(context, ManageCampaigns()); // Navega para a nova página
                               },
                               isDesktop: isDesktop, // Passa isDesktop
+                            ),
+                          if (hasExecutarAPIs)
+                            _buildCardOption(
+                              context,
+                              title: 'Gerenciar APIs',
+                              subtitle: 'Gerenciar, criar, editar e executar APIs',
+                              icon: Icons.api_rounded,
+                              onTap: () async {
+                                _navigateWithFade(context, ManageApis()); // Navega para a nova página
+                              },
                             ),
                           if (hasConfigurarDashAccess)
                             _buildCardOption(

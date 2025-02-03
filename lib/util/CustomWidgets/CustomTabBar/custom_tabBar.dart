@@ -183,7 +183,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
       if (_pages[_currentIndex] is AdminPanelPage) {
         return 'Painel Administrativo';
       } else if (_pages[_currentIndex] is DashboardPage) {
-        return 'início';
+        return 'Início';
       } else if (_pages[_currentIndex] is LeadsPage) {
         return 'Leads';
       } else if (_pages[_currentIndex] is SettingsPage) {
