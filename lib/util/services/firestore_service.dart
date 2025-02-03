@@ -3,6 +3,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  Future<void> createForm(String empresaId, String campanhaId, Map<String, dynamic> formData) async {
+    try {
+      await _db
+          .collection('empresas')
+          .doc(empresaId)
+          .collection('campanhas')
+          .doc(campanhaId)
+          .collection('forms')
+          .add(formData);
+    } catch (e) {
+      throw e;
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getEmpresas() async {
     try {
       QuerySnapshot snapshot = await _db.collection('empresas').get();

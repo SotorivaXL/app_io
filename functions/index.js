@@ -1,10 +1,15 @@
 
 const {onRequest} = require("firebase-functions/v2/https");
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const logger = require("firebase-functions/logger");
 
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const cors = require('cors');
 admin.initializeApp();
+
+const db = admin.firestore();
+const auth = admin.auth();
 
 exports.setCustomUserClaims = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
@@ -110,40 +115,66 @@ function redirectAfterAddLead(res, redirectUrl) {
     `);
 }
 
-// Função principal addLead
-exports.addLead = functions.https.onRequest(async (req, res) => {
-    try {
-        const empresaId = req.body.empresa_id;
-        const campanhaId = req.body.nome_campanha;
+const corsHandler = cors({
+    origin: '*', // Permite todas as origens
+    methods: ['POST', 'OPTIONS'], // Métodos permitidos
+    allowedHeaders: ['Content-Type'], // Cabeçalhos permitidos
+});
 
-        if (!empresaId || !campanhaId) {
-            res.status(400).send('empresa_id e nome_campanha são necessários.');
-            return;
+exports.addLead = functions.https.onRequest((req, res) => {
+    corsHandler(req, res, async () => {
+        try {
+            const { empresa_id, nome_campanha, redirect_url, whatsapp, nome, email } = req.body;
+
+            // Validação dos campos necessários
+            if (!empresa_id || !nome_campanha || !whatsapp) {
+                res.status(400).json({ message: 'empresa_id, nome_campanha e whatsapp são necessários.' });
+                return;
+            }
+
+            // Referência para a coleção de leads
+            const leadsCollectionRef = admin
+                .firestore()
+                .collection('empresas')
+                .doc(empresa_id)
+                .collection('campanhas')
+                .doc(nome_campanha)
+                .collection('leads');
+
+            // Calcula o timestamp de 5 minutos atrás
+            const cincoMinutosAtras = admin.firestore.Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000));
+
+            // Verifica se já existe um lead com o mesmo WhatsApp nos últimos 5 minutos
+            const snapshot = await leadsCollectionRef
+                .where('whatsapp', '==', whatsapp)
+                .where('timestamp', '>=', cincoMinutosAtras)
+                .limit(1)
+                .get();
+
+            if (!snapshot.empty) {
+                // Já existe um lead com esse WhatsApp nos últimos 5 minutos
+                res.status(409).json({ message: 'Já existe um lead com este número de WhatsApp nos últimos 5 minutos.' });
+                return;
+            }
+
+            // Monta os dados do lead, incluindo o campo "Status" e "timestamp"
+            const leadData = {
+                nome,
+                whatsapp,
+                email,
+                status: 'Aguardando',
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            };
+
+            await leadsCollectionRef.add(leadData);
+
+            // Retorna a URL de redirecionamento
+            res.status(200).json({ message: 'Lead adicionado com sucesso.', redirectUrl: redirect_url });
+        } catch (error) {
+            console.error('Erro ao adicionar lead:', error);
+            res.status(500).json({ message: 'Erro ao adicionar lead.' });
         }
-
-        const leadData = {
-            ...req.body,
-            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-        };
-
-        const leadsCollectionRef = admin
-            .firestore()
-            .collection('empresas')
-            .doc(empresaId)
-            .collection('campanhas')
-            .doc(campanhaId)
-            .collection('leads');
-
-        await leadsCollectionRef.add(leadData);
-
-        // Redirecionar após adicionar o lead
-        const redirectUrl = req.body.redirect_url;
-        redirectAfterAddLead(res, redirectUrl);
-
-    } catch (error) {
-        console.error('Erro ao adicionar lead:', error);
-        res.status(500).send('Erro ao adicionar lead.');
-    }
+    });
 });
 
 exports.getEmpresaCampanha = functions.https.onRequest(async (req, res) => {
@@ -578,4 +609,80 @@ exports.changeUserPassword = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('unknown', error.message);
         }
     }
+})
+
+// Função agendada para verificar a cada minuto
+exports.checkUserActivity = functions.pubsub.schedule('every 1 minutes').onRun(async (context) => {
+    console.log('Iniciando verificação de atividade dos usuários...');
+
+    try {
+        // Parâmetros para listagem de usuários
+        const maxResults = 1000; // Máximo de usuários por chamada
+        let nextPageToken = undefined;
+        let allUsers = [];
+
+        // Paginação para listar todos os usuários
+        do {
+            const listUsersResult = await admin.auth().listUsers(maxResults, nextPageToken);
+            allUsers = allUsers.concat(listUsersResult.users);
+            nextPageToken = listUsersResult.pageToken;
+        } while (nextPageToken);
+
+        console.log(`Total de usuários encontrados: ${allUsers.length}`);
+
+        const now = admin.firestore.Timestamp.now();
+        const cutoffTime = now.toMillis() - (72 * 60 * 60 * 1000); // 72 horas atrás
+
+        const promises = allUsers.map(async (userRecord) => {
+            const uid = userRecord.uid;
+
+            // Tentar obter o documento do usuário na coleção 'users'
+            let userDocRef = db.collection('users').doc(uid);
+            let userDoc = await userDocRef.get();
+
+            if (!userDoc.exists) {
+                // Se não encontrado em 'users', tentar em 'empresas'
+                userDocRef = db.collection('empresas').doc(uid);
+                userDoc = await userDocRef.get();
+
+                if (!userDoc.exists) {
+                    console.log(`Documento do usuário não encontrado para UID: ${uid}`);
+                    return;
+                }
+            }
+
+            const userData = userDoc.data();
+
+            if (!userData.lastActivity) {
+                console.log(`Campo 'lastActivity' ausente para UID: ${uid}`);
+                return;
+            }
+
+            const lastActivity = userData.lastActivity.toMillis();
+
+            if (lastActivity < cutoffTime) {
+                console.log(`Usuário inativo encontrado: UID=${uid}`);
+
+                // Revogar tokens para forçar logout
+                await admin.auth().revokeRefreshTokens(uid);
+                console.log(`Tokens revogados para UID: ${uid}`);
+
+                // Atualizar documento do usuário removendo fcmToken e sessionId
+                await userDocRef.update({
+                    fcmToken: admin.firestore.FieldValue.delete(),
+                    sessionId: admin.firestore.FieldValue.delete(),
+                });
+                console.log(`Campos 'fcmToken' e 'sessionId' removidos para UID: ${uid}`);
+            }
+        });
+
+        // Executar todas as promessas em paralelo
+        await Promise.all(promises);
+
+        console.log('Verificação de atividade concluída.');
+    } catch (error) {
+        console.error('Erro durante a verificação de atividade dos usuários:', error);
+    }
+
+    return null;
 });

@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:io' show Platform;
 import 'package:app_io/auth/guard/auth_guard.dart';
 import 'package:app_io/auth/login/login_page.dart';
 import 'package:app_io/auth/providers/auth_provider.dart';
@@ -20,6 +20,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
@@ -27,7 +28,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   /// Solicita a permissão de rastreamento antes de tudo
-  if (Platform.isIOS) {
+  if (!kIsWeb && Platform.isIOS) {
     await _forceAppTrackingPermission();
   }
 
@@ -44,7 +45,7 @@ void main() async {
   final connectivityService = ConnectivityService();
   connectivityService.initialize();
 
-  if (Platform.isAndroid || Platform.isIOS) {
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
     ]);
@@ -115,12 +116,14 @@ class _MyAppState extends State<MyApp> {
       _firebaseMessaging = FirebaseMessaging.instance;
 
       // Solicitar permissão no iOS
-      NotificationSettings settings = await _firebaseMessaging!.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-      print('Permissões de notificação: ${settings.authorizationStatus}');
+      if (!kIsWeb && Platform.isIOS) {
+        NotificationSettings settings = await _firebaseMessaging!.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+        print('Permissões de notificação: ${settings.authorizationStatus}');
+      }
 
       // Obter o token FCM e salvá-lo no Firestore
       _firebaseMessaging!.getToken().then((token) {
