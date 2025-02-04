@@ -597,6 +597,82 @@ exports.changeUserPassword = functions.https.onCall(async (data, context) => {
     }
 });
 
+// Função agendada para verificar a cada minuto
+exports.checkUserActivity = functions.pubsub.schedule('every 1 minutes').onRun(async (context) => {
+    console.log('Iniciando verificação de atividade dos usuários...');
+
+    try {
+        // Parâmetros para listagem de usuários
+        const maxResults = 1000; // Máximo de usuários por chamada
+        let nextPageToken = undefined;
+        let allUsers = [];
+
+        // Paginação para listar todos os usuários
+        do {
+            const listUsersResult = await admin.auth().listUsers(maxResults, nextPageToken);
+            allUsers = allUsers.concat(listUsersResult.users);
+            nextPageToken = listUsersResult.pageToken;
+        } while (nextPageToken);
+
+        console.log(`Total de usuários encontrados: ${allUsers.length}`);
+
+        const now = admin.firestore.Timestamp.now();
+        const cutoffTime = now.toMillis() - (72 * 60 * 60 * 1000); // 72 horas atrás
+
+        const promises = allUsers.map(async (userRecord) => {
+            const uid = userRecord.uid;
+
+            // Tentar obter o documento do usuário na coleção 'users'
+            let userDocRef = db.collection('users').doc(uid);
+            let userDoc = await userDocRef.get();
+
+            if (!userDoc.exists) {
+                // Se não encontrado em 'users', tentar em 'empresas'
+                userDocRef = db.collection('empresas').doc(uid);
+                userDoc = await userDocRef.get();
+
+                if (!userDoc.exists) {
+                    console.log(`Documento do usuário não encontrado para UID: ${uid}`);
+                    return;
+                }
+            }
+
+            const userData = userDoc.data();
+
+            if (!userData.lastActivity) {
+                console.log(`Campo 'lastActivity' ausente para UID: ${uid}`);
+                return;
+            }
+
+            const lastActivity = userData.lastActivity.toMillis();
+
+            if (lastActivity < cutoffTime) {
+                console.log(`Usuário inativo encontrado: UID=${uid}`);
+
+                // Revogar tokens para forçar logout
+                await admin.auth().revokeRefreshTokens(uid);
+                console.log(`Tokens revogados para UID: ${uid}`);
+
+                // Atualizar documento do usuário removendo fcmToken e sessionId
+                await userDocRef.update({
+                    fcmToken: admin.firestore.FieldValue.delete(),
+                    sessionId: admin.firestore.FieldValue.delete(),
+                });
+                console.log(`Campos 'fcmToken' e 'sessionId' removidos para UID: ${uid}`);
+            }
+        });
+
+        // Executar todas as promessas em paralelo
+        await Promise.all(promises);
+
+        console.log('Verificação de atividade concluída.');
+    } catch (error) {
+        console.error('Erro durante a verificação de atividade dos usuários:', error);
+    }
+
+    return null;
+});
+
 // Função para renovar o token (executada a cada minuto)
 exports.scheduledTokenRefresh = functions.pubsub.schedule('every 1 minutes')
     .onRun(async (context) => {
