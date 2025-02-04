@@ -121,6 +121,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     var userData = doc.data() as Map<String, dynamic>;
     print('Dados do usuário: $userData');
 
+    // Extrai apenas os campos que interessam para a UI
     bool newHasLeadsAccess = userData['leads'] ?? false;
     bool newHasDashboardAccess = userData['dashboard'] ?? false;
     bool newHasConfigurarDashAccess = userData['configurarDash'] ?? false;
@@ -136,6 +137,17 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
         newHasConfigurarDashAccess ||
         newHasCriarFormAccess ||
         newHasCriarCampanhaAccess;
+
+    // Se as permissões relevantes não foram alteradas, não atualiza o estado
+    if (hasLeadsAccess == newHasLeadsAccess &&
+        hasDashboardAccess == newHasDashboardAccess &&
+        hasConfigurarDashAccess == newHasConfigurarDashAccess &&
+        hasCriarCampanhaAccess == newHasCriarCampanhaAccess &&
+        hasCriarFormAccess == newHasCriarFormAccess &&
+        hasGerenciarColaboradoresAccess == newHasGerenciarColaboradoresAccess &&
+        hasGerenciarParceirosAccess == newHasGerenciarParceirosAccess) {
+      return;
+    }
 
     List<Widget> newPages = [];
 
@@ -274,11 +286,13 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
         appBar: isDesktop
             ? null // Remove o AppBar no desktop
             : PreferredSize(
-          preferredSize: Size.fromHeight((100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0)),
+          preferredSize: Size.fromHeight(
+              (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0)),
           child: Opacity(
             opacity: (1.0 - (_scrollOffset / 40)).clamp(0.0, 1.0),
             child: AppBar(
-              toolbarHeight: (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0),
+              toolbarHeight:
+              (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0),
               title: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -291,7 +305,9 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                           fontFamily: 'BrandingSF',
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
-                          color: Theme.of(context).colorScheme.onSecondary,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSecondary,
                         ),
                       ),
                       Text(
@@ -301,7 +317,9 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                           fontFamily: 'BrandingSF',
                           fontWeight: FontWeight.w700,
                           fontSize: 30,
-                          color: Theme.of(context).colorScheme.surfaceVariant,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceVariant,
                         ),
                       ),
                     ],
@@ -310,8 +328,10 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
               ),
               centerTitle: false,
               automaticallyImplyLeading: false,
-              backgroundColor: Theme.of(context).colorScheme.secondary,
-              foregroundColor: Theme.of(context).colorScheme.outline,
+              backgroundColor:
+              Theme.of(context).colorScheme.secondary,
+              foregroundColor:
+              Theme.of(context).colorScheme.outline,
             ),
           ),
         ),
@@ -343,12 +363,17 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
             ? null // Remove a barra de navegação inferior no desktop
             : SizedBox(
           height: (!kIsWeb && Platform.isIOS)
-              ? (111 - (_scrollOffset / 2)).clamp(0.0, 111).ceilToDouble()
-              : (79 - (_scrollOffset / 2)).clamp(0.0, 79).ceilToDouble(),
+              ? (111 - (_scrollOffset / 2))
+              .clamp(0.0, 111)
+              .ceilToDouble()
+              : (79 - (_scrollOffset / 2))
+              .clamp(0.0, 79)
+              .ceilToDouble(),
           child: Opacity(
             opacity: (1.0 - (_scrollOffset / 40)).clamp(0.0, 1.0),
             child: BottomNavyBar(
-              backgroundColor: Theme.of(context).colorScheme.secondary,
+              backgroundColor:
+              Theme.of(context).colorScheme.secondary,
               showInactiveTitle: false,
               selectedIndex: _currentIndex,
               showElevation: true,
@@ -374,11 +399,14 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   // Barra lateral para desktop
   Widget _buildDesktopSidebar() {
     return Container(
-      padding: _isSidebarExpanded ? EdgeInsets.only(left: 15) : EdgeInsets.zero, // Padding condicional
+      padding: _isSidebarExpanded
+          ? EdgeInsets.only(left: 15)
+          : EdgeInsets.zero, // Padding condicional
       width: _isSidebarExpanded ? 300 : 80, // Largura da barra lateral
       color: Theme.of(context).colorScheme.secondary,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch, // Garante que os itens ocupem toda a largura
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        // Garante que os itens ocupem toda a largura
         children: [
           // Botão para expandir/recolher a barra lateral
           IconButton(
@@ -397,7 +425,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
           // Ícones e nomes das páginas
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch, // Garante que os itens ocupem toda a largura
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              // Garante que os itens ocupem toda a largura
               children: _buildDesktopSidebarItems(),
             ),
           ),
@@ -412,10 +441,12 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     // Função para criar um item da barra lateral
     Widget buildSidebarItem(IconData icon, String title, Type pageType) {
       // Determina se este item está selecionado
-      bool isSelected = _pages.isNotEmpty && _pages[_currentIndex].runtimeType == pageType;
+      bool isSelected =
+          _pages.isNotEmpty && _pages[_currentIndex].runtimeType == pageType;
 
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5), // Ajuste o espaçamento conforme necessário
+        padding: const EdgeInsets.symmetric(
+            vertical: 5), // Ajuste o espaçamento conforme necessário
         child: Tooltip(
           message: title, // Exibe o título como dica ao passar o mouse
           child: InkWell(
@@ -433,7 +464,9 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
             child: Container(
               decoration: isSelected
                   ? BoxDecoration(
-                color: Theme.of(context).colorScheme.primary, // Fundo roxo com opacidade ajustável
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary, // Fundo roxo com opacidade ajustável
                 borderRadius: BorderRadius.only(
                   topRight: Radius.circular(8),
                   bottomRight: Radius.circular(8),
@@ -443,15 +476,22 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
               )
                   : null,
               padding: _isSidebarExpanded
-                  ? EdgeInsets.only(left: 15, right: 15, top: 20, bottom: 20) // Padding para barra expandida
-                  : EdgeInsets.symmetric(horizontal: 0, vertical: 20), // Padding para barra recolhida
+                  ? EdgeInsets.only(
+                  left: 15, right: 15, top: 20, bottom: 20)
+              // Padding para barra expandida
+                  : EdgeInsets.symmetric(
+                  horizontal: 0, vertical: 20), // Padding para barra recolhida
               margin: _isSidebarExpanded
-                  ? EdgeInsets.only(right: 16) // Margem à direita para barra expandida
-                  : EdgeInsets.only(right: 8, left: 8), // Margem à direita para barra recolhida
+                  ? EdgeInsets.only(
+                  right: 16) // Margem à direita para barra expandida
+                  : EdgeInsets.only(
+                  right: 8, left: 8), // Margem à direita para barra recolhida
               child: Row(
                 mainAxisAlignment: _isSidebarExpanded
-                    ? MainAxisAlignment.start // Alinha ícone e texto à esquerda
-                    : MainAxisAlignment.center, // Centraliza ícone quando recolhido
+                    ? MainAxisAlignment.start
+                // Alinha ícone e texto à esquerda
+                    : MainAxisAlignment.center,
+                // Centraliza ícone quando recolhido
                 children: [
                   Icon(
                     icon,
@@ -462,7 +502,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
                   ),
                   if (_isSidebarExpanded)
                     Padding(
-                      padding: const EdgeInsets.only(left: 15), // Espaçamento entre ícone e texto
+                      padding: const EdgeInsets.only(left: 15),
+                      // Espaçamento entre ícone e texto
                       child: Text(
                         title,
                         style: TextStyle(
@@ -491,7 +532,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     }
 
     if (hasAdmPanelAccess) {
-      items.add(buildSidebarItem(Icons.admin_panel_settings, 'Painel Adm', AdminPanelPage));
+      items.add(
+          buildSidebarItem(Icons.admin_panel_settings, 'Painel Adm', AdminPanelPage));
     }
 
     items.add(buildSidebarItem(Icons.settings, 'Configurações', SettingsPage));
