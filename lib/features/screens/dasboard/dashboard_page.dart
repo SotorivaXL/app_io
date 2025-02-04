@@ -1173,40 +1173,49 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<Map<String, dynamic>> _fetchMetaInsights(
       String id, String level, String startDate, String endDate) async {
     try {
-      // Nova validação de parâmetros
+      // Validação dos parâmetros
       if (id.isEmpty) throw Exception('ID não pode ser vazio');
-      if (!['account', 'campaign', 'adset'].contains(level.toLowerCase())) {
+      if (!['account', 'campaign', 'adset']
+          .contains(level.toLowerCase())) {
         throw Exception('Nível inválido');
       }
 
+      // Cria o corpo da requisição e o codifica explicitamente em bytes
+      final requestBody = json.encode({
+        "id": id,
+        "level": level,
+        "start_date": startDate,
+        "end_date": endDate,
+      });
+
       final response = await http.post(
         Uri.parse(apiUrl),
-        headers: {"Content-Type": "application/json"},
-        body: json.encode({
-          "id": id,
-          "level": level,
-          "start_date": startDate,
-          "end_date": endDate,
-        }),
+        headers: {
+          "Content-Type": "application/json; charset=UTF-8", // Observe o charset
+        },
+        body: utf8.encode(requestBody), // Codifica o corpo para bytes
       );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
-          // Verifique se 'insights' não está vazio
-          if (data['data']['insights'] != null && data['data']['insights'].isNotEmpty) {
-            setState(() {
-              initialInsightsData = data['data']['insights'][0];
-            });
-            return initialInsightsData;
+          // Verifica se o campo 'insights' não está vazio
+          if (data['data']['insights'] != null &&
+              data['data']['insights'].isNotEmpty) {
+            // Atualiza o estado com o primeiro insight
+            // (ajuste conforme sua lógica)
+            // setState(() { initialInsightsData = data['data']['insights'][0]; });
+            return data['data']['insights'][0];
           } else {
-            throw Exception('Nenhum insight encontrado para os parâmetros fornecidos.');
+            throw Exception(
+                'Nenhum insight encontrado para os parâmetros fornecidos.');
           }
         } else {
           throw Exception('Erro: ${data['message']}');
         }
       } else {
-        throw Exception('Erro na Cloud Function: ${response.statusCode} - ${response.body}');
+        throw Exception(
+            'Erro na Cloud Function: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       print('Erro ao buscar insights: $e');

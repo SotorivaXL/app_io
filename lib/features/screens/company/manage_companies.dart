@@ -557,6 +557,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                                             criarForm: company['criarForm'],
                                             copiarTelefones: company['copiarTelefones'],
                                             alterarSenha: company['alterarSenha'],
+                                            executarAPIs: company['executarAPIs'],
                                           ),
                                         );
                                       },
