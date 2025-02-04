@@ -336,7 +336,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                               size: 20,
                             ),
                             contentPadding: kIsWeb ? EdgeInsets.symmetric(vertical: 25)
-                                : EdgeInsets.symmetric(vertical: 20),
+                                : EdgeInsets.symmetric(vertical: 15),
                           ),
                           style: TextStyle(
                             fontFamily: 'Poppins',
@@ -412,7 +412,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                               size: 20,
                             ),
                             contentPadding: kIsWeb ? EdgeInsets.symmetric(vertical: 25)
-                                : EdgeInsets.symmetric(vertical: 20),
+                                : EdgeInsets.symmetric(vertical: 15),
                           ),
                           style: TextStyle(
                             fontFamily: 'Poppins',
@@ -482,7 +482,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                               size: 20,
                             ),
                             contentPadding: kIsWeb ? EdgeInsets.symmetric(vertical: 25)
-                                : EdgeInsets.symmetric(vertical: 20),
+                                : EdgeInsets.symmetric(vertical: 15),
                           ),
                           style: TextStyle(
                             fontFamily: 'Poppins',
@@ -558,7 +558,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                               size: 20,
                             ),
                             contentPadding: kIsWeb ? EdgeInsets.symmetric(vertical: 25)
-                                : EdgeInsets.symmetric(vertical: 20),
+                                : EdgeInsets.symmetric(vertical: 15),
                           ),
                           style: TextStyle(
                             fontFamily: 'Poppins',

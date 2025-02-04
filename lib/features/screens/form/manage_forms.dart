@@ -334,7 +334,7 @@ class _ManageFormsState extends State<ManageForms> {
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor:
-                        Theme.of(context).colorScheme.secondary,
+                        Theme.of(context).colorScheme.primary,
                         padding:
                         EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                         shape: RoundedRectangleBorder(
