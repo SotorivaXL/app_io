@@ -1,4 +1,5 @@
 import 'package:app_io/util/utils.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -22,7 +23,8 @@ class _ChangePasswordSheetState extends State<ChangePasswordSheet> {
     String newPassword = _newPasswordController.text;
 
     if (newPassword.isEmpty) {
-      await _showErrorDialog(context, 'Por favor, preencha o campo de nova senha.', 'Erro');
+      await _showErrorDialog(
+          context, 'Por favor, preencha o campo de nova senha.', 'Erro');
       return;
     }
 
@@ -33,14 +35,15 @@ class _ChangePasswordSheetState extends State<ChangePasswordSheet> {
     try {
       // Chamada da Cloud Function
       HttpsCallable callable =
-      FirebaseFunctions.instance.httpsCallable('changeUserPassword');
+          FirebaseFunctions.instance.httpsCallable('changeUserPassword');
       await callable.call(<String, dynamic>{
         'uid': widget.targetUid,
         'newPassword': newPassword,
       });
 
       // Exibe sucesso e limpa o campo
-      await _showErrorDialog(context, 'Senha atualizada com sucesso!', 'Sucesso');
+      await _showErrorDialog(
+          context, 'Senha atualizada com sucesso!', 'Sucesso');
       _newPasswordController.clear(); // Limpa o campo após sucesso
 
       // Fecha o BottomSheet principal após sucesso
@@ -50,7 +53,8 @@ class _ChangePasswordSheetState extends State<ChangePasswordSheet> {
       }
     } on FirebaseFunctionsException catch (e) {
       // Exibe erro detalhado
-      await _showErrorDialog(context, 'Erro ao atualizar a senha: ${e.message}', 'Erro');
+      await _showErrorDialog(
+          context, 'Erro ao atualizar a senha: ${e.message}', 'Erro');
     } catch (e) {
       // Exibe erro genérico
       await _showErrorDialog(context, 'Erro ao atualizar a senha: $e', 'Erro');
@@ -63,7 +67,8 @@ class _ChangePasswordSheetState extends State<ChangePasswordSheet> {
     }
   }
 
-  Future<void> _showErrorDialog(BuildContext context, String message, String title) async {
+  Future<void> _showErrorDialog(
+      BuildContext context, String message, String title) async {
     FocusScope.of(context).unfocus();
 
     var colorTitle = Theme.of(context).colorScheme.onSecondary;
@@ -194,60 +199,40 @@ class _ChangePasswordSheetState extends State<ChangePasswordSheet> {
                       });
                     },
                   ),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(
-                      color: Theme.of(context).colorScheme.primary,
-                      width: 2,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.secondary,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
                   ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(
-                      color: Theme.of(context).colorScheme.primary,
-                      width: 2,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  errorBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(
-                      color: Theme.of(context).colorScheme.error,
-                      width: 2,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  focusedErrorBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(
-                      color: Theme.of(context).colorScheme.error,
-                      width: 2,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 8.0),
+                  contentPadding: kIsWeb
+                      ? EdgeInsets.symmetric(vertical: 25)
+                      : EdgeInsets.symmetric(vertical: 15),
                 ),
               ),
               SizedBox(height: 24.0),
               _isChangingPassword
                   ? CircularProgressIndicator() // Exibe um indicador de progresso
                   : ElevatedButton(
-                onPressed: _isChangingPassword ? null : _changePassword,
-                child: Text(
-                  'Confirmar',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(context).colorScheme.outline,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  padding: EdgeInsetsDirectional.fromSTEB(30, 15, 30, 15),
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  elevation: 3,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(25),
-                  ),
-                ),
-              ),
+                      onPressed: _isChangingPassword ? null : _changePassword,
+                      child: Text(
+                        'Confirmar',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        padding: EdgeInsetsDirectional.fromSTEB(30, 15, 30, 15),
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        elevation: 3,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                      ),
+                    ),
               SizedBox(height: 16.0),
             ],
           ),

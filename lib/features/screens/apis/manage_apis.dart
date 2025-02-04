@@ -23,7 +23,7 @@ class _ManageApisState extends State<ManageApis> {
   final ScrollController _scrollController = ScrollController();
   double _scrollOffset = 0.0;
 
-  // Caso o usuário seja encontrado na coleção "empresas", usaremos esse listener
+  // Listener para o documento na coleção "empresas"
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _empresaSub;
 
   @override
@@ -47,16 +47,86 @@ class _ManageApisState extends State<ManageApis> {
     });
   }
 
-  /// Verifica as permissões do usuário:
-  /// - Se o documento for encontrado na coleção "users" (com id igual ao UID), o usuário NÃO tem permissão (isDevAccount = false).
-  /// - Caso contrário, busca na coleção "empresas" e, se encontrado, utiliza o valor de 'isDevAccount'.
-  ///   Se o documento da empresa existir, adiciona um listener para atualizar a permissão instantaneamente.
+  /// Exibe um BottomSheet informando que o usuário não possui permissão para acessar a funcionalidade.
+  /// Ao clicar em "Ok", o BottomSheet é fechado e o usuário é redirecionado para a tela CustomTabBarPage.
+  Future<void> _showPermissionBottomSheet() async {
+    await showModalBottomSheet(
+      context: context,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: Theme.of(context).primaryColor),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20.0)),
+      ),
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.all(16.0),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.background,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20.0)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                'Permissão Revogada',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onSecondary,
+                ),
+              ),
+              const SizedBox(height: 16.0),
+              Text(
+                'Você não tem mais permissão para acessar esta tela.',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 16,
+                  color: Theme.of(context).colorScheme.onSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24.0),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).pop(); // Fecha o BottomSheet
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20.0),
+                  ),
+                ),
+                child: Text(
+                  'Ok',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 16,
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    // Após o BottomSheet ser fechado, redireciona o usuário para a tela CustomTabBarPage
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => CustomTabBarPage()),
+      );
+    }
+  }
+
   Future<void> _checkPermissions() async {
     try {
       final user = Provider.of<AuthProvider>(context, listen: false).user;
       if (user == null) return;
 
-      // Referências para as coleções (com conversores, se desejar)
+      // Referências para as coleções
       final usersRef = FirebaseFirestore.instance
           .collection('users')
           .withConverter<Map<String, dynamic>>(
@@ -70,12 +140,12 @@ class _ManageApisState extends State<ManageApis> {
         toFirestore: (model, _) => model,
       );
 
-      // Primeiro, busca se o documento existe em "users"
+      // Primeiro, verifica se o documento existe na coleção "users"
       final DocumentSnapshot<Map<String, dynamic>> userDoc =
       await usersRef.doc(user.uid).get();
 
       if (userDoc.exists) {
-        // Encontrado em "users": não tem permissão
+        // Encontrado em "users": o usuário NÃO tem permissão.
         setState(() {
           isDevAccount = false;
           isLoading = false;
@@ -88,21 +158,39 @@ class _ManageApisState extends State<ManageApis> {
         await empresaDocRef.get();
 
         if (empresaDoc.exists) {
-          // Adiciona listener para que alterações em 'isDevAccount' sejam observadas instantaneamente
-          _empresaSub = empresaDocRef.snapshots().listen((docSnap) {
-            final data = docSnap.data();
-            setState(() {
-              isDevAccount = data?['isDevAccount'] ?? false;
-            });
-          });
-          // Atualiza o estado inicial (caso já haja dados)
           final empresaData = empresaDoc.data();
+          bool newIsDevAccount = empresaData?['isDevAccount'] ?? false;
+          bool executarAPIs = empresaData?['executarAPIs'] ?? false;
+
+          // Se executarAPIs for revogada, exibe o BottomSheet e redireciona
+          if (!executarAPIs) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _showPermissionBottomSheet();
+            });
+          }
+
           setState(() {
-            isDevAccount = empresaData?['isDevAccount'] ?? false;
+            isDevAccount = newIsDevAccount;
             isLoading = false;
           });
+
+          // Adiciona listener para que alterações em 'isDevAccount' e 'executarAPIs' sejam observadas instantaneamente
+          _empresaSub = empresaDocRef.snapshots().listen((docSnap) {
+            final data = docSnap.data();
+            bool newIsDevAccount = data?['isDevAccount'] ?? false;
+            bool executarAPIs = data?['executarAPIs'] ?? false;
+
+            if (!executarAPIs) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _showPermissionBottomSheet();
+              });
+            }
+            setState(() {
+              isDevAccount = newIsDevAccount;
+            });
+          });
         } else {
-          // Se não for encontrado em nenhuma coleção, assume que não há permissão
+          // Se o documento não for encontrado em nenhuma coleção, assume que não há permissão.
           setState(() {
             isDevAccount = false;
             isLoading = false;
@@ -149,8 +237,7 @@ class _ManageApisState extends State<ManageApis> {
                               children: [
                                 Icon(
                                   Icons.arrow_back_ios_new,
-                                  color:
-                                  Theme.of(context).colorScheme.onBackground,
+                                  color: Theme.of(context).colorScheme.onBackground,
                                   size: 18,
                                 ),
                                 const SizedBox(width: 4),
@@ -159,9 +246,7 @@ class _ManageApisState extends State<ManageApis> {
                                   style: TextStyle(
                                     fontFamily: 'Poppins',
                                     fontSize: 14,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary,
+                                    color: Theme.of(context).colorScheme.onSecondary,
                                   ),
                                 ),
                               ],
@@ -184,15 +269,14 @@ class _ManageApisState extends State<ManageApis> {
                           ? IconButton(
                         icon: Icon(
                           Icons.add,
-                          color:
-                          Theme.of(context).colorScheme.onBackground,
+                          color: Theme.of(context).colorScheme.onBackground,
                           size: 30,
                         ),
                         onPressed: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                                builder: (context) => AddApi()),
+                                builder: (context) => const AddApi()),
                           );
                         },
                         tooltip: 'Adicionar API',
@@ -223,12 +307,10 @@ class _ManageApisState extends State<ManageApis> {
                 builder: (context, snapshotStream) {
                   if (snapshotStream.connectionState ==
                       ConnectionState.waiting) {
-                    return const Center(
-                        child: CircularProgressIndicator());
+                    return const Center(child: CircularProgressIndicator());
                   }
                   if (snapshotStream.hasError) {
-                    return const Center(
-                        child: Text('Erro ao carregar APIs.'));
+                    return const Center(child: Text('Erro ao carregar APIs.'));
                   }
                   if (!snapshotStream.hasData ||
                       snapshotStream.data == null ||
@@ -247,11 +329,9 @@ class _ManageApisState extends State<ManageApis> {
                     itemCount: apis.length,
                     itemBuilder: (context, index) {
                       final apiDoc = apis[index];
-                      final api =
-                      apiDoc.data() as Map<String, dynamic>;
+                      final api = apiDoc.data() as Map<String, dynamic>;
                       final apiName = api['name'] ?? 'Sem nome';
-                      final description =
-                          api['description'] ?? 'Sem descrição';
+                      final description = api['description'] ?? 'Sem descrição';
 
                       return _buildApiCard(
                         context,
@@ -275,7 +355,7 @@ class _ManageApisState extends State<ManageApis> {
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => RunApi()),
+          MaterialPageRoute(builder: (context) => const RunApi()),
         );
       },
       borderRadius: BorderRadius.circular(12),
@@ -342,8 +422,7 @@ class _ManageApisState extends State<ManageApis> {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color:
-                          Theme.of(context).colorScheme.onBackground,
+                          color: Theme.of(context).colorScheme.onBackground,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -383,10 +462,11 @@ class _ManageApisState extends State<ManageApis> {
     );
   }
 
-  Widget _buildActionButton(
-      {required IconData icon,
-        required Color color,
-        required VoidCallback onPressed}) {
+  Widget _buildActionButton({
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
     return IconButton(
       icon: Icon(icon, color: color),
       onPressed: onPressed,

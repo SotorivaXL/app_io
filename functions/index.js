@@ -6,6 +6,7 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const axios = require('axios');
 const cors = require('cors');
+const express = require("express");
 admin.initializeApp();
 const db = admin.firestore();
 const auth = admin.auth();
@@ -593,5 +594,1011 @@ exports.changeUserPassword = functions.https.onCall(async (data, context) => {
         } else {
             throw new functions.https.HttpsError('unknown', error.message);
         }
+    }
+});
+
+// Função agendada para verificar a cada minuto
+exports.checkUserActivity = functions.pubsub.schedule('every 1 minutes').onRun(async (context) => {
+    console.log('Iniciando verificação de atividade dos usuários...');
+
+    try {
+        // Parâmetros para listagem de usuários
+        const maxResults = 1000; // Máximo de usuários por chamada
+        let nextPageToken = undefined;
+        let allUsers = [];
+
+        // Paginação para listar todos os usuários
+        do {
+            const listUsersResult = await admin.auth().listUsers(maxResults, nextPageToken);
+            allUsers = allUsers.concat(listUsersResult.users);
+            nextPageToken = listUsersResult.pageToken;
+        } while (nextPageToken);
+
+        console.log(`Total de usuários encontrados: ${allUsers.length}`);
+
+        const now = admin.firestore.Timestamp.now();
+        const cutoffTime = now.toMillis() - (72 * 60 * 60 * 1000); // 72 horas atrás
+
+        const promises = allUsers.map(async (userRecord) => {
+            const uid = userRecord.uid;
+
+            // Tentar obter o documento do usuário na coleção 'users'
+            let userDocRef = db.collection('users').doc(uid);
+            let userDoc = await userDocRef.get();
+
+            if (!userDoc.exists) {
+                // Se não encontrado em 'users', tentar em 'empresas'
+                userDocRef = db.collection('empresas').doc(uid);
+                userDoc = await userDocRef.get();
+
+                if (!userDoc.exists) {
+                    console.log(`Documento do usuário não encontrado para UID: ${uid}`);
+                    return;
+                }
+            }
+
+            const userData = userDoc.data();
+
+            if (!userData.lastActivity) {
+                console.log(`Campo 'lastActivity' ausente para UID: ${uid}`);
+                return;
+            }
+
+            const lastActivity = userData.lastActivity.toMillis();
+
+            if (lastActivity < cutoffTime) {
+                console.log(`Usuário inativo encontrado: UID=${uid}`);
+
+                // Revogar tokens para forçar logout
+                await admin.auth().revokeRefreshTokens(uid);
+                console.log(`Tokens revogados para UID: ${uid}`);
+
+                // Atualizar documento do usuário removendo fcmToken e sessionId
+                await userDocRef.update({
+                    fcmToken: admin.firestore.FieldValue.delete(),
+                    sessionId: admin.firestore.FieldValue.delete(),
+                });
+                console.log(`Campos 'fcmToken' e 'sessionId' removidos para UID: ${uid}`);
+            }
+        });
+
+        // Executar todas as promessas em paralelo
+        await Promise.all(promises);
+
+        console.log('Verificação de atividade concluída.');
+    } catch (error) {
+        console.error('Erro durante a verificação de atividade dos usuários:', error);
+    }
+
+    return null;
+});
+
+// Função para renovar o token (executada a cada minuto)
+exports.scheduledTokenRefresh = functions.pubsub.schedule('every 1 minutes')
+    .onRun(async (context) => {
+        try {
+            const docRef = admin.firestore().collection(META_CONFIG.collection).doc(META_CONFIG.docId);
+            const doc = await docRef.get();
+
+            if (!doc.exists) throw new Error('Documento de configuração não encontrado');
+
+            const data = doc.data();
+            const expiresAt = data.expiresAt || 0;
+
+            // Renova se expirar em menos de 5 minutos
+            if (Date.now() > (expiresAt - 300000)) {
+                const response = await axios.get(`${data[META_CONFIG.fields.baseUrl]}/oauth/access_token`, {
+                    params: {
+                        grant_type: 'fb_exchange_token',
+                        client_id: data[META_CONFIG.fields.clientId],
+                        client_secret: data[META_CONFIG.fields.clientSecret],
+                        fb_exchange_token: data[META_CONFIG.fields.refreshToken]
+                    }
+                });
+
+                await docRef.update({
+                    access_token: response.data.access_token,
+                    expiresAt: Date.now() + (response.data.expires_in * 1000),
+                    lastRefresh: admin.firestore.FieldValue.serverTimestamp()
+                });
+
+                console.log('Token renovado com sucesso!');
+            }
+            return null;
+        } catch (error) {
+            console.error('Erro na renovação do token:', error);
+            return null;
+        }
+    });
+
+// Endpoint para buscar insights (equivalente ao /dynamic_insights)
+exports.getInsights = functions.https.onRequest(async (req, res) => {
+  // Configura os headers de CORS para permitir requisições da Web
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'POST');
+  res.set('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Se for uma requisição OPTIONS (preflight), encerre aqui
+  if (req.method === 'OPTIONS') {
+    return res.status(204).send('');
+  }
+
+  // Log de informações básicas da requisição
+  console.log("Request method:", req.method);
+  console.log("Request headers:", req.headers);
+  console.log("Raw body:", req.rawBody ? req.rawBody.toString() : "Nenhum rawBody");
+  console.log("Initial parsed body:", req.body);
+
+  // Se req.body estiver vazio mas req.rawBody existir, tenta fazer o parse manual
+  if ((!req.body || Object.keys(req.body).length === 0) && req.rawBody) {
+    try {
+      req.body = JSON.parse(req.rawBody.toString());
+      console.log("Parsed body from rawBody:", req.body);
+    } catch (e) {
+      console.error("Erro ao parsear rawBody:", e);
+      return res.status(400).json({
+        status: 'error',
+        message: 'Corpo da requisição inválido'
+      });
+    }
+  } else {
+    console.log("Body já preenchido:", req.body);
+  }
+
+  try {
+    console.log('Recebendo requisição para getInsights');
+
+    // Obtém os parâmetros da requisição
+    let { id, level, start_date, end_date } = req.body;
+    console.log("Parâmetros recebidos:", { id, level, start_date, end_date });
+
+    if (!id || !level || !start_date) {
+      console.log('Parâmetros obrigatórios faltando:', req.body);
+      return res.status(400).json({
+        status: 'error',
+        message: 'Parâmetros obrigatórios faltando'
+      });
+    }
+    // Se end_date não for informado, usa start_date
+    if (!end_date) {
+      end_date = start_date;
+      console.log("end_date não informado; usando start_date:", start_date);
+    }
+
+    if (!['account', 'campaign', 'adset'].includes(level.toLowerCase())) {
+      console.log("Nível inválido:", level);
+      return res.status(400).json({
+        status: 'error',
+        message: 'Nível inválido. Valores permitidos: account, campaign, adset'
+      });
+    }
+
+    console.log("Parâmetros validados:", { start_date, end_date });
+
+    // Busca as configurações (como base URL e access token)
+    const docRef = admin.firestore().collection(META_CONFIG.collection).doc(META_CONFIG.docId);
+    const doc = await docRef.get();
+    if (!doc.exists) {
+      console.log("Documento de configuração não encontrado");
+      return res.status(500).json({
+        status: 'error',
+        message: 'Configuração da API não encontrada'
+      });
+    }
+    const metaData = doc.data();
+    console.log("META_CONFIG:", metaData);
+
+    if (!metaData.access_token) {
+      console.log("Access Token está ausente.");
+      return res.status(400).json({
+        status: 'error',
+        code: 'MISSING_ACCESS_TOKEN',
+        message: 'Access Token está ausente. Por favor, tente novamente mais tarde.'
+      });
+    }
+
+    // Realiza a requisição para a API da Meta usando o intervalo de datas fornecido
+    const response = await axios.get(
+      `${metaData[META_CONFIG.fields.baseUrl]}/${id}/insights`,
+      {
+        params: {
+          access_token: metaData.access_token,
+          fields:
+            'reach,cpm,impressions,inline_link_clicks,cost_per_inline_link_click,clicks,cost_per_conversion,conversions,cpc,inline_post_engagement,spend,date_start,date_stop',
+          time_range: JSON.stringify({ since: start_date, until: end_date }),
+          time_increment: 1,
+          level: level.toLowerCase()
+        }
+      }
+    );
+
+    console.log("Resposta da API da Meta:", response.data);
+
+    // Se a API retornar insights (array com pelo menos 1 item)
+    if (
+      response.data &&
+      response.data.data &&
+      Array.isArray(response.data.data) &&
+      response.data.data.length > 0
+    ) {
+      const insightsArray = response.data.data;
+
+      // Agrega os dados ignorando os campos de data
+      const aggregatedInsights = insightsArray.reduce((acc, insight) => {
+        Object.keys(insight).forEach((key) => {
+          if (key === 'date_start' || key === 'date_stop') return;
+          const value = insight[key];
+          const numValue = parseFloat(value);
+          if (!isNaN(numValue)) {
+            acc[key] = (acc[key] || 0) + numValue;
+          } else {
+            if (!(key in acc)) {
+              acc[key] = value;
+            }
+          }
+        });
+        return acc;
+      }, {});
+
+      // Sobrescreve as datas com os valores recebidos na requisição
+      aggregatedInsights.date_start = start_date;
+      aggregatedInsights.date_stop = end_date;
+
+      return res.json({
+        status: 'success',
+        data: {
+          insights: [aggregatedInsights]
+        }
+      });
+    } else {
+      // Se nenhum insight for encontrado, retorna métricas zeradas com as datas informadas
+      console.log("Nenhum insight encontrado. Retornando objeto vazio com as datas selecionadas.");
+      const emptyInsights = {
+        reach: 0,
+        cpm: 0,
+        impressions: 0,
+        inline_link_clicks: 0,
+        cost_per_inline_link_click: 0,
+        clicks: 0,
+        cost_per_conversion: 0,
+        conversions: 0,
+        cpc: 0,
+        inline_post_engagement: 0,
+        spend: 0,
+        date_start: start_date,
+        date_stop: end_date
+      };
+      return res.json({
+        status: 'success',
+        data: {
+          insights: [emptyInsights]
+        }
+      });
+    }
+  } catch (error) {
+    console.error("Erro completo:", {
+      code: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
+    const statusCode = error.response?.status || 500;
+    const errorMessage = error.response?.data?.error?.message || 'Erro interno';
+    return res.status(statusCode).json({
+      status: 'error',
+      code: error.response?.data?.error?.code || 'UNKNOWN_ERROR',
+      message: errorMessage
+    });
+  }
+});
+
+// Helper para sanitizar dados da Meta
+const sanitizeMetaData = (data) => {
+    return Object.entries(data).reduce((acc, [key, value]) => {
+        // Converter tipos incompatíveis com Firestore
+        if (value instanceof Object && !(value instanceof Array)) {
+            acc[key] = sanitizeMetaData(value);
+        } else if (value !== undefined && value !== null) {
+            acc[key] = value;
+        }
+        return acc;
+    }, {});
+};
+
+// Função auxiliar para buscar opções para os selects
+exports.getSyncOptions = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+    }
+
+    const { level, bmId, adAccountId, campaignId } = data;
+
+    try {
+        switch (level.toUpperCase()) {
+            case 'BM':
+                // Retorna as opções de Business Managers
+                const bmsSnapshot = await admin.firestore().collection('dashboard').get();
+                return bmsSnapshot.docs.map(doc => ({
+                    label: doc.data().name,
+                    value: doc.data().id // Usando o verdadeiro ID da BM
+                }));
+
+            case 'CONTA_ANUNCIO':
+                if (!bmId) {
+                    // bmId ausente, retorna opções de BM
+                    const bmsForAdSnapshot = await admin.firestore().collection('dashboard').get();
+                    return bmsForAdSnapshot.docs.map(doc => ({
+                        label: doc.data().name,
+                        value: doc.data().id
+                    }));
+                }
+                // Fetch Ad Accounts para o bmId fornecido
+                const accountsSnapshot = await admin.firestore().collection('dashboard')
+                    .where('id', '==', bmId).get();
+
+                if (accountsSnapshot.empty) {
+                    throw new functions.https.HttpsError('not-found', `Nenhum Business Manager encontrado com id: ${bmId}`);
+                }
+
+                const bmDoc = accountsSnapshot.docs[0];
+                const bmDocId = bmDoc.id; // Nome do documento (nome da BM)
+
+                const adAccounts = await admin.firestore().collection('dashboard')
+                    .doc(bmDocId).collection('contasAnuncio').get();
+
+                return adAccounts.docs.map(doc => ({
+                    label: doc.data().name,
+                    value: doc.data().name // Usando 'name' como value
+                }));
+
+            case 'CAMPANHA':
+                if (!bmId) {
+                    // bmId ausente, retorna opções de BM
+                    const bmsForCampaignSnapshot = await admin.firestore().collection('dashboard').get();
+                    return bmsForCampaignSnapshot.docs.map(doc => ({
+                        label: doc.data().name,
+                        value: doc.data().id
+                    }));
+                } else if (bmId && !adAccountId) {
+                    // adAccountId ausente, retorna Contas de Anúncio
+                    const accountsSnapshotCamp = await admin.firestore().collection('dashboard')
+                        .where('id', '==', bmId).get();
+
+                    if (accountsSnapshotCamp.empty) {
+                        throw new functions.https.HttpsError('not-found', `Nenhum Business Manager encontrado com id: ${bmId}`);
+                    }
+
+                    const bmDocCamp = accountsSnapshotCamp.docs[0];
+                    const bmDocIdCamp = bmDocCamp.id; // Nome do documento (nome da BM)
+
+                    const adAccountsCamp = await admin.firestore().collection('dashboard')
+                        .doc(bmDocIdCamp).collection('contasAnuncio').get();
+
+                    return adAccountsCamp.docs.map(doc => ({
+                        label: doc.data().name,
+                        value: doc.data().name
+                    }));
+                } else if (bmId && adAccountId && !campaignId) {
+                    // Retorna opções de Campanhas
+                    const campaignsSnapshot = await admin.firestore().collection('dashboard')
+                        .where('id', '==', bmId).get();
+
+                    if (campaignsSnapshot.empty) {
+                        throw new functions.https.HttpsError('not-found', `Nenhum Business Manager encontrado com id: ${bmId}`);
+                    }
+
+                    const bmCampaignDoc = campaignsSnapshot.docs[0];
+                    const bmCampaignDocId = bmCampaignDoc.id;
+
+                    // Buscar o documento da Conta de Anúncio pelo nome para obter o 'id'
+                    const adAccountDoc = await admin.firestore().collection('dashboard')
+                        .doc(bmCampaignDocId).collection('contasAnuncio')
+                        .where('name', '==', adAccountId).get();
+
+                    if (adAccountDoc.empty) {
+                        throw new functions.https.HttpsError('not-found', `Nenhuma Conta de Anúncio encontrada com name: ${adAccountId}`);
+                    }
+
+                    const adAccountRealId = adAccountDoc.docs[0].data().id;
+                    const adAccountFirestoreId = adAccountDoc.docs[0].id; // Nome da Conta de Anúncio
+
+                    const campaignsFirestoreSnapshot = await admin.firestore().collection('dashboard')
+                        .doc(bmCampaignDocId).collection('contasAnuncio')
+                        .doc(adAccountFirestoreId).collection('campanhas').get();
+
+                    return campaignsFirestoreSnapshot.docs.map(doc => ({
+                        label: doc.data().name,
+                        value: doc.data().name // Usando 'name' como value
+                    }));
+                } else {
+                    // Todos os parâmetros presentes, sem opções para retornar
+                    return [];
+                }
+
+            case 'GRUPO_ANUNCIO':
+                if (!bmId) {
+                    // bmId ausente, retorna opções de BM
+                    const bmsForGrupoSnapshot = await admin.firestore().collection('dashboard').get();
+                    return bmsForGrupoSnapshot.docs.map(doc => ({
+                        label: doc.data().name,
+                        value: doc.data().id
+                    }));
+                } else if (bmId && !adAccountId) {
+                    // adAccountId ausente, retorna Contas de Anúncio
+                    const accountsSnapshotGrupo = await admin.firestore().collection('dashboard')
+                        .where('id', '==', bmId).get();
+
+                    if (accountsSnapshotGrupo.empty) {
+                        throw new functions.https.HttpsError('not-found', `Nenhum Business Manager encontrado com id: ${bmId}`);
+                    }
+
+                    const bmDocGrupo = accountsSnapshotGrupo.docs[0];
+                    const bmDocIdGrupo = bmDocGrupo.id; // Nome do documento (nome da BM)
+
+                    const adAccountsGrupo = await admin.firestore().collection('dashboard')
+                        .doc(bmDocIdGrupo).collection('contasAnuncio').get();
+
+                    return adAccountsGrupo.docs.map(doc => ({
+                        label: doc.data().name,
+                        value: doc.data().name
+                    }));
+                } else if (bmId && adAccountId && !campaignId) {
+                    // campaignId ausente, retorna Campanhas
+                    const campaignsSnapshotGrupo = await admin.firestore().collection('dashboard')
+                        .where('id', '==', bmId).get();
+
+                    if (campaignsSnapshotGrupo.empty) {
+                        throw new functions.https.HttpsError('not-found', `Nenhum Business Manager encontrado com id: ${bmId}`);
+                    }
+
+                    const bmCampaignDocGrupo = campaignsSnapshotGrupo.docs[0];
+                    const bmCampaignDocIdGrupo = bmCampaignDocGrupo.id;
+
+                    // Buscar o documento da Conta de Anúncio pelo nome para obter o 'id'
+                    const adAccountDocGrupo = await admin.firestore().collection('dashboard')
+                        .doc(bmCampaignDocIdGrupo).collection('contasAnuncio')
+                        .where('name', '==', adAccountId).get();
+
+                    if (adAccountDocGrupo.empty) {
+                        throw new functions.https.HttpsError('not-found', `Nenhuma Conta de Anúncio encontrada com name: ${adAccountId}`);
+                    }
+
+                    const adAccountRealIdGrupo = adAccountDocGrupo.docs[0].data().id;
+                    const adAccountFirestoreIdGrupo = adAccountDocGrupo.docs[0].id;
+
+                    // Buscar Campanhas
+                    const campaignsFirestoreSnapshotGrupo = await admin.firestore().collection('dashboard')
+                        .doc(bmCampaignDocIdGrupo).collection('contasAnuncio')
+                        .doc(adAccountFirestoreIdGrupo).collection('campanhas').get();
+
+                    return campaignsFirestoreSnapshotGrupo.docs.map(doc => ({
+                        label: doc.data().name,
+                        value: doc.data().name // Usando 'name' como value
+                    }));
+                } else if (bmId && adAccountId && campaignId) {
+                    // Retorna opções de Grupos de Anúncio
+                    const gruposAnuncioSnapshot = await admin.firestore().collection('dashboard')
+                        .where('id', '==', bmId).get();
+
+                    if (gruposAnuncioSnapshot.empty) {
+                        throw new functions.https.HttpsError('not-found', `Nenhum Business Manager encontrado com id: ${bmId}`);
+                    }
+
+                    const bmGrupoDoc = gruposAnuncioSnapshot.docs[0];
+                    const bmGrupoDocId = bmGrupoDoc.id;
+
+                    // Buscar o documento da Conta de Anúncio pelo nome para obter o 'id'
+                    const adAccountGrupoDoc = await admin.firestore().collection('dashboard')
+                        .doc(bmGrupoDocId).collection('contasAnuncio')
+                        .where('name', '==', adAccountId).get();
+
+                    if (adAccountGrupoDoc.empty) {
+                        throw new functions.https.HttpsError('not-found', `Nenhuma Conta de Anúncio encontrada com name: ${adAccountId}`);
+                    }
+
+                    const adAccountGrupoRealId = adAccountGrupoDoc.docs[0].data().id;
+                    const adAccountGrupoFirestoreId = adAccountGrupoDoc.docs[0].id; // Nome da Conta de Anúncio
+
+                    // Buscar a Campanha pelo nome para obter o 'id'
+                    const campaignDocSnapshot = await admin.firestore().collection('dashboard')
+                        .doc(bmGrupoDocId).collection('contasAnuncio')
+                        .doc(adAccountGrupoFirestoreId).collection('campanhas')
+                        .where('name', '==', campaignId).get();
+
+                    if (campaignDocSnapshot.empty) {
+                        throw new functions.https.HttpsError('not-found', `Nenhuma Campanha encontrada com name: ${campaignId}`);
+                    }
+
+                    const campaignGrupoDoc = campaignDocSnapshot.docs[0];
+                    const campaignGrupoRealId = campaignGrupoDoc.data().id;
+                    const campaignGrupoFirestoreId = campaignGrupoDoc.id; // Nome da Campanha
+
+                    // Buscar Grupos de Anúncio
+                    const gruposAnuncioFirestoreSnapshot = await admin.firestore().collection('dashboard')
+                        .doc(bmGrupoDocId).collection('contasAnuncio')
+                        .doc(adAccountGrupoFirestoreId).collection('campanhas')
+                        .doc(campaignGrupoFirestoreId).collection('gruposAnuncio').get();
+
+                    return gruposAnuncioFirestoreSnapshot.docs.map(doc => ({
+                        label: doc.data().name,
+                        value: doc.data().name // Usando 'name' como value
+                    }));
+                }
+
+            case 'INSIGHTS':
+                if (!bmId) {
+                    // bmId ausente, retorna opções de BM
+                    const bmsForInsightsSnapshot = await admin.firestore().collection('dashboard').get();
+                    return bmsForInsightsSnapshot.docs.map(doc => ({
+                        label: doc.data().name,
+                        value: doc.data().id
+                    }));
+                } else if (bmId && !adAccountId) {
+                    // adAccountId ausente, retorna Contas de Anúncio
+                    const accountsSnapshotInsights = await admin.firestore().collection('dashboard')
+                        .where('id', '==', bmId).get();
+
+                    if (accountsSnapshotInsights.empty) {
+                        throw new functions.https.HttpsError('not-found', `Nenhum Business Manager encontrado com id: ${bmId}`);
+                    }
+
+                    const bmDocInsights = accountsSnapshotInsights.docs[0];
+                    const bmDocIdInsights = bmDocInsights.id; // Nome do documento (nome da BM)
+
+                    const adAccountsInsights = await admin.firestore().collection('dashboard')
+                        .doc(bmDocIdInsights).collection('contasAnuncio').get();
+
+                    return adAccountsInsights.docs.map(doc => ({
+                        label: doc.data().name,
+                        value: doc.data().name
+                    }));
+                } else if (bmId && adAccountId) {
+                    // Não há seleção adicional necessária para Insights
+                    // Retorna uma mensagem indicando que não há mais opções
+                    return [];
+                }
+
+            default:
+                return [];
+        }
+    } catch (error) {
+        console.error('Erro em getSyncOptions:', error);
+        throw new functions.https.HttpsError('internal', 'Erro ao buscar opções', error);
+    }
+});
+
+// Função principal para sincronizar dados
+exports.syncMetaData = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+    }
+
+    const { level, bmId, adAccountId, campaignId } = data;
+
+    // Log dos parâmetros recebidos
+    console.log(`syncMetaData chamada com: level=${level}, bmId=${bmId}, adAccountId=${adAccountId}, campaignId=${campaignId}`);
+
+    const metaDoc = await admin.firestore().collection(META_CONFIG.collection).doc(META_CONFIG.docId).get();
+
+    if (!metaDoc.exists) {
+        throw new functions.https.HttpsError('not-found', 'Configurações da Meta não encontradas');
+    }
+
+    const metaData = metaDoc.data();
+
+    // Verificação do access_token
+    if (!metaData.access_token) {
+        throw new functions.https.HttpsError('failed-precondition', 'Access Token não configurado');
+    }
+
+    const makeMetaRequest = async (url, params = {}) => {
+        try {
+            const response = await axios.get(url, {
+                params: {
+                    access_token: metaData.access_token,
+                    ...params
+                },
+                timeout: 10000
+            });
+            return response.data.data || [];
+        } catch (error) {
+            const errorData = error.response?.data?.error || {};
+            console.error('Erro na API Meta:', {
+                code: errorData.code,
+                type: errorData.type,
+                message: errorData.message,
+                fbtrace_id: errorData.fbtrace_id
+            });
+
+            throw new functions.https.HttpsError(
+                'internal',
+                'Erro na API Meta: ' + (errorData.message || 'Erro desconhecido'),
+                {
+                    code: errorData.code,
+                    subcode: errorData.error_subcode,
+                    fbtrace_id: errorData.fbtrace_id
+                }
+            );
+        }
+    };
+
+    const refreshFirestoreData = async (collectionPath, newData, idField = 'id', nameField = 'name') => {
+        const batch = admin.firestore().batch();
+        const collectionRef = admin.firestore().collection(collectionPath);
+
+        const snapshot = await collectionRef.get();
+        snapshot.forEach(doc => batch.delete(doc.ref));
+
+        newData.forEach(item => {
+            if (!item[idField] || !item[nameField]) {
+                throw new functions.https.HttpsError(
+                    'internal',
+                    `Campos de ID ou Nome ausentes no item: ${JSON.stringify(item)}`
+                );
+            }
+            // Sanitizar o nome para ser usado como ID do documento
+            const sanitizedName = item[nameField].replace(/[^a-zA-Z0-9_-]/g, '_');
+            const docRef = collectionRef.doc(sanitizedName);
+            batch.set(docRef, sanitizeMetaData(item));
+        });
+
+        await batch.commit();
+    };
+
+    try {
+        let result;
+        switch (level.toUpperCase()) {
+            case 'BM':
+                console.log('Sincronizando Business Managers...');
+                const bms = await makeMetaRequest(`${metaData[META_CONFIG.fields.baseUrl]}/me/businesses?limit=10000000000000`, {
+                    fields: 'id,name,created_time,vertical'
+                });
+                console.log(`Recebidos ${bms.length} Business Managers.`);
+                await refreshFirestoreData('dashboard', bms, 'id', 'name');
+                result = { message: `${bms.length} BMs sincronizadas` };
+                break;
+
+            case 'CONTA_ANUNCIO':
+                // Verificação do formato do BM ID
+                if (!bmId) {
+                    console.log('bmId está ausente.');
+                    throw new functions.https.HttpsError(
+                        'invalid-argument',
+                        'ID do Business Manager inválido: bmId ausente'
+                    );
+                }
+
+                // Assegure-se de que bmId é uma string numérica
+                if (typeof bmId !== 'string' || !/^\d+$/.test(bmId)) {
+                    console.log(`bmId inválido: ${bmId}`);
+                    throw new functions.https.HttpsError(
+                        'invalid-argument',
+                        'ID do Business Manager deve ser uma string numérica'
+                    );
+                }
+
+                console.log(`Sincronizando Contas de Anúncio para BM ID: ${bmId}`);
+
+                // Consultar a coleção 'dashboard' para encontrar o documento com 'id' igual a 'bmId'
+                const bmQuerySnapshot = await admin.firestore().collection('dashboard')
+                    .where('id', '==', bmId).get();
+
+                if (bmQuerySnapshot.empty) {
+                    console.error(`Nenhum documento encontrado na coleção 'dashboard' com id: ${bmId}`);
+                    throw new functions.https.HttpsError(
+                        'not-found',
+                        `Nenhum documento encontrado para BM ID: ${bmId}`
+                    );
+                }
+
+                if (bmQuerySnapshot.size > 1) {
+                    console.warn(`Mais de um documento encontrado na coleção 'dashboard' com id: ${bmId}`);
+                }
+
+                // Obter o primeiro documento encontrado
+                const bmDoc = bmQuerySnapshot.docs[0];
+                const bmDocId = bmDoc.id; // Nome do documento (nome da BM)
+
+                const adAccounts = await makeMetaRequest(
+                    `${metaData[META_CONFIG.fields.baseUrl]}/${bmId}/owned_ad_accounts`, {
+                        fields: 'id,name,account_id,account_status,currency,timezone_name',
+                        limit: 200
+                    }
+                );
+                console.log(`Recebidas ${adAccounts.length} Contas de Anúncio.`);
+
+                // Acessar a subcoleção 'contasAnuncio' dentro do documento BM existente
+                const adAccountsRef = admin.firestore().collection('dashboard').doc(bmDocId).collection('contasAnuncio');
+
+                // Preparar o batch para deletar contas existentes e adicionar novas
+                const adBatch = admin.firestore().batch();
+                const existingAdAccounts = await adAccountsRef.get();
+                existingAdAccounts.forEach(doc => adBatch.delete(doc.ref));
+
+                adAccounts.forEach(account => {
+                    if (!account.name || !account.id) { // Verificação atualizada para 'name' e 'id'
+                        console.error('Conta sem name ou id:', account);
+                        return;
+                    }
+                    // Sanitizar o nome para ser usado como ID do documento
+                    const sanitizedName = account.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+                    const docRef = adAccountsRef.doc(sanitizedName); // Usando 'name' como ID do documento
+                    adBatch.set(docRef, sanitizeMetaData(account));
+                });
+
+                await adBatch.commit();
+                result = { message: `${adAccounts.length} contas sincronizadas` };
+                break;
+
+            case 'CAMPANHA':
+                if (!bmId) {
+                    console.log('bmId está ausente para CAMPANHA.');
+                    throw new functions.https.HttpsError(
+                        'invalid-argument',
+                        'bmId é necessário para sincronizar campanhas.'
+                    );
+                }
+
+                if (!adAccountId) {
+                    console.log('adAccountId está ausente para CAMPANHA.');
+                    throw new functions.https.HttpsError(
+                        'invalid-argument',
+                        'adAccountId é necessário para sincronizar campanhas.'
+                    );
+                }
+
+                console.log(`Sincronizando Campanhas para Ad Account Name: ${adAccountId}`);
+
+                // Consultar o BM document para obter o ID do BM
+                const bmCampaignSnapshot = await admin.firestore().collection('dashboard')
+                    .where('id', '==', bmId).get();
+
+                if (bmCampaignSnapshot.empty) {
+                    console.error(`Nenhum documento BM encontrado com id: ${bmId}`);
+                    throw new functions.https.HttpsError(
+                        'not-found',
+                        `Nenhum documento BM encontrado com id: ${bmId}`
+                    );
+                }
+
+                const bmCampaignDoc = bmCampaignSnapshot.docs[0];
+                const bmCampaignDocId = bmCampaignDoc.id;
+
+                // Buscar o documento da Conta de Anúncio pelo nome para obter o 'id'
+                const adAccountCampaignSnapshot = await admin.firestore().collection('dashboard')
+                    .doc(bmCampaignDocId).collection('contasAnuncio')
+                    .where('name', '==', adAccountId).get();
+
+                if (adAccountCampaignSnapshot.empty) {
+                    console.error(`Nenhuma Conta de Anúncio encontrada com name: ${adAccountId}`);
+                    throw new functions.https.HttpsError(
+                        'not-found',
+                        `Nenhuma Conta de Anúncio encontrada com name: ${adAccountId}`
+                    );
+                }
+
+                const adAccountCampaignDoc = adAccountCampaignSnapshot.docs[0];
+                const adAccountCampaignRealId = adAccountCampaignDoc.data().id;
+                const adAccountCampaignFirestoreId = adAccountCampaignDoc.id; // Nome da Conta de Anúncio
+
+                const campaignsUrl = `${metaData[META_CONFIG.fields.baseUrl]}/${adAccountCampaignRealId}/campaigns`;
+                const campaigns = await makeMetaRequest(campaignsUrl, {
+                    fields: 'id,name,status,objective,spend_cap',
+                    effective_status: '["ACTIVE"]'
+                });
+                console.log(`Recebidas ${campaigns.length} campanhas.`);
+
+                // Acessar a subcoleção 'campanhas' dentro da Conta de Anúncio existente
+                const campanhasRef = admin.firestore().collection('dashboard').doc(bmCampaignDocId)
+                    .collection('contasAnuncio').doc(adAccountCampaignFirestoreId).collection('campanhas');
+
+                // Preparar o batch para deletar campanhas existentes e adicionar novas
+                const campanhaBatch = admin.firestore().batch();
+                const existingCampaigns = await campanhasRef.get();
+                existingCampaigns.forEach(doc => campanhaBatch.delete(doc.ref));
+
+                campaigns.forEach(campaign => {
+                    if (!campaign.name || !campaign.id) { // Verificação atualizada para 'name' e 'id'
+                        console.error('Campanha sem name ou id:', campaign);
+                        return;
+                    }
+                    // Sanitizar o nome para ser usado como ID do documento
+                    const sanitizedName = campaign.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+                    const docRef = campanhasRef.doc(sanitizedName); // Usando 'name' como ID do documento
+                    campanhaBatch.set(docRef, sanitizeMetaData(campaign));
+                });
+
+                await campanhaBatch.commit();
+                result = { message: `${campaigns.length} campanhas sincronizadas` };
+                break;
+
+            case 'GRUPO_ANUNCIO':
+                if (!bmId || !adAccountId || !campaignId) {
+                    console.log('bmId, adAccountId ou campaignId está ausente para GRUPO_ANUNCIO.');
+                    throw new functions.https.HttpsError(
+                        'invalid-argument',
+                        'bmId, adAccountId e campaignId são necessários para sincronizar grupos de anúncio.'
+                    );
+                }
+
+                console.log(`Sincronizando Grupos de Anúncio para Campanha Name: ${campaignId}`);
+
+                // Consultar o BM document para obter o ID do BM
+                const bmGrupoSnapshot = await admin.firestore().collection('dashboard')
+                    .where('id', '==', bmId).get();
+
+                if (bmGrupoSnapshot.empty) {
+                    console.error(`Nenhum documento BM encontrado com id: ${bmId}`);
+                    throw new functions.https.HttpsError(
+                        'not-found',
+                        `Nenhum documento BM encontrado com id: ${bmId}`
+                    );
+                }
+
+                const bmGrupoDoc = bmGrupoSnapshot.docs[0];
+                const bmGrupoDocId = bmGrupoDoc.id;
+
+                // Buscar o documento da Conta de Anúncio pelo nome para obter o 'id'
+                const adAccountGrupoSnapshot = await admin.firestore().collection('dashboard')
+                    .doc(bmGrupoDocId).collection('contasAnuncio')
+                    .where('name', '==', adAccountId).get();
+
+                if (adAccountGrupoSnapshot.empty) {
+                    console.error(`Nenhuma Conta de Anúncio encontrada com name: ${adAccountId}`);
+                    throw new functions.https.HttpsError(
+                        'not-found',
+                        `Nenhuma Conta de Anúncio encontrada com name: ${adAccountId}`
+                    );
+                }
+
+                const adAccountGrupoDoc = adAccountGrupoSnapshot.docs[0];
+                const adAccountGrupoRealId = adAccountGrupoDoc.data().id;
+                const adAccountGrupoFirestoreId = adAccountGrupoDoc.id; // Nome da Conta de Anúncio
+
+                // Buscar o documento da Campanha pelo nome para obter o 'id'
+                const campaignGrupoSnapshot = await admin.firestore().collection('dashboard')
+                    .doc(bmGrupoDocId).collection('contasAnuncio')
+                    .doc(adAccountGrupoFirestoreId).collection('campanhas')
+                    .where('name', '==', campaignId).get();
+
+                if (campaignGrupoSnapshot.empty) {
+                    console.error(`Nenhuma Campanha encontrada com name: ${campaignId}`);
+                    throw new functions.https.HttpsError(
+                        'not-found',
+                        `Nenhuma Campanha encontrada com name: ${campaignId}`
+                    );
+                }
+
+                const campaignGrupoDoc = campaignGrupoSnapshot.docs[0];
+                const campaignGrupoRealId = campaignGrupoDoc.data().id;
+                const campaignGrupoFirestoreId = campaignGrupoDoc.id; // Nome da Campanha
+
+                const adGroupsUrl = `${metaData[META_CONFIG.fields.baseUrl]}/${campaignGrupoRealId}/adsets`;
+                const adGroups = await makeMetaRequest(adGroupsUrl, {
+                    fields: 'id,name,status,budget_remaining',
+                    effective_status: '["ACTIVE"]'
+                });
+                console.log(`Recebidas ${adGroups.length} grupos de anúncio.`);
+
+                // Acessar a subcoleção 'gruposAnuncio' dentro da Campanha existente
+                const gruposAnuncioRef = admin.firestore().collection('dashboard').doc(bmGrupoDocId)
+                    .collection('contasAnuncio').doc(adAccountGrupoFirestoreId)
+                    .collection('campanhas').doc(campaignGrupoFirestoreId)
+                    .collection('gruposAnuncio');
+
+                // Preparar o batch para deletar grupos existentes e adicionar novos
+                const grupoBatch = admin.firestore().batch();
+                const existingGrupos = await gruposAnuncioRef.get();
+                existingGrupos.forEach(doc => grupoBatch.delete(doc.ref));
+
+                adGroups.forEach(group => {
+                    if (!group.name || !group.id) { // Verificação atualizada para 'name' e 'id'
+                        console.error('Grupo de Anúncio sem name ou id:', group);
+                        return;
+                    }
+                    // Sanitizar o nome para ser usado como ID do documento
+                    const sanitizedName = group.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+                    const docRef = gruposAnuncioRef.doc(sanitizedName); // Usando 'name' como ID do documento
+                    grupoBatch.set(docRef, sanitizeMetaData(group));
+                });
+
+                await grupoBatch.commit();
+                result = { message: `${adGroups.length} grupos de anúncio sincronizados` };
+                break;
+
+            case 'INSIGHTS': {
+                if (!bmId || !adAccountId) {
+                    throw new functions.https.HttpsError(
+                        'invalid-argument',
+                        'bmId e adAccountId são necessários para insights.'
+                    );
+                }
+
+                // 1. Obter a data do callData ou usar ontem
+                let dateStr = data.date; // <--- Recebe a data do Flutter
+                if (!dateStr) {
+                    const today = new Date();
+                    const yesterday = new Date(today);
+                    yesterday.setDate(today.getDate() - 1);
+                    dateStr = yesterday.toISOString().split('T')[0];
+                }
+
+                // 2. Validação de segurança da data
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+                    throw new functions.https.HttpsError(
+                        'invalid-argument',
+                        'Formato de data inválido. Use YYYY-MM-DD'
+                    );
+                }
+
+                // 3. Restante do código de busca...
+                const bmSnapshot = await admin.firestore().collection('dashboard')
+                    .where('id', '==', bmId).get();
+
+                if (bmSnapshot.empty) {
+                    throw new functions.https.HttpsError('not-found', `BM ${bmId} não encontrado`);
+                }
+                const bmDocInsights = bmSnapshot.docs[0]; // Renomeado para evitar conflito
+
+                // 3. Buscar a Conta de Anúncio pelo nome
+                const adAccountsSnapshot = await admin.firestore().collection('dashboard')
+                    .doc(bmDocInsights.id).collection('contasAnuncio')
+                    .where('name', '==', adAccountId).get();
+
+                if (adAccountsSnapshot.empty) {
+                    throw new functions.https.HttpsError('not-found', `Conta ${adAccountId} não encontrada`);
+                }
+
+                // 4. Obter o ID real da conta de anúncio
+                const adAccountData = adAccountsSnapshot.docs[0].data();
+                const adAccountInsightsRealId = adAccountData.id;
+
+                const insightsUrl = `${metaData[META_CONFIG.fields.baseUrl]}/${adAccountInsightsRealId}/insights`;
+                    const insights = await makeMetaRequest(insightsUrl, {
+                        fields: 'reach,cpm,impressions,inline_link_clicks,cost_per_inline_link_click,clicks,cpc,inline_post_engagement,spend',
+                        time_range: JSON.stringify({ since: dateStr, until: dateStr }), // <--- Data dinâmica
+                        time_increment: 1
+                    });
+
+                // 6. Salvar no Firestore
+                const insightsRef = admin.firestore().collection('dashboard').doc(bmDocInsights.id)
+                    .collection('contasAnuncio').doc(adAccountsSnapshot.docs[0].id)
+                    .collection('insights');
+
+                // Usar dateStr que já contém a data correta (selecionada ou do dia anterior)
+                await insightsRef.doc(dateStr).set({
+                    ...insights[0],
+                    syncDate: admin.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+
+                result = {
+                    message: `Insights de ${dateStr} salvos com sucesso`,
+                    date: dateStr,
+                    data: insights[0]
+                };
+                break;
+            }
+
+            default:
+                throw new functions.https.HttpsError(
+                    'invalid-argument',
+                    `Nível inválido: ${level}`
+                );
+        }
+
+        console.log('Resultado da sincronização:', result);
+        return result;
+
+    } catch (error) {
+        console.error('Erro completo:', {
+            message: error.message,
+            details: error.details,
+            stack: error.stack
+        });
+
+        throw new functions.https.HttpsError(
+            error.code || 'internal',
+            error.message,
+            error.details
+        );
     }
 });

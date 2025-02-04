@@ -25,7 +25,7 @@ class _DashboardPageState extends State<DashboardPage> {
   bool _isLoading = true;
   bool _isFiltering = false;
   final DateRangePickerController _datePickerController =
-  DateRangePickerController();
+      DateRangePickerController();
 
   final String apiUrl =
       "https://us-central1-app-io-1c16f.cloudfunctions.net/getInsights";
@@ -73,7 +73,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: AlertDialog(
             backgroundColor: Theme.of(context).colorScheme.secondary,
             shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: Text(
               'Selecione o intervalo de datas',
               textAlign: TextAlign.center,
@@ -118,13 +118,16 @@ class _DashboardPageState extends State<DashboardPage> {
                     fontFamily: 'Poppins',
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Theme.of(context).colorScheme.inverseSurface.withOpacity(0.5),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .inverseSurface
+                        .withOpacity(0.5),
                   ),
                 ),
                 startRangeSelectionColor: Theme.of(context).colorScheme.primary,
                 endRangeSelectionColor: Theme.of(context).colorScheme.primary,
                 rangeSelectionColor:
-                Theme.of(context).colorScheme.tertiary.withOpacity(0.3),
+                    Theme.of(context).colorScheme.tertiary.withOpacity(0.3),
                 todayHighlightColor: Theme.of(context).colorScheme.tertiary,
                 monthViewSettings: DateRangePickerMonthViewSettings(
                   viewHeaderStyle: DateRangePickerViewHeaderStyle(
@@ -211,37 +214,37 @@ class _DashboardPageState extends State<DashboardPage> {
           padding: EdgeInsetsDirectional.fromSTEB(10, 20, 10, 0),
           child: _isLoading
               ? Center(
-            child: CircularProgressIndicator(),
-          )
+                  child: CircularProgressIndicator(),
+                )
               : isDesktop
-              ? Container(
-              constraints: BoxConstraints(
-                maxWidth: 1850, // Defina a largura máxima desejada
-              ),
-              padding: EdgeInsets.symmetric(horizontal: 50), // 50px de padding nas laterais
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildFilters(),
-                    const SizedBox(height: 20),
-                    _buildMetricCards(),
-                    const SizedBox(height: 50),
-                  ],
-                ),
-              ),
-            )
-              : SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildFilters(),
-                const SizedBox(height: 20),
-                _buildMetricCards(),
-                const SizedBox(height: 50),
-              ],
-            ),
-          ),
+                  ? Container(
+                      constraints: BoxConstraints(
+                        maxWidth: 1850,
+                      ),
+                      padding: EdgeInsets.symmetric(horizontal: 50),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildFilters(),
+                            const SizedBox(height: 20),
+                            _buildMetricCards(),
+                            const SizedBox(height: 50),
+                          ],
+                        ),
+                      ),
+                    )
+                  : SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildFilters(),
+                          const SizedBox(height: 20),
+                          _buildMetricCards(),
+                          const SizedBox(height: 50),
+                        ],
+                      ),
+                    ),
         ),
       ),
     );
@@ -297,26 +300,28 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                       label: startDate != null && endDate != null
                           ? Text(
-                        "${DateFormat('dd/MM/yyyy').format(startDate!)} - ${DateFormat('dd/MM/yyyy').format(endDate!)}",
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.onSecondary,
-                        ),
-                      )
+                              "${DateFormat('dd/MM/yyyy').format(startDate!)} - ${DateFormat('dd/MM/yyyy').format(endDate!)}",
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    Theme.of(context).colorScheme.onSecondary,
+                              ),
+                            )
                           : Text(
-                        "Selecione um intervalo de datas",
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.onSecondary,
-                        ),
-                      ),
+                              "Selecione um intervalo de datas",
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    Theme.of(context).colorScheme.onSecondary,
+                              ),
+                            ),
                       style: OutlinedButton.styleFrom(
                         backgroundColor:
-                        Theme.of(context).colorScheme.secondary,
+                            Theme.of(context).colorScheme.secondary,
                         padding: const EdgeInsets.symmetric(
                             vertical: 12.0, horizontal: 16.0),
                         side: BorderSide.none,
@@ -334,10 +339,8 @@ class _DashboardPageState extends State<DashboardPage> {
                       } else if (snapshot.hasError) {
                         return Text('Erro: ${snapshot.error}');
                       } else {
-                        // Não atualiza diretamente campaignsList aqui
                         final localCampaigns = snapshot.data ?? [];
 
-                        // Processa localmente as campanhas sem modificar o estado
                         var processedCampaigns = localCampaigns.map((campaign) {
                           campaign['id'] = campaign['id'].toString();
                           return campaign;
@@ -347,7 +350,6 @@ class _DashboardPageState extends State<DashboardPage> {
                         processedCampaigns
                             .retainWhere((campaign) => ids.add(campaign['id']));
 
-                        // Cria a lista de opções local
                         List<Map<String, dynamic>> campaignOptions = [
                           {'id': '', 'name': 'Limpar Filtro', 'isError': true},
                           ...processedCampaigns.map((campaign) {
@@ -359,10 +361,9 @@ class _DashboardPageState extends State<DashboardPage> {
                           }).toList(),
                         ];
 
-                        // Verifica se selectedCampaignId ainda é válido
                         if (selectedCampaignId != null) {
                           bool isSelectedIdValid = campaignOptions.any(
-                                  (option) => option['id'] == selectedCampaignId);
+                              (option) => option['id'] == selectedCampaignId);
                           if (!isSelectedIdValid) {
                             selectedCampaignId = null;
                           }
@@ -380,23 +381,20 @@ class _DashboardPageState extends State<DashboardPage> {
                                   onChanged: (value) async {
                                     setState(() {
                                       selectedCampaignId = value;
-
                                       if (value != null && value.isNotEmpty) {
                                         selectedCampaigns = campaignOptions
                                             .where((option) =>
-                                        option['id'] == value)
+                                                option['id'] == value)
                                             .toList();
                                       } else {
                                         selectedCampaigns = [];
                                       }
-
                                       selectedGrupoAnuncioId = null;
                                       gruposAnunciosList.clear();
                                     });
-
                                     if (selectedCampaigns.isNotEmpty) {
-                                      final grupos = await _fetchGruposAnuncios();
-                                      // Agenda atualização após o frame atual
+                                      final grupos =
+                                          await _fetchGruposAnuncios();
                                       WidgetsBinding.instance
                                           .addPostFrameCallback((_) {
                                         if (mounted) {
@@ -411,13 +409,12 @@ class _DashboardPageState extends State<DashboardPage> {
                                     if (value == null || value.isEmpty) {
                                       return 'Selecione a campanha';
                                     }
-                                    final selectedItem = campaignOptions
-                                        .firstWhere(
+                                    final selectedItem =
+                                        campaignOptions.firstWhere(
                                             (item) => item['id'] == value,
-                                        orElse: () => {
-                                          'name':
-                                          'Selecione a campanha'
-                                        });
+                                            orElse: () => {
+                                                  'name': 'Selecione a campanha'
+                                                });
                                     return selectedItem['name'];
                                   },
                                 ),
@@ -437,22 +434,20 @@ class _DashboardPageState extends State<DashboardPage> {
                                       value: null,
                                       onChanged: (_) {},
                                       displayText: (_) =>
-                                      'Erro ao carregar grupos de anúncios',
+                                          'Erro ao carregar grupos de anúncios',
                                     );
                                   } else {
                                     final localGruposAnuncios =
                                         snapshot.data ?? [];
-
                                     if (localGruposAnuncios.isEmpty) {
                                       return CustomDropdown(
                                         items: [],
                                         value: null,
                                         onChanged: (_) {},
                                         displayText: (_) =>
-                                        'Nenhum grupo de anúncio encontrado',
+                                            'Nenhum grupo de anúncio encontrado',
                                       );
                                     }
-
                                     return CustomDropdown(
                                       items: localGruposAnuncios,
                                       value: selectedGrupoAnuncioId,
@@ -465,13 +460,15 @@ class _DashboardPageState extends State<DashboardPage> {
                                         if (value == null || value.isEmpty) {
                                           return 'Selecione o grupo de anúncios';
                                         }
-                                        final selectedItem = localGruposAnuncios.firstWhere(
-                                              (item) => item['id'] == value,
-                                          orElse: () => {
-                                            'name': 'Selecione o grupo de anúncios'
-                                          },
-                                        );
-                                        return selectedItem['name'] ?? 'Selecione o grupo de anúncios';
+                                        final selectedItem =
+                                            localGruposAnuncios.firstWhere(
+                                                (item) => item['id'] == value,
+                                                orElse: () => {
+                                                      'name':
+                                                          'Selecione o grupo de anúncios'
+                                                    });
+                                        return selectedItem['name'] ??
+                                            'Selecione o grupo de anúncios';
                                       },
                                     );
                                   }
@@ -487,20 +484,20 @@ class _DashboardPageState extends State<DashboardPage> {
                   ElevatedButton.icon(
                     icon: _isFiltering
                         ? SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.0,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Theme.of(context).colorScheme.outline,
-                        ),
-                      ),
-                    )
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.0,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Theme.of(context).colorScheme.outline,
+                              ),
+                            ),
+                          )
                         : Icon(
-                      Icons.manage_search,
-                      size: 22,
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
+                            Icons.manage_search,
+                            size: 22,
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
                     label: Text(
                       _isFiltering ? 'Filtrando...' : 'Filtrar',
                       textAlign: TextAlign.center,
@@ -512,7 +509,8 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                       backgroundColor: Theme.of(context).colorScheme.tertiary,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(25),
@@ -521,75 +519,73 @@ class _DashboardPageState extends State<DashboardPage> {
                     onPressed: _isFiltering
                         ? null
                         : () async {
-                      // Desativa o botão e exibe o CircularProgressIndicator
-                      setState(() {
-                        _isFiltering = true;
-                      });
-                      try {
-                        if (startDate == null || endDate == null) {
-                          print('Erro: Nenhum intervalo de datas foi selecionado.');
-                          _handleApiError('Por favor, selecione um intervalo de datas.');
-                          return;
-                        }
+                            setState(() {
+                              _isFiltering = true;
+                            });
+                            try {
+                              if (startDate == null || endDate == null) {
+                                print(
+                                    'Erro: Nenhum intervalo de datas foi selecionado.');
+                                _handleApiError(
+                                    'Por favor, selecione um intervalo de datas.');
+                                return;
+                              }
+                              String dataInicial =
+                                  DateFormat('yyyy-MM-dd').format(startDate!);
+                              String dataFinal =
+                                  DateFormat('yyyy-MM-dd').format(endDate!);
 
-                        String dataInicial =
-                        DateFormat('yyyy-MM-dd').format(startDate!);
-                        String dataFinal = DateFormat('yyyy-MM-dd').format(endDate!);
+                              String? id;
+                              String level;
 
-                        String? id;
-                        String level;
+                              if (selectedGrupoAnuncioId != null &&
+                                  selectedCampaignId == null) {
+                                id = selectedGrupoAnuncioId;
+                                level = "adset";
+                                print(
+                                    'Buscando insights do grupo de anúncios: $id');
+                              } else if (selectedCampaignId != null) {
+                                id = selectedCampaignId;
+                                level = "campaign";
+                                print('Buscando insights da campanha: $id');
+                              } else {
+                                if (selectedContaAnuncioId == null) {
+                                  await _fetchInitialInsights();
+                                  if (selectedContaAnuncioId == null) {
+                                    print(
+                                        'Erro: ID da conta de anúncios não encontrado.');
+                                    _handleApiError(
+                                        'ID da conta de anúncios não encontrado.');
+                                    return;
+                                  }
+                                }
+                                id = selectedContaAnuncioId;
+                                level = "account";
+                                print('Buscando insights da conta: $id');
+                              }
 
-                        // Hierarquia correta de seleção
-                        if (selectedGrupoAnuncioId != null && selectedCampaignId == null) {
-                          // Nível Adset (grupo de anúncios)
-                          id = selectedGrupoAnuncioId;
-                          level = "adset";
-                          print('Buscando insights do grupo de anúncios: $id');
-                        } else if (selectedCampaignId != null) {
-                          // Nível Campaign
-                          id = selectedCampaignId;
-                          level = "campaign";
-                          print('Buscando insights da campanha: $id');
-                        } else {
-                          // Nível Account (conta de anúncios)
-                          if (selectedContaAnuncioId == null) {
-                            await _fetchInitialInsights();
-                            if (selectedContaAnuncioId == null) {
-                              print('Erro: ID da conta de anúncios não encontrado.');
-                              _handleApiError('ID da conta de anúncios não encontrado.');
-                              return;
+                              final insights = await _fetchMetaInsights(
+                                  id!, level, dataInicial, dataFinal);
+
+                              if (insights.isEmpty) {
+                                _handleApiError(
+                                    'Nenhum dado de insights encontrado.');
+                              } else {
+                                print(
+                                    '\n--- Dados de Insights Recuperados ---');
+                                insights.forEach((key, value) {
+                                  print('$key: $value');
+                                });
+                              }
+                            } catch (e) {
+                              print('Erro ao buscar dados: $e');
+                              _handleApiError(e.toString());
+                            } finally {
+                              setState(() {
+                                _isFiltering = false;
+                              });
                             }
-                          }
-                          id = selectedContaAnuncioId;
-                          level = "account";
-                          print('Buscando insights da conta: $id');
-                        }
-
-                        final insights = await _fetchMetaInsights(
-                          id!,
-                          level,
-                          dataInicial,
-                          dataFinal,
-                        );
-
-                        if (insights.isEmpty) {
-                          _handleApiError('Nenhum dado de insights encontrado.');
-                        } else {
-                          print('\n--- Dados de Insights Recuperados ---');
-                          insights.forEach((key, value) {
-                            print('$key: $value');
-                          });
-                        }
-                      } catch (e) {
-                        print('Erro ao buscar dados: $e');
-                        _handleApiError(e.toString());
-                      } finally {
-                        // Reativa o botão após o carregamento ou erro
-                        setState(() {
-                          _isFiltering = false;
-                        });
-                      }
-                    },
+                          },
                   ),
                   const SizedBox(height: 20),
                 ],
@@ -607,14 +603,13 @@ class _DashboardPageState extends State<DashboardPage> {
     if (dataValue != null) {
       final double numericValue = _parseToDouble(dataValue);
       if (['spend', 'cost_per_inline_link_click', 'cpc'].contains(key)) {
-        // Formata como valor monetário
-        return NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$').format(numericValue);
+        return NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$')
+            .format(numericValue);
       } else {
-        // Formata como número com separador de milhares
         return NumberFormat('#,##0', 'pt_BR').format(numericValue);
       }
     }
-    return '—'; // Valor padrão se não houver dados
+    return '—';
   }
 
   Widget _buildMetricCards() {
@@ -663,7 +658,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
     final formatter = NumberFormat('#,##0', 'pt_BR');
     final currencyFormatter =
-    NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+        NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -722,11 +717,11 @@ class _DashboardPageState extends State<DashboardPage> {
             Text(
               title,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w500,
-                fontFamily: "Poppins",
-                fontSize: 14,
-                color: Theme.of(context).colorScheme.onBackground,
-              ),
+                    fontWeight: FontWeight.w500,
+                    fontFamily: "Poppins",
+                    fontSize: 14,
+                    color: Theme.of(context).colorScheme.onBackground,
+                  ),
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
             ),
@@ -734,9 +729,9 @@ class _DashboardPageState extends State<DashboardPage> {
             Text(
               value,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onBackground,
-              ),
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onBackground,
+                  ),
             ),
           ],
         ),
@@ -755,7 +750,7 @@ class _DashboardPageState extends State<DashboardPage> {
       }
 
       final authProvider =
-      Provider.of<appProvider.AuthProvider>(context, listen: false);
+          Provider.of<appProvider.AuthProvider>(context, listen: false);
       final user = authProvider.user;
 
       if (user == null) {
@@ -787,7 +782,8 @@ class _DashboardPageState extends State<DashboardPage> {
               .get();
 
           if (!empresaDoc.exists) {
-            print('Documento da empresa não encontrado para o companyId: $companyId');
+            print(
+                'Documento da empresa não encontrado para o companyId: $companyId');
             if (shouldSetState) {
               setState(() {
                 _isLoading = false;
@@ -831,7 +827,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
       if (!empresaDoc.data()!.containsKey('BMs') ||
           !empresaDoc.data()!.containsKey('contasAnuncio')) {
-        print('Campos BMs ou contasAnuncio não existem no documento da empresa.');
+        print(
+            'Campos BMs ou contasAnuncio não existem no documento da empresa.');
         if (shouldSetState) {
           setState(() {
             _isLoading = false;
@@ -949,8 +946,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         (combinedInsights[key] ?? 0) + numValue;
                   }
                 } else if (value is num) {
-                  combinedInsights[key] =
-                      (combinedInsights[key] ?? 0) + value;
+                  combinedInsights[key] = (combinedInsights[key] ?? 0) + value;
                 }
               });
             }
@@ -967,7 +963,6 @@ class _DashboardPageState extends State<DashboardPage> {
         initialInsightsData = combinedInsights;
         _isLoading = false;
       }
-
     } catch (e, stacktrace) {
       print('Erro ao buscar insights iniciais: $e');
       print(stacktrace);
@@ -984,7 +979,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<List<Map<String, dynamic>>> _fetchAdAccounts() async {
     try {
       final authProvider =
-      Provider.of<appProvider.AuthProvider>(context, listen: false);
+          Provider.of<appProvider.AuthProvider>(context, listen: false);
       final user = authProvider.user;
 
       if (user == null) {
@@ -1027,7 +1022,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
       if (!empresaDoc.data()!.containsKey('BMs') ||
           !empresaDoc.data()!.containsKey('contasAnuncio')) {
-        print('Campos BMs ou contasAnuncio não existem no documento da empresa.');
+        print(
+            'Campos BMs ou contasAnuncio não existem no documento da empresa.');
         return [];
       }
 
@@ -1075,7 +1071,6 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<List<Map<String, dynamic>>> _fetchCampaigns() async {
     try {
       if (adAccounts.isEmpty) {
-        // Em vez de chamar setState diretamente, chamamos a função sem atualizar o estado
         await _fetchInitialInsights(shouldSetState: false);
         if (adAccounts.isEmpty) {
           print('Nenhuma conta de anúncio disponível para buscar campanhas.');
@@ -1097,7 +1092,7 @@ class _DashboardPageState extends State<DashboardPage> {
             .doc(contaAnuncioDocId);
 
         final campanhasSnapshot =
-        await contaAnuncioDoc.collection('campanhas').get();
+            await contaAnuncioDoc.collection('campanhas').get();
 
         for (var doc in campanhasSnapshot.docs) {
           var data = doc.data();
@@ -1145,10 +1140,9 @@ class _DashboardPageState extends State<DashboardPage> {
 
         for (var doc in gruposAnunciosSnapshot.docs) {
           var data = doc.data();
-          // Verifique se 'id' e 'name' não são nulos
           if (data['id'] == null || data['name'] == null) {
             print('Grupo de anúncio com dados faltando: ${doc.id}');
-            continue; // Pule este item
+            continue;
           }
           allGruposAnuncios.add({
             'id': data['id'].toString(),
@@ -1173,40 +1167,41 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<Map<String, dynamic>> _fetchMetaInsights(
       String id, String level, String startDate, String endDate) async {
     try {
-      // Nova validação de parâmetros
       if (id.isEmpty) throw Exception('ID não pode ser vazio');
       if (!['account', 'campaign', 'adset'].contains(level.toLowerCase())) {
         throw Exception('Nível inválido');
       }
 
+      // Cria o corpo da requisição (como string JSON)
+      final requestBody = json.encode({
+        "id": id,
+        "level": level,
+        "start_date": startDate,
+        "end_date": endDate,
+      });
+      print("Corpo enviado para a Cloud Function: $requestBody");
+
+      // Envia a requisição com o header "application/json"
       final response = await http.post(
         Uri.parse(apiUrl),
         headers: {"Content-Type": "application/json"},
-        body: json.encode({
-          "id": id,
-          "level": level,
-          "start_date": startDate,
-          "end_date": endDate,
-        }),
+        body: requestBody,
       );
+      print("Resposta recebida: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
-          // Verifique se 'insights' não está vazio
-          if (data['data']['insights'] != null && data['data']['insights'].isNotEmpty) {
-            setState(() {
-              initialInsightsData = data['data']['insights'][0];
-            });
-            return initialInsightsData;
-          } else {
-            throw Exception('Nenhum insight encontrado para os parâmetros fornecidos.');
-          }
+          setState(() {
+            initialInsightsData = data['data']['insights'][0];
+          });
+          return initialInsightsData;
         } else {
           throw Exception('Erro: ${data['message']}');
         }
       } else {
-        throw Exception('Erro na Cloud Function: ${response.statusCode} - ${response.body}');
+        throw Exception(
+            'Erro na Cloud Function: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       print('Erro ao buscar insights: $e');
@@ -1236,13 +1231,9 @@ class _DashboardPageState extends State<DashboardPage> {
   void _updateMetrics(Map<String, dynamic> newData) {
     setState(() {
       initialInsightsData = newData;
-
-      // Atualize outras variáveis de estado se necessário
       selectedCampaigns = [];
       selectedGruposAnuncios = [];
     });
-
-    // Forçar reconstrução dos widgets
     _buildMetricCards();
   }
 }

@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:app_io/data/models/RegisterCompanyModel/add_company_model.dart';
 import 'package:app_io/util/services/firestore_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class EditCollaborators extends StatefulWidget {
   final String collaboratorId;
@@ -335,7 +336,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                               size: 20,
                             ),
                             contentPadding: kIsWeb ? EdgeInsets.symmetric(vertical: 25)
-                                : EdgeInsets.symmetric(vertical: 20),
+                                : EdgeInsets.symmetric(vertical: 15),
                           ),
                           style: TextStyle(
                             fontFamily: 'Poppins',
@@ -411,7 +412,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                               size: 20,
                             ),
                             contentPadding: kIsWeb ? EdgeInsets.symmetric(vertical: 25)
-                                : EdgeInsets.symmetric(vertical: 20),
+                                : EdgeInsets.symmetric(vertical: 15),
                           ),
                           style: TextStyle(
                             fontFamily: 'Poppins',
@@ -481,7 +482,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                               size: 20,
                             ),
                             contentPadding: kIsWeb ? EdgeInsets.symmetric(vertical: 25)
-                                : EdgeInsets.symmetric(vertical: 20),
+                                : EdgeInsets.symmetric(vertical: 15),
                           ),
                           style: TextStyle(
                             fontFamily: 'Poppins',
@@ -557,7 +558,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                               size: 20,
                             ),
                             contentPadding: kIsWeb ? EdgeInsets.symmetric(vertical: 25)
-                                : EdgeInsets.symmetric(vertical: 20),
+                                : EdgeInsets.symmetric(vertical: 15),
                           ),
                           style: TextStyle(
                             fontFamily: 'Poppins',
