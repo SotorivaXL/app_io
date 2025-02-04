@@ -713,11 +713,45 @@ exports.scheduledTokenRefresh = functions.pubsub.schedule('every 1 minutes')
 
 // Endpoint para buscar insights (equivalente ao /dynamic_insights)
 exports.getInsights = functions.https.onRequest(async (req, res) => {
+  // Configura os headers de CORS para permitir requisições da Web
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'POST');
+  res.set('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Se for uma requisição OPTIONS (preflight), encerre aqui
+  if (req.method === 'OPTIONS') {
+    return res.status(204).send('');
+  }
+
+  // Log de informações básicas da requisição
+  console.log("Request method:", req.method);
+  console.log("Request headers:", req.headers);
+  console.log("Raw body:", req.rawBody ? req.rawBody.toString() : "Nenhum rawBody");
+  console.log("Initial parsed body:", req.body);
+
+  // Se req.body estiver vazio mas req.rawBody existir, tenta fazer o parse manual
+  if ((!req.body || Object.keys(req.body).length === 0) && req.rawBody) {
+    try {
+      req.body = JSON.parse(req.rawBody.toString());
+      console.log("Parsed body from rawBody:", req.body);
+    } catch (e) {
+      console.error("Erro ao parsear rawBody:", e);
+      return res.status(400).json({
+        status: 'error',
+        message: 'Corpo da requisição inválido'
+      });
+    }
+  } else {
+    console.log("Body já preenchido:", req.body);
+  }
+
   try {
     console.log('Recebendo requisição para getInsights');
 
     // Obtém os parâmetros da requisição
     let { id, level, start_date, end_date } = req.body;
+    console.log("Parâmetros recebidos:", { id, level, start_date, end_date });
+
     if (!id || !level || !start_date) {
       console.log('Parâmetros obrigatórios faltando:', req.body);
       return res.status(400).json({
@@ -728,34 +762,34 @@ exports.getInsights = functions.https.onRequest(async (req, res) => {
     // Se end_date não for informado, usa start_date
     if (!end_date) {
       end_date = start_date;
+      console.log("end_date não informado; usando start_date:", start_date);
     }
 
     if (!['account', 'campaign', 'adset'].includes(level.toLowerCase())) {
-      console.log('Nível inválido:', level);
+      console.log("Nível inválido:", level);
       return res.status(400).json({
         status: 'error',
         message: 'Nível inválido. Valores permitidos: account, campaign, adset'
       });
     }
 
-    // Log dos parâmetros recebidos
-    console.log("start_date recebido:", start_date, "end_date recebido:", end_date);
+    console.log("Parâmetros validados:", { start_date, end_date });
 
     // Busca as configurações (como base URL e access token)
     const docRef = admin.firestore().collection(META_CONFIG.collection).doc(META_CONFIG.docId);
     const doc = await docRef.get();
     if (!doc.exists) {
-      console.log('Documento de configuração não encontrado');
+      console.log("Documento de configuração não encontrado");
       return res.status(500).json({
         status: 'error',
         message: 'Configuração da API não encontrada'
       });
     }
     const metaData = doc.data();
-    console.log('META_CONFIG:', metaData);
+    console.log("META_CONFIG:", metaData);
 
     if (!metaData.access_token) {
-      console.log('Access Token está ausente.');
+      console.log("Access Token está ausente.");
       return res.status(400).json({
         status: 'error',
         code: 'MISSING_ACCESS_TOKEN',
@@ -778,9 +812,9 @@ exports.getInsights = functions.https.onRequest(async (req, res) => {
       }
     );
 
-    console.log('Resposta da API da Meta:', response.data);
+    console.log("Resposta da API da Meta:", response.data);
 
-    // Se a API da Meta retornar insights (array com pelo menos 1 item)
+    // Se a API retornar insights (array com pelo menos 1 item)
     if (
       response.data &&
       response.data.data &&
@@ -792,16 +826,12 @@ exports.getInsights = functions.https.onRequest(async (req, res) => {
       // Agrega os dados ignorando os campos de data
       const aggregatedInsights = insightsArray.reduce((acc, insight) => {
         Object.keys(insight).forEach((key) => {
-          if (key === 'date_start' || key === 'date_stop') {
-            // Ignora a agregação das datas
-            return;
-          }
+          if (key === 'date_start' || key === 'date_stop') return;
           const value = insight[key];
           const numValue = parseFloat(value);
           if (!isNaN(numValue)) {
             acc[key] = (acc[key] || 0) + numValue;
           } else {
-            // Para valores não numéricos, mantém o primeiro valor encontrado
             if (!(key in acc)) {
               acc[key] = value;
             }
@@ -821,8 +851,8 @@ exports.getInsights = functions.https.onRequest(async (req, res) => {
         }
       });
     } else {
-      // Se a API não retornar nenhum insight, retorna um objeto com métricas zeradas e as datas enviadas
-      console.log('Nenhum insight encontrado para os parâmetros fornecidos. Retornando objeto vazio com as datas selecionadas.');
+      // Se nenhum insight for encontrado, retorna métricas zeradas com as datas informadas
+      console.log("Nenhum insight encontrado. Retornando objeto vazio com as datas selecionadas.");
       const emptyInsights = {
         reach: 0,
         cpm: 0,
@@ -846,7 +876,7 @@ exports.getInsights = functions.https.onRequest(async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('Erro completo:', {
+    console.error("Erro completo:", {
       code: error.response?.status,
       data: error.response?.data,
       message: error.message
