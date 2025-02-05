@@ -18,6 +18,8 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
+  static const String cachedInsightsKey = 'cached_insights';
+
   String? selectedContaAnuncioId;
   String? selectedCampaignId;
   String? selectedGrupoAnuncioId;
@@ -47,6 +49,92 @@ class _DashboardPageState extends State<DashboardPage> {
   void initState() {
     super.initState();
     _initilizeData();
+    _fetchLatestInsights(); // Busca os dados atualizados diretamente do Firestore
+  }
+
+  // Método que agrega os insights com base nas contas carregadas
+  // Método que agrega os insights com base nas contas carregadas
+  Future<void> _fetchLatestInsights() async {
+    try {
+      setState(() { _isLoading = true; });
+
+      // Carrega as contas se ainda não estiverem carregadas
+      await _fetchInitialInsights(shouldSetState: false);
+      if (adAccounts.isEmpty) {
+        print('Nenhuma conta de anúncio encontrada.');
+        setState(() { _isLoading = false; });
+        return;
+      }
+
+      // Variáveis de agregação
+      Map<String, double> aggregated = {};
+      double totalSpend = 0.0;
+      double totalReach = 0.0;
+      double totalLinkClicks = 0.0;
+
+      // Para cada conta, buscar os 30 documentos mais recentes da subcoleção "insights"
+      for (var adAccount in adAccounts) {
+        String bmId = adAccount['bmId'];
+        String contaAnuncioDocId = adAccount['contaAnuncioDocId'];
+        print("Processando insights para BM: $bmId, Conta: $contaAnuncioDocId");
+
+        QuerySnapshot<Map<String, dynamic>> insightsSnapshot =
+        await FirebaseFirestore.instance
+            .collection('dashboard')
+            .doc(bmId)
+            .collection('contasAnuncio')
+            .doc(contaAnuncioDocId)
+            .collection('insights')
+            .orderBy(FieldPath.documentId, descending: true)
+            .limit(30)
+            .get();
+        print("Total de documentos retornados: ${insightsSnapshot.docs.length}");
+
+        for (var doc in insightsSnapshot.docs) {
+          print("Processando documento: ${doc.id}");
+          Map<String, dynamic> data = doc.data();
+          print("Dados do documento ${doc.id}: $data");
+          data.forEach((key, value) {
+            double numericValue = 0.0;
+            if (value is String) {
+              numericValue = double.tryParse(value) ?? 0.0;
+            } else if (value is num) {
+              numericValue = value.toDouble();
+            }
+            double previous = aggregated[key] ?? 0.0;
+            aggregated[key] = previous + numericValue;
+            print("Aggregated [$key]: $previous + $numericValue = ${aggregated[key]}");
+
+            if (key == 'spend') {
+              totalSpend += numericValue;
+              print("Total spend atualizado: $totalSpend");
+            } else if (key == 'reach') {
+              totalReach += numericValue;
+              print("Total reach atualizado: $totalReach");
+            } else if (key == 'inline_link_clicks') {
+              totalLinkClicks += numericValue;
+              print("Total inline_link_clicks atualizado: $totalLinkClicks");
+            }
+          });
+        }
+      }
+
+      double calculatedCpm = totalReach > 0 ? (totalSpend / totalReach) * 1000 : 0.0;
+      double calculatedCostPerLinkClick = totalLinkClicks > 0 ? (totalSpend / totalLinkClicks) : 0.0;
+      aggregated['cpm'] = calculatedCpm;
+      aggregated['cost_per_inline_link_click'] = calculatedCostPerLinkClick;
+      print("CPM calculado: $calculatedCpm, Custo por clique: $calculatedCostPerLinkClick");
+
+      setState(() {
+        initialInsightsData = aggregated;
+        _isLoading = false;
+      });
+    } catch (e, stacktrace) {
+      print('Erro ao buscar insights recentes: $e');
+      print(stacktrace);
+      setState(() { _isLoading = false; });
+      _handleApiError(e);
+    }
   }
 
   void _initilizeData() async {
@@ -739,6 +827,8 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  // Método que carrega as contas de anúncio (sem agregar os insights)
+  // Método único que carrega as contas de anúncio (sem agregar insights)
   Future<void> _fetchInitialInsights({bool shouldSetState = true}) async {
     try {
       if (shouldSetState) {
@@ -750,226 +840,103 @@ class _DashboardPageState extends State<DashboardPage> {
       }
 
       final authProvider =
-          Provider.of<appProvider.AuthProvider>(context, listen: false);
+      Provider.of<appProvider.AuthProvider>(context, listen: false);
       final user = authProvider.user;
-
       if (user == null) {
         print('Usuário não está logado.');
-        if (shouldSetState) {
-          setState(() {
-            _isLoading = false;
-          });
-        } else {
-          _isLoading = false;
-        }
+        if (shouldSetState) setState(() => _isLoading = false);
         return;
       }
 
-      String? companyId;
-      DocumentSnapshot<Map<String, dynamic>>? empresaDoc;
-
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-
-      if (userDoc.exists) {
-        if (userDoc.data()!.containsKey('createdBy')) {
-          companyId = userDoc['createdBy'];
-          empresaDoc = await FirebaseFirestore.instance
-              .collection('empresas')
-              .doc(companyId)
-              .get();
-
-          if (!empresaDoc.exists) {
-            print(
-                'Documento da empresa não encontrado para o companyId: $companyId');
-            if (shouldSetState) {
-              setState(() {
-                _isLoading = false;
-              });
-            } else {
-              _isLoading = false;
-            }
-            return;
-          }
-        } else {
-          print('Campo "createdBy" não encontrado no documento do usuário.');
-          if (shouldSetState) {
-            setState(() {
-              _isLoading = false;
-            });
-          } else {
-            _isLoading = false;
-          }
+      // Buscar documento da empresa
+      DocumentSnapshot<Map<String, dynamic>> companyDoc =
+      await FirebaseFirestore.instance.collection('empresas').doc(user.uid).get();
+      print("CompanyDoc (uid ${user.uid}) exists: ${companyDoc.exists}");
+      if (!companyDoc.exists) {
+        DocumentSnapshot<Map<String, dynamic>> userDoc =
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        print("UserDoc exists: ${userDoc.exists}");
+        if (!userDoc.exists || !userDoc.data()!.containsKey('createdBy')) {
+          print('Documento do usuário ou campo "createdBy" não encontrado.');
+          if (shouldSetState) setState(() => _isLoading = false);
           return;
         }
-      } else {
-        empresaDoc = await FirebaseFirestore.instance
-            .collection('empresas')
-            .doc(user.uid)
-            .get();
-
-        if (empresaDoc.exists) {
-          companyId = user.uid;
-        } else {
-          print('Usuário não é "user" nem "empresa".');
-          if (shouldSetState) {
-            setState(() {
-              _isLoading = false;
-            });
-          } else {
-            _isLoading = false;
-          }
+        String companyId = userDoc.data()!['createdBy'];
+        companyDoc =
+        await FirebaseFirestore.instance.collection('empresas').doc(companyId).get();
+        print("CompanyDoc (companyId $companyId) exists: ${companyDoc.exists}");
+        if (!companyDoc.exists) {
+          print('Documento da empresa não encontrado para companyId: $companyId');
+          if (shouldSetState) setState(() => _isLoading = false);
           return;
         }
       }
 
-      if (!empresaDoc.data()!.containsKey('BMs') ||
-          !empresaDoc.data()!.containsKey('contasAnuncio')) {
-        print(
-            'Campos BMs ou contasAnuncio não existem no documento da empresa.');
-        if (shouldSetState) {
-          setState(() {
-            _isLoading = false;
-          });
-        } else {
-          _isLoading = false;
-        }
+      // Verificar se os campos necessários existem
+      if (!companyDoc.data()!.containsKey('BMs') ||
+          !companyDoc.data()!.containsKey('contasAnuncio')) {
+        print('Campos BMs ou contasAnuncio não existem no documento da empresa.');
+        if (shouldSetState) setState(() => _isLoading = false);
         return;
       }
 
-      var bmIds = empresaDoc['BMs'];
-      var contaAnuncioIds = empresaDoc['contasAnuncio'];
+      var bmIds = companyDoc.data()!['BMs'];
+      var contaAnuncioIds = companyDoc.data()!['contasAnuncio'];
+      if (bmIds is! List) bmIds = [bmIds];
+      if (contaAnuncioIds is! List) contaAnuncioIds = [contaAnuncioIds];
+      List<String> bmList = bmIds.map((e) => e.toString()).toList();
+      List<String> contaAnuncioList = contaAnuncioIds.map((e) => e.toString()).toList();
 
-      if (bmIds is! List) {
-        bmIds = [bmIds];
-      } else {
-        bmIds = bmIds.expand((e) => e is List ? e : [e]).toList();
-      }
-
-      if (contaAnuncioIds is! List) {
-        contaAnuncioIds = [contaAnuncioIds];
-      } else {
-        contaAnuncioIds =
-            contaAnuncioIds.expand((e) => e is List ? e : [e]).toList();
-      }
-
-      bmIds = bmIds.map((e) => e.toString()).toList();
-      contaAnuncioIds = contaAnuncioIds.map((e) => e.toString()).toList();
-
+      // Limpar a lista para evitar duplicação
       adAccounts = [];
-
-      for (var bmId in bmIds) {
-        for (var contaAnuncioDocId in contaAnuncioIds) {
-          final adAccountDoc = await FirebaseFirestore.instance
+      for (var bm in bmList) {
+        for (var conta in contaAnuncioList) {
+          DocumentSnapshot<Map<String, dynamic>> adAccountDoc =
+          await FirebaseFirestore.instance
               .collection('dashboard')
-              .doc(bmId)
+              .doc(bm)
               .collection('contasAnuncio')
-              .doc(contaAnuncioDocId)
+              .doc(conta)
               .get();
-
           if (adAccountDoc.exists) {
-            adAccounts.add({
-              'id': adAccountDoc.data()?['id'],
-              'name': adAccountDoc.data()?['name'],
-              'bmId': bmId,
-              'contaAnuncioDocId': contaAnuncioDocId,
-            });
-          } else {
-            print(
-                'Conta de anúncio não encontrada para BM ID $bmId e Conta Anúncio Doc ID $contaAnuncioDocId');
-          }
-        }
-      }
-
-      if (adAccounts.isNotEmpty) {
-        selectedContaAnuncioId = adAccounts.first['id'];
-        print('ID da conta de anúncios selecionada: $selectedContaAnuncioId');
-      } else {
-        print('Nenhuma conta de anúncio encontrada.');
-        if (shouldSetState) {
-          setState(() {
-            _isLoading = false;
-          });
-        } else {
-          _isLoading = false;
-        }
-        return;
-      }
-
-      Map<String, dynamic> combinedInsights = {};
-
-      for (var adAccount in adAccounts) {
-        String bmId = adAccount['bmId'];
-        String contaAnuncioDocId = adAccount['contaAnuncioDocId'];
-
-        final dadosInsightsDoc = await FirebaseFirestore.instance
-            .collection('dashboard')
-            .doc(bmId)
-            .collection('contasAnuncio')
-            .doc(contaAnuncioDocId)
-            .collection('insights')
-            .doc('dados_insights')
-            .get();
-
-        if (dadosInsightsDoc.exists) {
-          Map<String, dynamic>? insightsData = dadosInsightsDoc.data();
-
-          if (insightsData != null) {
-            if (insightsData.containsKey('insights')) {
-              List<dynamic>? insightsList = insightsData['insights'];
-              if (insightsList != null && insightsList is List) {
-                for (var insight in insightsList) {
-                  if (insight is Map<String, dynamic>) {
-                    insight.forEach((key, value) {
-                      if (value is String) {
-                        final numValue = num.tryParse(value);
-                        if (numValue != null) {
-                          combinedInsights[key] =
-                              (combinedInsights[key] ?? 0) + numValue;
-                        }
-                      } else if (value is num) {
-                        combinedInsights[key] =
-                            (combinedInsights[key] ?? 0) + value;
-                      }
-                    });
-                  }
-                }
-              }
-            } else {
-              insightsData.forEach((key, value) {
-                if (value is String) {
-                  final numValue = num.tryParse(value);
-                  if (numValue != null) {
-                    combinedInsights[key] =
-                        (combinedInsights[key] ?? 0) + numValue;
-                  }
-                } else if (value is num) {
-                  combinedInsights[key] = (combinedInsights[key] ?? 0) + value;
-                }
+            // Antes de adicionar, verifique se essa conta já não está na lista
+            bool exists = adAccounts.any((element) =>
+            element['bmId'] == bm && element['contaAnuncioDocId'] == conta);
+            if (!exists) {
+              adAccounts.add({
+                'id': adAccountDoc.data()?['id'],
+                'name': adAccountDoc.data()?['name'],
+                'bmId': bm,
+                'contaAnuncioDocId': conta,
               });
+              print("AdAccount carregada: BM: $bm, Conta: $conta, ID: ${adAccountDoc.data()?['id']}");
+            } else {
+              print("AdAccount já carregada: BM: $bm, Conta: $conta");
             }
+          } else {
+            print("Conta de anúncio não encontrada para BM: $bm e Conta: $conta");
           }
         }
+      }
+
+      if (adAccounts.isEmpty) {
+        print("Nenhuma conta de anúncio encontrada.");
+      } else {
+        // Seleciona a primeira conta (pode ajustar essa lógica)
+        selectedContaAnuncioId = adAccounts.first['id'];
+        print("ID da conta de anúncios selecionada: $selectedContaAnuncioId");
       }
 
       if (shouldSetState) {
-        setState(() {
-          initialInsightsData = combinedInsights;
-          _isLoading = false;
-        });
+        setState(() { _isLoading = false; });
       } else {
-        initialInsightsData = combinedInsights;
         _isLoading = false;
       }
     } catch (e, stacktrace) {
-      print('Erro ao buscar insights iniciais: $e');
+      print("Erro ao buscar insights iniciais: $e");
       print(stacktrace);
       if (shouldSetState && mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       } else {
         _isLoading = false;
       }
