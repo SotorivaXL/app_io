@@ -127,40 +127,66 @@ function redirectAfterAddLead(res, redirectUrl) {
     `);
 }
 
-// Função principal addLead
-exports.addLead = functions.https.onRequest(async (req, res) => {
-    try {
-        const empresaId = req.body.empresa_id;
-        const campanhaId = req.body.nome_campanha;
+const corsHandler = cors({
+    origin: '*', // Permite todas as origens
+    methods: ['POST', 'OPTIONS'], // Métodos permitidos
+    allowedHeaders: ['Content-Type'], // Cabeçalhos permitidos
+});
 
-        if (!empresaId || !campanhaId) {
-            res.status(400).send('empresa_id e nome_campanha são necessários.');
-            return;
+exports.addLead = functions.https.onRequest((req, res) => {
+    corsHandler(req, res, async () => {
+        try {
+            // Extraímos os campos essenciais e o restante dos dados enviados
+            const { empresa_id, nome_campanha, redirect_url, ...rest } = req.body;
+
+            // Validação dos campos necessários
+            if (!empresa_id || !nome_campanha || !rest.whatsapp) {
+                res.status(400).json({ message: 'empresa_id, nome_campanha e whatsapp são necessários.' });
+                return;
+            }
+
+            // Cria a referência para a coleção de leads
+            const leadsCollectionRef = admin
+                .firestore()
+                .collection('empresas')
+                .doc(empresa_id)
+                .collection('campanhas')
+                .doc(nome_campanha)
+                .collection('leads');
+
+            // Calcula o timestamp de 5 minutos atrás
+            const cincoMinutosAtras = admin.firestore.Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000));
+
+            // Verifica se já existe um lead com o mesmo WhatsApp nos últimos 5 minutos
+            const snapshot = await leadsCollectionRef
+                .where('whatsapp', '==', rest.whatsapp)
+                .where('timestamp', '>=', cincoMinutosAtras)
+                .limit(1)
+                .get();
+
+            if (!snapshot.empty) {
+                // Já existe um lead com esse WhatsApp nos últimos 5 minutos
+                res.status(409).json({ message: 'Já existe uma resposta com este número de WhatsApp nos últimos 5 minutos.' });
+                return;
+            }
+
+            // Monta os dados do lead incluindo todos os campos enviados,
+            // além de adicionar os campos "status" e "timestamp"
+            const leadData = {
+                ...rest,
+                status: 'Aguardando',
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            };
+
+            await leadsCollectionRef.add(leadData);
+
+            // Retorna a URL de redirecionamento
+            res.status(200).json({ message: 'Resposta enviada com sucesso.', redirectUrl: redirect_url });
+        } catch (error) {
+            console.error('Erro ao enviar resposta:', error);
+            res.status(500).json({ message: 'Erro ao enviar resposta.' });
         }
-
-        const leadData = {
-            ...req.body,
-            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-        };
-
-        const leadsCollectionRef = admin
-            .firestore()
-            .collection('empresas')
-            .doc(empresaId)
-            .collection('campanhas')
-            .doc(campanhaId)
-            .collection('leads');
-
-        await leadsCollectionRef.add(leadData);
-
-        // Redirecionar após adicionar o lead
-        const redirectUrl = req.body.redirect_url;
-        redirectAfterAddLead(res, redirectUrl);
-
-    } catch (error) {
-        console.error('Erro ao adicionar lead:', error);
-        res.status(500).send('Erro ao adicionar lead.');
-    }
+    });
 });
 
 exports.getEmpresaCampanha = functions.https.onRequest(async (req, res) => {

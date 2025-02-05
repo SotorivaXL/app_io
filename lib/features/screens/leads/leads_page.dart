@@ -96,6 +96,22 @@ class _LeadsPageState extends State<LeadsPage> {
     }
   }
 
+  String formatFieldLabel(String field) {
+    // Se for 'cpf' ou 'cnpj', retorna todo em maiúsculas
+    if (field.toLowerCase() == 'cpf' || field.toLowerCase() == 'cnpj') {
+      return field.toUpperCase();
+    }
+    // Se contém underscore, é composto por mais de uma palavra
+    if (field.contains('_')) {
+      return field.split('_').map((word) {
+        if (word.isEmpty) return word;
+        return word[0].toUpperCase() + word.substring(1).toLowerCase();
+      }).join(' ');
+    }
+    // Se for apenas uma palavra, capitaliza apenas a primeira letra
+    return field[0].toUpperCase() + field.substring(1).toLowerCase();
+  }
+
   void _filterLeads() {
     setState(() {
       if (_searchQuery.isEmpty) {
@@ -417,11 +433,15 @@ class _LeadsPageState extends State<LeadsPage> {
                                     'WhatsApp', whatsapp, context,
                                     maxLines: isDesktop ? 1 : 2,
                                     fontSize: isDesktop ? 18 : 16),
+                              // Depois (com a formatação do label):
                               ...filteredLeadData.entries.map((entry) {
                                 return _buildDetailRow(
-                                    entry.key, entry.value.toString(), context,
+                                    formatFieldLabel(entry.key),
+                                    entry.value.toString(),
+                                    context,
                                     maxLines: isDesktop ? 2 : 1,
-                                    fontSize: isDesktop ? 18 : 16);
+                                    fontSize: isDesktop ? 18 : 16
+                                );
                               }).toList(),
                             ],
                           ),
