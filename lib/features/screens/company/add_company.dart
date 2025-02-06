@@ -133,17 +133,19 @@ class _AddCompanyState extends State<AddCompany> {
                             children: [
                               Icon(
                                 Icons.arrow_back_ios_new,
-                                color: Theme.of(context).colorScheme.onBackground,
-                                size: 20,
+                                color:
+                                Theme.of(context).colorScheme.onBackground,
+                                size: 18,
                               ),
                               const SizedBox(width: 4),
                               Text(
                                 'Voltar',
                                 style: TextStyle(
                                   fontFamily: 'Poppins',
-                                  fontSize: 16,
-                                  color:
-                                  Theme.of(context).colorScheme.onSecondary,
+                                  fontSize: 14,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSecondary,
                                 ),
                               ),
                             ],
@@ -154,7 +156,7 @@ class _AddCompanyState extends State<AddCompany> {
                           'Adicionar Parceiro',
                           style: TextStyle(
                             fontFamily: 'Poppins',
-                            fontSize: 26,
+                            fontSize: 22,
                             fontWeight: FontWeight.w700,
                             color: Theme.of(context).colorScheme.onSecondary,
                           ),

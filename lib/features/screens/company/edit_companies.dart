@@ -26,6 +26,7 @@ class EditCompanies extends StatefulWidget {
   final bool criarForm;
   final bool copiarTelefones;
   final bool alterarSenha;
+  final bool executarAPIs;
 
   EditCompanies({
     required this.companyId,
@@ -44,6 +45,7 @@ class EditCompanies extends StatefulWidget {
     required this.criarForm,
     required this.copiarTelefones,
     required this.alterarSenha,
+    required this.executarAPIs,
   });
 
   @override
@@ -66,6 +68,7 @@ class _EditCompaniesState extends State<EditCompanies> {
     'criarForm': false,
     'copiarTelefones': false,
     'alterarSenha': false,
+    'executarAPIs': false,
   };
 
   bool _isChangingPassword = false;
@@ -94,6 +97,7 @@ class _EditCompaniesState extends State<EditCompanies> {
     accessRights['criarForm'] = widget.criarForm;
     accessRights['copiarTelefones'] = widget.copiarTelefones;
     accessRights['alterarSenha'] = widget.alterarSenha;
+    accessRights['executarAPIs'] = widget.executarAPIs;
   }
 
   @override
@@ -142,6 +146,7 @@ class _EditCompaniesState extends State<EditCompanies> {
         'criarForm': accessRights['criarForm'],
         'copiarTelefones': accessRights['copiarTelefones'],
         'alterarSenha': accessRights['alterarSenha'],
+        'executarAPIs': accessRights['executarAPIs'],
       });
 
       // Volta para a tela anterior
@@ -218,16 +223,19 @@ class _EditCompaniesState extends State<EditCompanies> {
                             children: [
                               Icon(
                                 Icons.arrow_back_ios_new,
-                                color: Theme.of(context).colorScheme.onBackground,
-                                size: 20,
+                                color:
+                                Theme.of(context).colorScheme.onBackground,
+                                size: 18,
                               ),
                               const SizedBox(width: 4),
                               Text(
                                 'Voltar',
                                 style: TextStyle(
                                   fontFamily: 'Poppins',
-                                  fontSize: 16,
-                                  color: Theme.of(context).colorScheme.onSecondary,
+                                  fontSize: 14,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSecondary,
                                 ),
                               ),
                             ],
@@ -238,7 +246,7 @@ class _EditCompaniesState extends State<EditCompanies> {
                           'Editar Parceiro',
                           style: TextStyle(
                             fontFamily: 'Poppins',
-                            fontSize: 26,
+                            fontSize: 22,
                             fontWeight: FontWeight.w700,
                             color: Theme.of(context).colorScheme.onSecondary,
                           ),
@@ -267,7 +275,6 @@ class _EditCompaniesState extends State<EditCompanies> {
             surfaceTintColor: Colors.transparent,
             backgroundColor: Theme.of(context).colorScheme.secondary,
           ),
-
           // 2) Se for desktop, envolvemos em Center + Container(maxWidth: 1850)
           body: isDesktop
               ? Center(

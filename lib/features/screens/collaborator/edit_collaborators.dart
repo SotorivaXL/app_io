@@ -4,10 +4,10 @@ import 'package:app_io/util/utils.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:app_io/data/models/RegisterCompanyModel/add_company_model.dart';
 import 'package:app_io/util/services/firestore_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class EditCollaborators extends StatefulWidget {
   final String collaboratorId;
@@ -21,6 +21,7 @@ class EditCollaborators extends StatefulWidget {
   final bool criarCampanha;
   final bool criarForm;
   final bool copiarTelefones;
+  final bool executarAPIs;
 
   EditCollaborators({
     required this.collaboratorId,
@@ -34,6 +35,7 @@ class EditCollaborators extends StatefulWidget {
     required this.criarCampanha,
     required this.criarForm,
     required this.copiarTelefones,
+    required this.executarAPIs,
   });
 
   @override
@@ -54,6 +56,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
     'criarCampanha': false,
     'criarForm': false,
     'copiarTelefones': false,
+    'executarAPIs': false,
   };
 
   late TextEditingController _nameController;
@@ -81,6 +84,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
     accessRights['criarCampanha'] = widget.criarCampanha;
     accessRights['criarForm'] = widget.criarForm;
     accessRights['copiarTelefones'] = widget.copiarTelefones;
+    accessRights['executarAPIs'] = widget.executarAPIs;
   }
 
   @override
@@ -107,6 +111,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
     }
 
     try {
+
       // Atualize os dados do colaborador no Firestore
       await FirebaseFirestore.instance
           .collection('users')
@@ -199,16 +204,18 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                             children: [
                               Icon(
                                 Icons.arrow_back_ios_new,
-                                color: Theme.of(context).colorScheme.onBackground,
-                                size: 20,
+                                color:
+                                Theme.of(context).colorScheme.onBackground,
+                                size: 18,
                               ),
                               const SizedBox(width: 4),
                               Text(
                                 'Voltar',
                                 style: TextStyle(
                                   fontFamily: 'Poppins',
-                                  fontSize: 16,
-                                  color: Theme.of(context).colorScheme.onSecondary,
+                                  fontSize: 14,
+                                  color:
+                                  Theme.of(context).colorScheme.onSecondary,
                                 ),
                               ),
                             ],
@@ -219,7 +226,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                           'Editar Colaborador',
                           style: TextStyle(
                             fontFamily: 'Poppins',
-                            fontSize: 26,
+                            fontSize: 22,
                             fontWeight: FontWeight.w700,
                             color: Theme.of(context).colorScheme.onSecondary,
                           ),
@@ -329,7 +336,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                               size: 20,
                             ),
                             contentPadding: kIsWeb ? EdgeInsets.symmetric(vertical: 25)
-                                : EdgeInsets.symmetric(vertical: 20),
+                                : EdgeInsets.symmetric(vertical: 15),
                           ),
                           style: TextStyle(
                             fontFamily: 'Poppins',
@@ -405,7 +412,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                               size: 20,
                             ),
                             contentPadding: kIsWeb ? EdgeInsets.symmetric(vertical: 25)
-                                : EdgeInsets.symmetric(vertical: 20),
+                                : EdgeInsets.symmetric(vertical: 15),
                           ),
                           style: TextStyle(
                             fontFamily: 'Poppins',
@@ -475,7 +482,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                               size: 20,
                             ),
                             contentPadding: kIsWeb ? EdgeInsets.symmetric(vertical: 25)
-                                : EdgeInsets.symmetric(vertical: 20),
+                                : EdgeInsets.symmetric(vertical: 15),
                           ),
                           style: TextStyle(
                             fontFamily: 'Poppins',
@@ -551,7 +558,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
                               size: 20,
                             ),
                             contentPadding: kIsWeb ? EdgeInsets.symmetric(vertical: 25)
-                                : EdgeInsets.symmetric(vertical: 20),
+                                : EdgeInsets.symmetric(vertical: 15),
                           ),
                           style: TextStyle(
                             fontFamily: 'Poppins',

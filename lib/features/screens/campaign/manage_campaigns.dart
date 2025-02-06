@@ -212,7 +212,7 @@ class _ManageCampaignsState extends State<ManageCampaigns> {
                         Navigator.of(context).pop();
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.secondary,
+                        backgroundColor: Theme.of(context).colorScheme.primary,
                         padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20.0),
@@ -399,14 +399,14 @@ class _ManageCampaignsState extends State<ManageCampaigns> {
                                     Icon(
                                       Icons.arrow_back_ios_new,
                                       color: Theme.of(context).colorScheme.onBackground,
-                                      size: 20,
+                                      size: 18,
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
                                       'Voltar',
                                       style: TextStyle(
                                         fontFamily: 'Poppins',
-                                        fontSize: 16,
+                                        fontSize: 14,
                                         color: Theme.of(context).colorScheme.onSecondary,
                                       ),
                                     ),
@@ -418,7 +418,7 @@ class _ManageCampaignsState extends State<ManageCampaigns> {
                                 'Gerenciar Campanhas',
                                 style: TextStyle(
                                   fontFamily: 'Poppins',
-                                  fontSize: 26,
+                                  fontSize: 22,
                                   fontWeight: FontWeight.w700,
                                   color: Theme.of(context).colorScheme.onSecondary,
                                 ),
