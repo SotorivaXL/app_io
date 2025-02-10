@@ -1,7 +1,16 @@
 {
-  "functions": {
-    "source": "functions"
-  },
+  "functions": [
+    {
+      "source": "functions-legacy",
+      "codebase": "legacy",
+      "runtime": "nodejs18"
+    },
+    {
+      "source": "functions-v2",
+      "codebase": "v2",
+      "runtime": "nodejs20"
+    }
+  ],
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
