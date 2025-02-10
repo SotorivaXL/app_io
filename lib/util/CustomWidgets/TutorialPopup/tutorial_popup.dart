@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io' show Platform; // <-- Adicionado
+import 'package:flutter/foundation.dart' show kIsWeb; // <-- Adicionado
 import 'package:flutter/material.dart';
 
 // Definição da classe TutorialStep
@@ -38,10 +40,24 @@ class _TutorialPopupState extends State<TutorialPopup> {
   // Tornar tutorialSteps nullable
   List<TutorialStep>? tutorialSteps;
 
+  // Utilize 'isDesktp' para a verificação
+  bool get isDesktp {
+    try {
+      // Quando não estiver rodando na Web, verifique se a plataforma é desktop
+      if (!kIsWeb &&
+          (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+        return true;
+      }
+    } catch (_) {
+      // Caso falhe, retorna falso
+    }
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
-    // Não é necessário iniciar o timer aqui, pois estamos removendo o temporizador
+    // Não é necessário iniciar o timer aqui
   }
 
   @override
@@ -58,42 +74,42 @@ class _TutorialPopupState extends State<TutorialPopup> {
             ? "assets/images/icons/logoDark.png"
             : "assets/images/icons/logoLight.png",
         description: "Explore os recursos incríveis da nossa plataforma!",
-        imageWidth: 220, // Tamanho específico para esta imagem
+        imageWidth: 220,
         imageHeight: 80,
       ),
       TutorialStep(
         title: "Filtrando Leads por Campanha!",
         image: "assets/images/tutorial/Filtros.jpg",
-        imageWidth: 500, // Tamanho específico para esta imagem
+        imageWidth: 500,
         imageHeight: 200,
       ),
       TutorialStep(
         title: "Filtrando Leads por Status!",
         image: "assets/images/tutorial/Filtros.jpg",
-        imageWidth: 500, // Tamanho específico para esta imagem
+        imageWidth: 500,
         imageHeight: 200,
       ),
       TutorialStep(
         title: "Atualize o Status do Lead com praticidade e rapidez!",
         image: "assets/images/tutorial/Status.jpg",
-        imageWidth: 500, // Tamanho específico para esta imagem
+        imageWidth: 500,
         imageHeight: 200,
       ),
       TutorialStep(
         title: "Veja Todas as Informações do Lead!",
         image: "assets/images/tutorial/Detalhes.jpg",
-        imageWidth: 500, // Tamanho específico para esta imagem
+        imageWidth: 500,
         imageHeight: 200,
       ),
       TutorialStep(
         title: "Converse com Seus Leads no WhatsApp!",
         image: "assets/images/tutorial/WhatsApp.jpg",
-        imageWidth: 500, // Tamanho específico para esta imagem
+        imageWidth: 500,
         imageHeight: 200,
       ),
     ];
 
-    // Depuração: Imprimir todas as etapas para verificar se estão corretas
+    // Depuração
     print('Tutorial Steps: $tutorialSteps');
   }
 
@@ -115,13 +131,11 @@ class _TutorialPopupState extends State<TutorialPopup> {
   Widget build(BuildContext context) {
     // Verificar se tutorialSteps está inicializado
     if (tutorialSteps == null) {
-      // Pode mostrar um indicador de carregamento ou retornar um Container vazio
       return const Center(child: CircularProgressIndicator());
     }
 
     // Garantir que currentStep está dentro dos limites da lista
     if (currentStep >= tutorialSteps!.length) {
-      // Se estiver fora dos limites, finalizar o tutorial
       WidgetsBinding.instance.addPostFrameCallback((_) {
         widget.onComplete();
       });
@@ -129,13 +143,29 @@ class _TutorialPopupState extends State<TutorialPopup> {
     }
 
     final step = tutorialSteps![currentStep];
-
-    // Depuração: Imprimir a etapa atual para verificar os dados
     print('Current Step: $step');
 
+    // AUMENTANDO O TAMANHO DAS IMAGENS
+    // Caso queira aumentar também no Web, inclua kIsWeb no if
+    final bool isDesktopOrWeb = isDesktp || kIsWeb;
+    final double increaseFactor = 1.3; // Ajuste conforme desejar
+
+    final double? finalImageWidth = step.imageWidth != null
+        ? (isDesktopOrWeb ? step.imageWidth! * increaseFactor : step.imageWidth!)
+        : null;
+
+    final double? finalImageHeight = step.imageHeight != null
+        ? (isDesktopOrWeb ? step.imageHeight! * increaseFactor : step.imageHeight!)
+        : null;
+
     return Dialog(
+      // Se for web, definimos um padding horizontal maior (como no seu código)
+      insetPadding: kIsWeb
+          ? const EdgeInsets.symmetric(horizontal: 650, vertical: 24.0)
+          : null,
       backgroundColor: Theme.of(context).colorScheme.background,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      // Sem constraints
       child: Padding(
         padding: const EdgeInsets.all(35.0),
         child: SingleChildScrollView(
@@ -155,17 +185,17 @@ class _TutorialPopupState extends State<TutorialPopup> {
                   ),
                 ),
               ),
-              // Imagem do passo com tamanho específico
+              const SizedBox(height: 10),
+              // Imagem do passo com o tamanho ajustado
               Image.asset(
                 step.image,
-                width: step.imageWidth, // Usa o tamanho definido ou um padrão
-                height: step.imageHeight,
-                fit: BoxFit.contain, // Ajusta a imagem dentro do espaço
+                width: finalImageWidth,
+                height: finalImageHeight,
+                fit: BoxFit.contain,
                 errorBuilder: (context, error, stackTrace) {
                   return const Icon(Icons.error, size: 50, color: Colors.red);
                 },
               ),
-              // Descrição apenas para a primeira página
               const SizedBox(height: 10),
               if (step.description != null)
                 Text(
@@ -178,13 +208,11 @@ class _TutorialPopupState extends State<TutorialPopup> {
                     color: Theme.of(context).colorScheme.onSecondary,
                   ),
                 ),
-              if (step.description != null)
-                const SizedBox(height: 25),
+              if (step.description != null) const SizedBox(height: 25),
               // Botões "Próximo/Concluir" e "Pular Tutorial"
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Botão para pular o tutorial
                   TextButton(
                     onPressed: _skipTutorial,
                     child: Text(
@@ -197,7 +225,6 @@ class _TutorialPopupState extends State<TutorialPopup> {
                       ),
                     ),
                   ),
-                  // Botão "Próximo" ou "Concluir"
                   ElevatedButton(
                     onPressed: _nextStep,
                     style: ElevatedButton.styleFrom(

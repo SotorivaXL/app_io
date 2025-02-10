@@ -1,8 +1,8 @@
-
 const {onRequest} = require("firebase-functions/v2/https");
+const {onSchedule} = require('firebase-functions/v2/scheduler');
+const {onDocumentCreated} = require('firebase-functions/v2/firestore');
 const logger = require("firebase-functions/logger");
-
-const functions = require('firebase-functions');
+const functions = require("firebase-functions/v1");
 const admin = require('firebase-admin');
 const axios = require('axios');
 const cors = require('cors');
@@ -77,7 +77,7 @@ exports.setCustomUserClaims = functions.https.onCall(async (data, context) => {
 
 exports.addCampaign = functions.https.onCall(async (data, context) => {
     try {
-        const { empresaId, nomeCampanha, descricao, dataInicio, dataFim } = data;
+        const {empresaId, nomeCampanha, descricao, dataInicio, dataFim} = data;
 
         // Verificar se os campos obrigatórios foram fornecidos
         if (!empresaId || !nomeCampanha) {
@@ -104,164 +104,10 @@ exports.addCampaign = functions.https.onCall(async (data, context) => {
         // Adicionar a campanha à coleção
         await campaignsCollectionRef.add(campaignData);
 
-        return { message: 'Campanha adicionada com sucesso.' };
+        return {message: 'Campanha adicionada com sucesso.'};
     } catch (error) {
         console.error('Erro ao adicionar campanha:', error);
         throw new functions.https.HttpsError('internal', 'Erro ao adicionar campanha.');
-    }
-});
-
-// Função para redirecionar o usuário após adicionar o lead
-function redirectAfterAddLead(res, redirectUrl) {
-    res.status(200).send(`
-        <html>
-            <head>
-                <script type="text/javascript">
-                    window.location.href = "${redirectUrl}";
-                </script>
-            </head>
-            <body>
-                Redirecionando...
-            </body>
-        </html>
-    `);
-}
-
-const corsHandler = cors({
-    origin: '*', // Permite todas as origens
-    methods: ['POST', 'OPTIONS'], // Métodos permitidos
-    allowedHeaders: ['Content-Type'], // Cabeçalhos permitidos
-});
-
-exports.addLead = functions.https.onRequest((req, res) => {
-    corsHandler(req, res, async () => {
-        try {
-            // Extraímos os campos essenciais e o restante dos dados enviados
-            const { empresa_id, nome_campanha, redirect_url, ...rest } = req.body;
-
-            // Validação dos campos necessários
-            if (!empresa_id || !nome_campanha || !rest.whatsapp) {
-                res.status(400).json({ message: 'empresa_id, nome_campanha e whatsapp são necessários.' });
-                return;
-            }
-
-            // Cria a referência para a coleção de leads
-            const leadsCollectionRef = admin
-                .firestore()
-                .collection('empresas')
-                .doc(empresa_id)
-                .collection('campanhas')
-                .doc(nome_campanha)
-                .collection('leads');
-
-            // Calcula o timestamp de 5 minutos atrás
-            const cincoMinutosAtras = admin.firestore.Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000));
-
-            // Verifica se já existe um lead com o mesmo WhatsApp nos últimos 5 minutos
-            const snapshot = await leadsCollectionRef
-                .where('whatsapp', '==', rest.whatsapp)
-                .where('timestamp', '>=', cincoMinutosAtras)
-                .limit(1)
-                .get();
-
-            if (!snapshot.empty) {
-                // Já existe um lead com esse WhatsApp nos últimos 5 minutos
-                res.status(409).json({ message: 'Já existe uma resposta com este número de WhatsApp nos últimos 5 minutos.' });
-                return;
-            }
-
-            // Monta os dados do lead incluindo todos os campos enviados,
-            // além de adicionar os campos "status" e "timestamp"
-            const leadData = {
-                ...rest,
-                status: 'Aguardando',
-                timestamp: admin.firestore.FieldValue.serverTimestamp(),
-            };
-
-            await leadsCollectionRef.add(leadData);
-
-            // Retorna a URL de redirecionamento
-            res.status(200).json({ message: 'Resposta enviada com sucesso.', redirectUrl: redirect_url });
-        } catch (error) {
-            console.error('Erro ao enviar resposta:', error);
-            res.status(500).json({ message: 'Erro ao enviar resposta.' });
-        }
-    });
-});
-
-exports.getEmpresaCampanha = functions.https.onRequest(async (req, res) => {
-    try {
-        const { empresaId } = req.query;
-
-        // Fetch the Empresa data
-        const empresaDoc = await admin.firestore().collection('empresas').doc(empresaId).get();
-        if (!empresaDoc.exists) {
-            return res.status(404).json({ error: 'Empresa not found' });
-        }
-        const empresaData = empresaDoc.data();
-
-        // Fetch all Campanha data within the Empresa
-        const campanhasSnapshot = await admin.firestore().collection('empresas').doc(empresaId).collection().get();
-        const campanhasData = campanhasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        return res.status(200).json({
-            empresa: empresaData,
-            campanhas: campanhasData,
-        });
-    } catch (error) {
-        console.error('Error fetching data:', error);
-        return res.status(500).json({ error: 'Internal Server Error' });
-    }
-});
-
-// Funções CRUD para a coleção de empresas
-
-// Read (Ler todas as empresas)
-exports.getCompanies = functions.https.onRequest(async (req, res) => {
-    try {
-        const snapshot = await admin.firestore().collection('empresas').get();
-        const companies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        res.status(200).json(companies);
-    } catch (error) {
-        console.error("Error getting companies: ", error);
-        res.status(500).send("Erro ao buscar empresas");
-    }
-});
-
-// Update (Atualizar uma empresa existente)
-exports.updateCompany = functions.https.onRequest(async (req, res) => {
-    try {
-        console.log('Recebendo dados:', req.body);
-
-        const { companyId, NomeEmpresa, contract, countArtsValue, countVideosValue, dashboard, leads, gerenciarColaboradores, gerenciarParceiros } = req.body;
-
-        // Verifique se todos os campos obrigatórios estão presentes
-        if (!companyId || !NomeEmpresa || !contract) {
-            return res.status(400).send('Missing companyId, NomeEmpresa, or contract');
-        }
-
-        const updateData = {
-            NomeEmpresa: NomeEmpresa,
-            contract: contract,
-            countArtsValue: countArtsValue,
-            countVideosValue: countVideosValue,
-            dashboard: dashboard,
-            leads: leads,
-            gerenciarColaboradores: gerenciarColaboradores,
-            gerenciarParceiros: gerenciarParceiros,
-        };
-
-        console.log('Dados para atualizar:', updateData);
-
-        // Atualize a empresa no Firestore
-        const docRef = admin.firestore().collection('empresas').doc(companyId);
-        await docRef.update(updateData);
-
-        res.status(200).send({ success: true, message: "Empresa atualizada com sucesso!" });
-    } catch (error) {
-        console.error("Error updating company:", error);
-        res.status(500).send("Erro ao atualizar empresa");
     }
 });
 
@@ -329,7 +175,7 @@ exports.deleteCompany = functions.https.onCall(async (data, context) => {
             }
         }
 
-        return { success: true, message: 'Empresa e usuários vinculados excluídos com sucesso.' };
+        return {success: true, message: 'Empresa e usuários vinculados excluídos com sucesso.'};
     } catch (error) {
         console.error('Erro ao excluir empresa e usuários vinculados:', error);
         throw new functions.https.HttpsError('unknown', 'Erro ao excluir empresa e usuários vinculados.');
@@ -342,7 +188,20 @@ exports.createUserAndCompany = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('failed-precondition', 'A função deve ser chamada enquanto autenticado.');
     }
 
-    const { email, password, nomeEmpresa, name, role, birth, founded, cnpj, accessRights, contract, countArtsValue, countVideosValue } = data;
+    const {
+        email,
+        password,
+        nomeEmpresa,
+        name,
+        role,
+        birth,
+        founded,
+        cnpj,
+        accessRights,
+        contract,
+        countArtsValue,
+        countVideosValue
+    } = data;
 
     try {
         // Cria o novo usuário
@@ -377,7 +236,7 @@ exports.createUserAndCompany = functions.https.onCall(async (data, context) => {
                 emailVerified: false,
             });
 
-            return { success: true, message: 'Usuário e empresa criados com sucesso.' };
+            return {success: true, message: 'Usuário e empresa criados com sucesso.'};
         } else {
             // Adiciona os dados do colaborador no Firestore na coleção 'users'
             await admin.firestore().collection('users').doc(userRecord.uid).set({
@@ -395,7 +254,7 @@ exports.createUserAndCompany = functions.https.onCall(async (data, context) => {
                 emailVerified: false,
             });
 
-            return { success: true, message: 'Usuário colaborador criado com sucesso.' };
+            return {success: true, message: 'Usuário colaborador criado com sucesso.'};
         }
     } catch (error) {
         throw new functions.https.HttpsError('internal', 'Erro ao criar usuário ou empresa.', error);
@@ -426,7 +285,7 @@ exports.setCompanyClaims = functions.https.onCall(async (data, context) => {
         }
 
         // Define a claim personalizada com o ID da empresa
-        await admin.auth().setCustomUserClaims(uid, { companyId });
+        await admin.auth().setCustomUserClaims(uid, {companyId});
 
         return {
             message: 'Claims set successfully for user ${uid}.',
@@ -440,7 +299,7 @@ exports.setCompanyClaims = functions.https.onCall(async (data, context) => {
 });
 
 exports.addCampanha = functions.https.onCall(async (data, context) => {
-    const { empresaId, nome_campanha, descricao, dataInicio, dataFim } = data;
+    const {empresaId, nome_campanha, descricao, dataInicio, dataFim} = data;
 
     // Verifica se todos os dados necessários foram fornecidos
     if (!empresaId || !nome_campanha || !descricao || !dataInicio || !dataFim) {
@@ -458,7 +317,7 @@ exports.addCampanha = functions.https.onCall(async (data, context) => {
             dataFim: new Date(dataFim),
         });
 
-        return { message: 'Campanha adicionada com sucesso!' };
+        return {message: 'Campanha adicionada com sucesso!'};
     } catch (error) {
         console.error('Erro ao adicionar campanha:', error);
         throw new functions.https.HttpsError('internal', 'Erro ao adicionar campanha.');
@@ -479,89 +338,10 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
         // Apaga o documento do usuário no Firestore
         await admin.firestore().collection('users').doc(uid).delete();
 
-        return { success: true };
+        return {success: true};
     } catch (error) {
         console.error('Erro ao deletar o usuário:', error);
         throw new functions.https.HttpsError('internal', 'Erro ao deletar o usuário.');
-    }
-});
-
-exports.sendNewLeadNotification = functions.firestore
-  .document('empresas/{empresaId}/campanhas/{campanhaId}/leads/{leadId}')
-  .onCreate(async (snap, context) => {
-    try {
-      const newValue = snap.data();
-      const { empresaId, campanhaId, leadId } = context.params;
-
-      const campanhaDoc = await admin.firestore()
-        .collection('empresas')
-        .doc(empresaId)
-        .collection('campanhas')
-        .doc(campanhaId)
-        .get();
-
-      if (!campanhaDoc.exists) {
-        console.error(`Campanha com ID ${campanhaId} não encontrada para a empresa ${empresaId}`);
-        return null;
-      }
-
-      const nomeCampanha = campanhaDoc.data().nome_campanha;
-      const tokensSet = new Set();
-
-      const empresaDoc = await admin.firestore().collection('empresas').doc(empresaId).get();
-      if (empresaDoc.exists && empresaDoc.data().fcmToken) {
-        tokensSet.add(empresaDoc.data().fcmToken);
-      }
-
-      const usersSnapshot = await admin.firestore()
-        .collection('users')
-        .where('createdBy', '==', empresaId)
-        .get();
-
-      usersSnapshot.forEach(userDoc => {
-        if (userDoc.data().fcmToken) {
-          tokensSet.add(userDoc.data().fcmToken);
-        }
-      });
-
-      const tokens = Array.from(tokensSet).filter(token => token);
-
-      if (tokens.length === 0) {
-        console.log(`Nenhum token válido encontrado para a empresa ${empresaId}.`);
-        return null;
-      }
-
-      const payload = {
-        notification: {
-          title: 'Novo Lead!',
-          body: `Você tem um novo lead na campanha ${nomeCampanha}`,
-        },
-        data: {
-          leadId,
-          campanhaId,
-          empresaId,
-        },
-      };
-
-      const response = await admin.messaging().sendMulticast({
-        tokens,
-        notification: payload.notification,
-        data: payload.data,
-      });
-
-      console.log(`${response.successCount} notificações enviadas com sucesso.`);
-      if (response.failureCount > 0) {
-        response.responses.forEach((resp, idx) => {
-          if (!resp.success) {
-            console.error(`Erro ao enviar para o token ${tokens[idx]}: ${resp.error.message}`);
-          }
-        });
-      }
-
-      return null;
-    } catch (error) {
-      console.error('Erro ao enviar notificação:', error);
-      return null;
     }
 });
 
@@ -571,9 +351,9 @@ exports.deleteUserByEmail = functions.https.onCall(async (data, context) => {
     try {
         const userRecord = await admin.auth().getUserByEmail(email);
         await admin.auth().deleteUser(userRecord.uid);
-        return { message: 'Usuário excluído com sucesso' };
+        return {message: 'Usuário excluído com sucesso'};
     } catch (error) {
-        return { error: 'Erro ao excluir o usuário: ' + error.message };
+        return {error: 'Erro ao excluir o usuário: ' + error.message};
     }
 });
 
@@ -611,8 +391,8 @@ exports.changeUserPassword = functions.https.onCall(async (data, context) => {
         }
 
         // Atualiza a senha do usuário
-        await admin.auth().updateUser(uid, { password: newPassword });
-        return { message: 'Senha atualizada com sucesso' };
+        await admin.auth().updateUser(uid, {password: newPassword});
+        return {message: 'Senha atualizada com sucesso'};
 
     } catch (error) {
         if (error instanceof functions.https.HttpsError) {
@@ -623,320 +403,12 @@ exports.changeUserPassword = functions.https.onCall(async (data, context) => {
     }
 });
 
-// Função agendada para verificar a cada minuto
-exports.checkUserActivity = functions.pubsub.schedule('every 1 minutes').onRun(async (context) => {
-    console.log('Iniciando verificação de atividade dos usuários...');
-
-    try {
-        // Parâmetros para listagem de usuários
-        const maxResults = 1000; // Máximo de usuários por chamada
-        let nextPageToken = undefined;
-        let allUsers = [];
-
-        // Paginação para listar todos os usuários
-        do {
-            const listUsersResult = await admin.auth().listUsers(maxResults, nextPageToken);
-            allUsers = allUsers.concat(listUsersResult.users);
-            nextPageToken = listUsersResult.pageToken;
-        } while (nextPageToken);
-
-        console.log(`Total de usuários encontrados: ${allUsers.length}`);
-
-        const now = admin.firestore.Timestamp.now();
-        const cutoffTime = now.toMillis() - (72 * 60 * 60 * 1000); // 72 horas atrás
-
-        const promises = allUsers.map(async (userRecord) => {
-            const uid = userRecord.uid;
-
-            // Tentar obter o documento do usuário na coleção 'users'
-            let userDocRef = db.collection('users').doc(uid);
-            let userDoc = await userDocRef.get();
-
-            if (!userDoc.exists) {
-                // Se não encontrado em 'users', tentar em 'empresas'
-                userDocRef = db.collection('empresas').doc(uid);
-                userDoc = await userDocRef.get();
-
-                if (!userDoc.exists) {
-                    console.log(`Documento do usuário não encontrado para UID: ${uid}`);
-                    return;
-                }
-            }
-
-            const userData = userDoc.data();
-
-            if (!userData.lastActivity) {
-                console.log(`Campo 'lastActivity' ausente para UID: ${uid}`);
-                return;
-            }
-
-            const lastActivity = userData.lastActivity.toMillis();
-
-            if (lastActivity < cutoffTime) {
-                console.log(`Usuário inativo encontrado: UID=${uid}`);
-
-                // Revogar tokens para forçar logout
-                await admin.auth().revokeRefreshTokens(uid);
-                console.log(`Tokens revogados para UID: ${uid}`);
-
-                // Atualizar documento do usuário removendo fcmToken e sessionId
-                await userDocRef.update({
-                    fcmToken: admin.firestore.FieldValue.delete(),
-                    sessionId: admin.firestore.FieldValue.delete(),
-                });
-                console.log(`Campos 'fcmToken' e 'sessionId' removidos para UID: ${uid}`);
-            }
-        });
-
-        // Executar todas as promessas em paralelo
-        await Promise.all(promises);
-
-        console.log('Verificação de atividade concluída.');
-    } catch (error) {
-        console.error('Erro durante a verificação de atividade dos usuários:', error);
-    }
-
-    return null;
-});
-
-// Função para renovar o token (executada a cada minuto)
-exports.scheduledTokenRefresh = functions.pubsub.schedule('every 1 minutes')
-    .onRun(async (context) => {
-        try {
-            const docRef = admin.firestore().collection(META_CONFIG.collection).doc(META_CONFIG.docId);
-            const doc = await docRef.get();
-
-            if (!doc.exists) throw new Error('Documento de configuração não encontrado');
-
-            const data = doc.data();
-            const expiresAt = data.expiresAt || 0;
-
-            // Renova se expirar em menos de 5 minutos
-            if (Date.now() > (expiresAt - 300000)) {
-                const response = await axios.get(`${data[META_CONFIG.fields.baseUrl]}/oauth/access_token`, {
-                    params: {
-                        grant_type: 'fb_exchange_token',
-                        client_id: data[META_CONFIG.fields.clientId],
-                        client_secret: data[META_CONFIG.fields.clientSecret],
-                        fb_exchange_token: data[META_CONFIG.fields.refreshToken]
-                    }
-                });
-
-                await docRef.update({
-                    access_token: response.data.access_token,
-                    expiresAt: Date.now() + (response.data.expires_in * 1000),
-                    lastRefresh: admin.firestore.FieldValue.serverTimestamp()
-                });
-
-                console.log('Token renovado com sucesso!');
-            }
-            return null;
-        } catch (error) {
-            console.error('Erro na renovação do token:', error);
-            return null;
-        }
-    });
-
-// Endpoint para buscar insights (equivalente ao /dynamic_insights)
-exports.getInsights = functions.https.onRequest(async (req, res) => {
-  // Configura os headers de CORS para permitir requisições da Web
-  res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Methods', 'POST');
-  res.set('Access-Control-Allow-Headers', 'Content-Type');
-
-  // Se for uma requisição OPTIONS (preflight), encerre aqui
-  if (req.method === 'OPTIONS') {
-    return res.status(204).send('');
-  }
-
-  // Log de informações básicas da requisição
-  console.log("Request method:", req.method);
-  console.log("Request headers:", req.headers);
-  console.log("Raw body:", req.rawBody ? req.rawBody.toString() : "Nenhum rawBody");
-  console.log("Initial parsed body:", req.body);
-
-  // Se req.body estiver vazio mas req.rawBody existir, tenta fazer o parse manual
-  if ((!req.body || Object.keys(req.body).length === 0) && req.rawBody) {
-    try {
-      req.body = JSON.parse(req.rawBody.toString());
-      console.log("Parsed body from rawBody:", req.body);
-    } catch (e) {
-      console.error("Erro ao parsear rawBody:", e);
-      return res.status(400).json({
-        status: 'error',
-        message: 'Corpo da requisição inválido'
-      });
-    }
-  } else {
-    console.log("Body já preenchido:", req.body);
-  }
-
-  try {
-    console.log('Recebendo requisição para getInsights');
-
-    // Obtém os parâmetros da requisição
-    let { id, level, start_date, end_date } = req.body;
-    console.log("Parâmetros recebidos:", { id, level, start_date, end_date });
-
-    if (!id || !level || !start_date) {
-      console.log('Parâmetros obrigatórios faltando:', req.body);
-      return res.status(400).json({
-        status: 'error',
-        message: 'Parâmetros obrigatórios faltando'
-      });
-    }
-    // Se end_date não for informado, usa start_date
-    if (!end_date) {
-      end_date = start_date;
-      console.log("end_date não informado; usando start_date:", start_date);
-    }
-
-    if (!['account', 'campaign', 'adset'].includes(level.toLowerCase())) {
-      console.log("Nível inválido:", level);
-      return res.status(400).json({
-        status: 'error',
-        message: 'Nível inválido. Valores permitidos: account, campaign, adset'
-      });
-    }
-
-    console.log("Parâmetros validados:", { start_date, end_date });
-
-    // Busca as configurações (como base URL e access token)
-    const docRef = admin.firestore().collection(META_CONFIG.collection).doc(META_CONFIG.docId);
-    const doc = await docRef.get();
-    if (!doc.exists) {
-      console.log("Documento de configuração não encontrado");
-      return res.status(500).json({
-        status: 'error',
-        message: 'Configuração da API não encontrada'
-      });
-    }
-    const metaData = doc.data();
-    console.log("META_CONFIG:", metaData);
-
-    if (!metaData.access_token) {
-      console.log("Access Token está ausente.");
-      return res.status(400).json({
-        status: 'error',
-        code: 'MISSING_ACCESS_TOKEN',
-        message: 'Access Token está ausente. Por favor, tente novamente mais tarde.'
-      });
-    }
-
-    // Realiza a requisição para a API da Meta usando o intervalo de datas fornecido
-    const response = await axios.get(
-      `${metaData[META_CONFIG.fields.baseUrl]}/${id}/insights`,
-      {
-        params: {
-          access_token: metaData.access_token,
-          fields:
-            'reach,cpm,impressions,inline_link_clicks,cost_per_inline_link_click,clicks,cost_per_conversion,conversions,cpc,inline_post_engagement,spend,date_start,date_stop',
-          time_range: JSON.stringify({ since: start_date, until: end_date }),
-          time_increment: 1,
-          level: level.toLowerCase()
-        }
-      }
-    );
-
-    console.log("Resposta da API da Meta:", response.data);
-
-    // Se a API retornar insights (array com pelo menos 1 item)
-    if (
-      response.data &&
-      response.data.data &&
-      Array.isArray(response.data.data) &&
-      response.data.data.length > 0
-    ) {
-      const insightsArray = response.data.data;
-
-      // Agrega os dados ignorando os campos de data
-      const aggregatedInsights = insightsArray.reduce((acc, insight) => {
-        Object.keys(insight).forEach((key) => {
-          if (key === 'date_start' || key === 'date_stop') return;
-          const value = insight[key];
-          const numValue = parseFloat(value);
-          if (!isNaN(numValue)) {
-            acc[key] = (acc[key] || 0) + numValue;
-          } else {
-            if (!(key in acc)) {
-              acc[key] = value;
-            }
-          }
-        });
-        return acc;
-      }, {});
-
-      // Sobrescreve as datas com os valores recebidos na requisição
-      aggregatedInsights.date_start = start_date;
-      aggregatedInsights.date_stop = end_date;
-
-      return res.json({
-        status: 'success',
-        data: {
-          insights: [aggregatedInsights]
-        }
-      });
-    } else {
-      // Se nenhum insight for encontrado, retorna métricas zeradas com as datas informadas
-      console.log("Nenhum insight encontrado. Retornando objeto vazio com as datas selecionadas.");
-      const emptyInsights = {
-        reach: 0,
-        cpm: 0,
-        impressions: 0,
-        inline_link_clicks: 0,
-        cost_per_inline_link_click: 0,
-        clicks: 0,
-        cost_per_conversion: 0,
-        conversions: 0,
-        cpc: 0,
-        inline_post_engagement: 0,
-        spend: 0,
-        date_start: start_date,
-        date_stop: end_date
-      };
-      return res.json({
-        status: 'success',
-        data: {
-          insights: [emptyInsights]
-        }
-      });
-    }
-  } catch (error) {
-    console.error("Erro completo:", {
-      code: error.response?.status,
-      data: error.response?.data,
-      message: error.message
-    });
-    const statusCode = error.response?.status || 500;
-    const errorMessage = error.response?.data?.error?.message || 'Erro interno';
-    return res.status(statusCode).json({
-      status: 'error',
-      code: error.response?.data?.error?.code || 'UNKNOWN_ERROR',
-      message: errorMessage
-    });
-  }
-});
-
-// Helper para sanitizar dados da Meta
-const sanitizeMetaData = (data) => {
-    return Object.entries(data).reduce((acc, [key, value]) => {
-        // Converter tipos incompatíveis com Firestore
-        if (value instanceof Object && !(value instanceof Array)) {
-            acc[key] = sanitizeMetaData(value);
-        } else if (value !== undefined && value !== null) {
-            acc[key] = value;
-        }
-        return acc;
-    }, {});
-};
-
-// Função auxiliar para buscar opções para os selects
 exports.getSyncOptions = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
     }
 
-    const { level, bmId, adAccountId, campaignId } = data;
+    const {level, bmId, adAccountId, campaignId} = data;
 
     try {
         switch (level.toUpperCase()) {
@@ -1198,7 +670,7 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
     }
 
-    const { level, bmId, adAccountId, campaignId } = data;
+    const {level, bmId, adAccountId, campaignId} = data;
 
     // Log dos parâmetros recebidos
     console.log(`syncMetaData chamada com: level=${level}, bmId=${bmId}, adAccountId=${adAccountId}, campaignId=${campaignId}`);
@@ -1280,7 +752,7 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
                 });
                 console.log(`Recebidos ${bms.length} Business Managers.`);
                 await refreshFirestoreData('dashboard', bms, 'id', 'name');
-                result = { message: `${bms.length} BMs sincronizadas` };
+                result = {message: `${bms.length} BMs sincronizadas`};
                 break;
 
             case 'CONTA_ANUNCIO':
@@ -1352,7 +824,7 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
                 });
 
                 await adBatch.commit();
-                result = { message: `${adAccounts.length} contas sincronizadas` };
+                result = {message: `${adAccounts.length} contas sincronizadas`};
                 break;
 
             case 'CAMPANHA':
@@ -1434,7 +906,7 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
                 });
 
                 await campanhaBatch.commit();
-                result = { message: `${campaigns.length} campanhas sincronizadas` };
+                result = {message: `${campaigns.length} campanhas sincronizadas`};
                 break;
 
             case 'GRUPO_ANUNCIO':
@@ -1528,7 +1000,7 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
                 });
 
                 await grupoBatch.commit();
-                result = { message: `${adGroups.length} grupos de anúncio sincronizados` };
+                result = {message: `${adGroups.length} grupos de anúncio sincronizados`};
                 break;
 
             case 'INSIGHTS': {
@@ -1579,11 +1051,11 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
                 const adAccountInsightsRealId = adAccountData.id;
 
                 const insightsUrl = `${metaData[META_CONFIG.fields.baseUrl]}/${adAccountInsightsRealId}/insights`;
-                    const insights = await makeMetaRequest(insightsUrl, {
-                        fields: 'reach,cpm,impressions,inline_link_clicks,cost_per_inline_link_click,clicks,cpc,inline_post_engagement,spend',
-                        time_range: JSON.stringify({ since: dateStr, until: dateStr }), // <--- Data dinâmica
-                        time_increment: 1
-                    });
+                const insights = await makeMetaRequest(insightsUrl, {
+                    fields: 'reach,cpm,impressions,inline_link_clicks,cost_per_inline_link_click,clicks,cpc,inline_post_engagement,spend',
+                    time_range: JSON.stringify({since: dateStr, until: dateStr}), // <--- Data dinâmica
+                    time_increment: 1
+                });
 
                 // 6. Salvar no Firestore
                 const insightsRef = admin.firestore().collection('dashboard').doc(bmDocInsights.id)
@@ -1594,7 +1066,7 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
                 await insightsRef.doc(dateStr).set({
                     ...insights[0],
                     syncDate: admin.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
+                }, {merge: true});
 
                 result = {
                     message: `Insights de ${dateStr} salvos com sucesso`,
@@ -1626,5 +1098,153 @@ exports.syncMetaData = functions.https.onCall(async (data, context) => {
             error.message,
             error.details
         );
+    }
+});
+
+const corsHandler = cors({
+    origin: '*', // Permite todas as origens
+    methods: ['POST', 'OPTIONS'], // Métodos permitidos
+    allowedHeaders: ['Content-Type'], // Cabeçalhos permitidos
+});
+
+exports.addLead = functions.https.onRequest((req, res) => {
+    corsHandler(req, res, async () => {
+        try {
+            // Extraímos os campos essenciais e o restante dos dados enviados
+            const {empresa_id, nome_campanha, redirect_url, ...rest} = req.body;
+
+            // Validação dos campos necessários
+            if (!empresa_id || !nome_campanha || !rest.whatsapp) {
+                res.status(400).json({message: 'empresa_id, nome_campanha e whatsapp são necessários.'});
+                return;
+            }
+
+            // Cria a referência para a coleção de leads
+            const leadsCollectionRef = admin
+                .firestore()
+                .collection('empresas')
+                .doc(empresa_id)
+                .collection('campanhas')
+                .doc(nome_campanha)
+                .collection('leads');
+
+            // Calcula o timestamp de 5 minutos atrás
+            const cincoMinutosAtras = admin.firestore.Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000));
+
+            // Verifica se já existe um lead com o mesmo WhatsApp nos últimos 5 minutos
+            const snapshot = await leadsCollectionRef
+                .where('whatsapp', '==', rest.whatsapp)
+                .where('timestamp', '>=', cincoMinutosAtras)
+                .limit(1)
+                .get();
+
+            if (!snapshot.empty) {
+                // Já existe um lead com esse WhatsApp nos últimos 5 minutos
+                res.status(409).json({message: 'Já existe uma resposta com este número de WhatsApp nos últimos 5 minutos.'});
+                return;
+            }
+
+            // Monta os dados do lead incluindo todos os campos enviados,
+            // além de adicionar os campos "status" e "timestamp"
+            const leadData = {
+                ...rest,
+                status: 'Aguardando',
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            };
+
+            await leadsCollectionRef.add(leadData);
+
+            // Retorna a URL de redirecionamento
+            res.status(200).json({message: 'Resposta enviada com sucesso.', redirectUrl: redirect_url});
+        } catch (error) {
+            console.error('Erro ao enviar resposta:', error);
+            res.status(500).json({message: 'Erro ao enviar resposta.'});
+        }
+    });
+});
+
+exports.getEmpresaCampanha = functions.https.onRequest(async (req, res) => {
+    try {
+        const {empresaId} = req.query;
+
+        // Fetch the Empresa data
+        const empresaDoc = await admin.firestore().collection('empresas').doc(empresaId).get();
+        if (!empresaDoc.exists) {
+            return res.status(404).json({error: 'Empresa not found'});
+        }
+        const empresaData = empresaDoc.data();
+
+        // Fetch all Campanha data within the Empresa
+        const campanhasSnapshot = await admin.firestore().collection('empresas').doc(empresaId).collection().get();
+        const campanhasData = campanhasSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
+
+        return res.status(200).json({
+            empresa: empresaData,
+            campanhas: campanhasData,
+        });
+    } catch (error) {
+        console.error('Error fetching data:', error);
+        return res.status(500).json({error: 'Internal Server Error'});
+    }
+});
+
+// Funções CRUD para a coleção de empresas
+
+// Read (Ler todas as empresas)
+exports.getCompanies = functions.https.onRequest(async (req, res) => {
+    try {
+        const snapshot = await admin.firestore().collection('empresas').get();
+        const companies = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
+
+        res.status(200).json(companies);
+    } catch (error) {
+        console.error("Error getting companies: ", error);
+        res.status(500).send("Erro ao buscar empresas");
+    }
+});
+
+// Update (Atualizar uma empresa existente)
+exports.updateCompany = functions.https.onRequest(async (req, res) => {
+    try {
+        console.log('Recebendo dados:', req.body);
+
+        const {
+            companyId,
+            NomeEmpresa,
+            contract,
+            countArtsValue,
+            countVideosValue,
+            dashboard,
+            leads,
+            gerenciarColaboradores,
+            gerenciarParceiros
+        } = req.body;
+
+        // Verifique se todos os campos obrigatórios estão presentes
+        if (!companyId || !NomeEmpresa || !contract) {
+            return res.status(400).send('Missing companyId, NomeEmpresa, or contract');
+        }
+
+        const updateData = {
+            NomeEmpresa: NomeEmpresa,
+            contract: contract,
+            countArtsValue: countArtsValue,
+            countVideosValue: countVideosValue,
+            dashboard: dashboard,
+            leads: leads,
+            gerenciarColaboradores: gerenciarColaboradores,
+            gerenciarParceiros: gerenciarParceiros,
+        };
+
+        console.log('Dados para atualizar:', updateData);
+
+        // Atualize a empresa no Firestore
+        const docRef = admin.firestore().collection('empresas').doc(companyId);
+        await docRef.update(updateData);
+
+        res.status(200).send({success: true, message: "Empresa atualizada com sucesso!"});
+    } catch (error) {
+        console.error("Error updating company:", error);
+        res.status(500).send("Erro ao atualizar empresa");
     }
 });
