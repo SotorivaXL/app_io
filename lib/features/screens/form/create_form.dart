@@ -584,190 +584,215 @@ class _CreateFormState extends State<CreateForm> {
   Widget _buildDynamicFields(BuildContext context) {
     final bool isDesktop = MediaQuery.of(context).size.width > 1024;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 61),
-      child: GridView.builder(
-        shrinkWrap: true, // Para evitar conflitos com o SingleChildScrollView
-        physics: const NeverScrollableScrollPhysics(), // Desabilita o scroll interno
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: isDesktop ? 4 : 1, // 4 campos por linha no desktop, 1 no mobile
-          crossAxisSpacing: 10, // Espaçamento horizontal entre os campos
-          mainAxisSpacing: 10, // Espaçamento vertical entre os campos
-          childAspectRatio: 1.5, // Ajusta a proporção para campos mais compactos
+    // Função auxiliar para construir o card de cada campo
+    Widget buildFieldCard(int index) {
+      final fieldData = _fields[index];
+      return Card(
+        color: Theme.of(context).colorScheme.secondary,
+        elevation: 3,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
         ),
-        itemCount: _fields.length,
-        itemBuilder: (context, index) {
-          final fieldData = _fields[index];
-          return Card(
-            color: Theme.of(context).colorScheme.secondary,
-            elevation: 3,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 10), // Reduzi o padding interno
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center, // Centraliza horizontalmente
-                children: [
-                  const SizedBox(height: 15), // Reduzi o espaçamento
-                  // CAMPO DO NOME
-                  TextFormField(
-                    controller: fieldData.nameController,
-                    readOnly: fieldData.isLocked,
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Theme.of(context).colorScheme.background,
-                      hintText: 'Nome do Campo',
-                      hintStyle: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 14,
-                        color: Theme.of(context).colorScheme.onSecondary,
-                      ),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12.0, vertical: 8), // Ajuste no padding interno
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // CAMPO DO NOME
+              TextFormField(
+                controller: fieldData.nameController,
+                readOnly: fieldData.isLocked,
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.background,
+                  hintText: 'Nome do Campo',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 14,
+                    color: Theme.of(context).colorScheme.onSecondary,
                   ),
-                  const SizedBox(height: 8), // Reduzi o espaçamento
-                  // CAMPO DO HINT
-                  TextFormField(
-                    controller: fieldData.hintController,
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Theme.of(context).colorScheme.background,
-                      hintText: 'Hint do Campo',
-                      hintStyle: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 14,
-                        color: Theme.of(context).colorScheme.onSecondary,
-                      ),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12.0, vertical: 8), // Ajuste no padding interno
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
+                  contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
                   ),
-                  const SizedBox(height: 8), // Reduzi o espaçamento
-                  // DROPDOWN MÁSCARA
-                  DropdownButtonFormField<String>(
-                    value: fieldData.mask,
-                    onChanged: fieldData.isLocked
-                        ? null
-                        : (value) {
-                      setState(() {
-                        fieldData.mask = value ?? '';
-                      });
-                    },
-                    dropdownColor: Theme.of(context).colorScheme.background,
-                    items: [
-                      {'label': 'Nenhuma', 'value': ''},
-                      {'label': 'Telefone', 'value': 'phone'},
-                      {'label': 'CPF', 'value': 'cpf'},
-                      {'label': 'CNPJ', 'value': 'cnpj'},
-                      {'label': 'Data', 'value': 'date'},
-                      {'label': 'Email', 'value': 'email'},
-                    ].map((maskOption) {
-                      return DropdownMenuItem<String>(
-                        value: maskOption['value'],
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 10.0),
-                          child: Text(
-                            maskOption['label']!,
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 14,
-                              color: Theme.of(context).colorScheme.onSecondary,
-                            ),
-                          ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // CAMPO DO HINT
+              TextFormField(
+                controller: fieldData.hintController,
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.background,
+                  hintText: 'Hint do Campo',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 14,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                  contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // DROPDOWN MÁSCARA
+              DropdownButtonFormField<String>(
+                value: fieldData.mask,
+                onChanged: fieldData.isLocked
+                    ? null
+                    : (value) {
+                  setState(() {
+                    fieldData.mask = value ?? '';
+                  });
+                },
+                dropdownColor: Theme.of(context).colorScheme.background,
+                items: [
+                  {'label': 'Nenhuma', 'value': ''},
+                  {'label': 'Telefone', 'value': 'phone'},
+                  {'label': 'CPF', 'value': 'cpf'},
+                  {'label': 'CNPJ', 'value': 'cnpj'},
+                  {'label': 'Data', 'value': 'date'},
+                  {'label': 'Email', 'value': 'email'},
+                ].map((maskOption) {
+                  return DropdownMenuItem<String>(
+                    value: maskOption['value'],
+                    child: Padding(
+                      padding: EdgeInsets.zero,
+                      child: Text(
+                        maskOption['label']!,
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSecondary,
                         ),
-                      );
-                    }).toList(),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Theme.of(context).colorScheme.background,
-                      hintText: 'Máscara',
-                      hintStyle: TextStyle(
+                      ),
+                    ),
+                  );
+                }).toList(),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.background,
+                  hintText: 'Máscara',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                  contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // GRADIENTE
+              Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.background,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding:
+                const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Gradiente',
+                      style: TextStyle(
                         fontFamily: 'Poppins',
-                        fontSize: 12,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
                         color: Theme.of(context).colorScheme.onSecondary,
                       ),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12.0, vertical: 8), // Ajuste no padding interno
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide.none,
-                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8), // Reduzi o espaçamento
-                  // GRADIENTE
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.background,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    Row(
                       children: [
-                        Text(
-                          'Gradiente',
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 12,
-                            color: Theme.of(context).colorScheme.onSecondary,
+                        GestureDetector(
+                          onTap: () => _pickFieldStartColor(index),
+                          child: Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: _fields[index].fieldStartColor,
+                              shape: BoxShape.circle,
+                            ),
                           ),
                         ),
-                        Row(
-                          children: [
-                            GestureDetector(
-                              onTap: () => _pickFieldStartColor(index),
-                              child: Container(
-                                width: 20,
-                                height: 20,
-                                decoration: BoxDecoration(
-                                  color: _fields[index].fieldStartColor,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: () => _pickFieldEndColor(index),
+                          child: Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: _fields[index].fieldEndColor,
+                              shape: BoxShape.circle,
                             ),
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: () => _pickFieldEndColor(index),
-                              child: Container(
-                                width: 20,
-                                height: 20,
-                                decoration: BoxDecoration(
-                                  color: _fields[index].fieldEndColor,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 8), // Reduzi o espaçamento
-                  // ÍCONE DE DELETAR
-                  Center(
-                    child: IconButton(
-                      icon: Icon(
-                        Icons.delete,
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                      onPressed: () => _removeField(index),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          );
-        },
-      ),
-    );
+              const SizedBox(height: 8),
+              // ÍCONE DE DELETAR
+              Center(
+                child: IconButton(
+                  icon: Icon(
+                    Icons.delete,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  onPressed: () => _removeField(index),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (!isDesktop) {
+      // Layout mobile: os cards ocupam toda a largura disponível e têm altura flexível.
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Column(
+          children: List.generate(_fields.length, (index) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: buildFieldCard(index),
+            );
+          }),
+        ),
+      );
+    } else {
+      // Layout desktop: usa grid com 4 colunas.
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 61),
+        child: GridView.builder(
+          shrinkWrap: true, // Evita conflitos com o SingleChildScrollView
+          physics: const NeverScrollableScrollPhysics(), // Desabilita o scroll interno
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 4, // 4 campos por linha no desktop
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+          ),
+          itemCount: _fields.length,
+          itemBuilder: (context, index) {
+            return buildFieldCard(index);
+          },
+        ),
+      );
+    }
   }
 
   Widget _buildStyleOptions(BuildContext context) {
@@ -1193,19 +1218,19 @@ class _CreateFormState extends State<CreateForm> {
         _fields.addAll([
           FieldData(
             nameController: TextEditingController(text: 'nome'),
-            hintController: TextEditingController(text: 'Insira seu nome'),
+            hintController: TextEditingController(text: 'Digite seu nome'),
             mask: '', // sem máscara
             isLocked: true, // travado
           ),
           FieldData(
             nameController: TextEditingController(text: 'whatsapp'),
-            hintController: TextEditingController(text: 'Insira seu WhatsApp'),
+            hintController: TextEditingController(text: 'Digite seu WhatsApp'),
             mask: 'phone', // máscara de telefone
             isLocked: true, // travado
           ),
           FieldData(
             nameController: TextEditingController(text: 'email'),
-            hintController: TextEditingController(text: 'Insira seu Email'),
+            hintController: TextEditingController(text: 'digite seu E-mail'),
             mask: 'email', // máscara de email
             isLocked: true, // travado
           ),

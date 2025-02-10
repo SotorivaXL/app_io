@@ -578,228 +578,244 @@ class _EditFormState extends State<EditFormPage> {
   }
 
   Widget _buildDynamicFields(BuildContext context) {
-    // Para a edição, usamos uma grade que exibe os campos de forma organizada
     bool isDesktop = MediaQuery.of(context).size.width > 1024;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: GridView.builder(
+    Widget buildFieldCard(int index) {
+      final fieldData = _fields[index];
+      return Card(
+        color: Theme.of(context).colorScheme.secondary,
+        elevation: 3,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const SizedBox(height: 15),
+              // Campo: Nome do Campo
+              TextFormField(
+                controller: fieldData.nameController,
+                readOnly: false,
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.background,
+                  hintText: 'Nome do Campo',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 14,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                  contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Campo: Hint do Campo
+              TextFormField(
+                controller: fieldData.hintController,
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.background,
+                  hintText: 'Hint do Campo',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 14,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                  contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Campo: Dropdown para Máscara
+              DropdownButtonFormField<String>(
+                value: fieldData.mask,
+                onChanged: (value) {
+                  setState(() {
+                    fieldData.mask = value ?? '';
+                  });
+                },
+                dropdownColor: Theme.of(context).colorScheme.background,
+                items: [
+                  {'label': 'Nenhuma', 'value': ''},
+                  {'label': 'Telefone', 'value': 'phone'},
+                  {'label': 'CPF', 'value': 'cpf'},
+                  {'label': 'CNPJ', 'value': 'cnpj'},
+                  {'label': 'Data', 'value': 'date'},
+                  {'label': 'Email', 'value': 'email'},
+                ].map((maskOption) {
+                  return DropdownMenuItem<String>(
+                    value: maskOption['value'],
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                      child: Text(
+                        maskOption['label']!,
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          color: Theme.of(context).colorScheme.onSecondary,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.background,
+                  hintText: 'Máscara',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                  contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Campo: Arredondamento da Borda
+              TextFormField(
+                controller: TextEditingController(
+                    text: fieldData.borderRadius.toString()),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.background,
+                  hintText: 'Ex: 8.0',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 16,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                  contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 20.0, vertical: 15.0),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+                onChanged: (value) {
+                  setState(() {
+                    fieldData.borderRadius = double.tryParse(value) ?? 8.0;
+                  });
+                },
+              ),
+              const SizedBox(height: 8),
+              // Campo: Gradiente do Campo
+              Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.background,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding:
+                const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Gradiente',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSecondary,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () => _pickFieldStartColor(index),
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: _fields[index].fieldStartColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: () => _pickFieldEndColor(index),
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: _fields[index].fieldEndColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Ícone de deletar
+              Center(
+                child: IconButton(
+                  icon: Icon(
+                    Icons.delete,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  onPressed: () => _removeField(index),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (!isDesktop) {
+      // Layout mobile: os cards ocupam toda a largura disponível.
+      return Container(
+        width: MediaQuery.of(context).size.width,
+        // Removendo ou reduzindo o padding horizontal para aumentar a largura dos cards
+        child: Column(
+          children: List.generate(_fields.length, (index) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: buildFieldCard(index),
+            );
+          }),
+        ),
+      );
+    } else {
+      // Layout desktop: exibe os campos em uma grade com 4 colunas.
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: isDesktop ? 4 : 1,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 4,
             crossAxisSpacing: 10,
             mainAxisSpacing: 10,
             childAspectRatio: 1.25,
           ),
           itemCount: _fields.length,
           itemBuilder: (context, index) {
-            final fieldData = _fields[index];
-            return Card(
-              color: Theme.of(context).colorScheme.secondary,
-              elevation: 3,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const SizedBox(height: 15),
-                    // Campo: Nome do Campo
-                    TextFormField(
-                      controller: fieldData.nameController,
-                      readOnly: false,
-                      // Na edição, você pode permitir edição se desejar
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Theme.of(context).colorScheme.background,
-                        hintText: 'Nome do Campo',
-                        hintStyle: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          color: Theme.of(context).colorScheme.onSecondary,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12.0, vertical: 8),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    // Campo: Hint do Campo
-                    TextFormField(
-                      controller: fieldData.hintController,
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Theme.of(context).colorScheme.background,
-                        hintText: 'Hint do Campo',
-                        hintStyle: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          color: Theme.of(context).colorScheme.onSecondary,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12.0, vertical: 8),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    // Campo: Dropdown para Máscara
-                    DropdownButtonFormField<String>(
-                      value: fieldData.mask,
-                      onChanged: (value) {
-                        setState(() {
-                          fieldData.mask = value ?? '';
-                        });
-                      },
-                      dropdownColor: Theme.of(context).colorScheme.background,
-                      items: [
-                        {'label': 'Nenhuma', 'value': ''},
-                        {'label': 'Telefone', 'value': 'phone'},
-                        {'label': 'CPF', 'value': 'cpf'},
-                        {'label': 'CNPJ', 'value': 'cnpj'},
-                        {'label': 'Data', 'value': 'date'},
-                        {'label': 'Email', 'value': 'email'},
-                      ].map((maskOption) {
-                        return DropdownMenuItem<String>(
-                          value: maskOption['value'],
-                          child: Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 10.0),
-                            child: Text(
-                              maskOption['label']!,
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 14,
-                                color:
-                                    Theme.of(context).colorScheme.onSecondary,
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Theme.of(context).colorScheme.background,
-                        hintText: 'Máscara',
-                        hintStyle: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 12,
-                          color: Theme.of(context).colorScheme.onSecondary,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12.0, vertical: 8),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    // Campo: Arredondamento da Borda
-                    TextFormField(
-                      controller: TextEditingController(
-                          text: fieldData.borderRadius.toString()),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Theme.of(context).colorScheme.background,
-                        hintText: 'Ex: 8.0',
-                        hintStyle: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 16,
-                          color: Theme.of(context).colorScheme.onSecondary,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20.0, vertical: 15.0),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                      keyboardType:
-                          TextInputType.numberWithOptions(decimal: true),
-                      onChanged: (value) {
-                        setState(() {
-                          fieldData.borderRadius =
-                              double.tryParse(value) ?? 8.0;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    // Campo: Gradiente do Campo
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.background,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 8.0, horizontal: 12.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Gradiente',
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 12,
-                              color: Theme.of(context).colorScheme.onSecondary,
-                            ),
-                          ),
-                          Row(
-                            children: [
-                              GestureDetector(
-                                onTap: () => _pickFieldStartColor(index),
-                                child: Container(
-                                  width: 20,
-                                  height: 20,
-                                  decoration: BoxDecoration(
-                                    color: _fields[index].fieldStartColor,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              GestureDetector(
-                                onTap: () => _pickFieldEndColor(index),
-                                child: Container(
-                                  width: 20,
-                                  height: 20,
-                                  decoration: BoxDecoration(
-                                    color: _fields[index].fieldEndColor,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    // Ícone de deletar
-                    Center(
-                      child: IconButton(
-                        icon: Icon(
-                          Icons.delete,
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                        onPressed: () => _removeField(index),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-    );
+            return buildFieldCard(index);
+          },
+        ),
+      );
+    }
   }
 
   Widget _buildStyleOptions(BuildContext context) {
