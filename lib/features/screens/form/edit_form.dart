@@ -591,13 +591,52 @@ class _EditFormState extends State<EditFormPage> {
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
           child: Column(
+            spacing: 10,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 15),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Tooltip(
+                    triggerMode: TooltipTriggerMode.tap,
+                    richMessage: TextSpan(
+                      children: [
+                        WidgetSpan(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(maxWidth: 200), // Limita a largura
+                            child: Text(
+                              "Aviso: use '_' no lugar de espaço e letras minúsculas apenas.",
+                              style: TextStyle(
+                                color: Colors.white, // Cor do texto
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.secondary,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: CircleAvatar(
+                      backgroundColor: Colors.orange,
+                      radius: 12,
+                      child: Icon(
+                        Icons.warning,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               // Campo: Nome do Campo
               TextFormField(
                 controller: fieldData.nameController,
                 readOnly: false,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[a-z_]')),
+                ],
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: Theme.of(context).colorScheme.background,
@@ -615,7 +654,6 @@ class _EditFormState extends State<EditFormPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
               // Campo: Hint do Campo
               TextFormField(
                 controller: fieldData.hintController,
@@ -636,7 +674,6 @@ class _EditFormState extends State<EditFormPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
               // Campo: Dropdown para Máscara
               DropdownButtonFormField<String>(
                 value: fieldData.mask,
@@ -686,7 +723,6 @@ class _EditFormState extends State<EditFormPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
               // Campo: Arredondamento da Borda
               TextFormField(
                 controller: TextEditingController(
@@ -715,7 +751,6 @@ class _EditFormState extends State<EditFormPage> {
                   });
                 },
               ),
-              const SizedBox(height: 8),
               // Campo: Gradiente do Campo
               Container(
                 decoration: BoxDecoration(
@@ -765,7 +800,6 @@ class _EditFormState extends State<EditFormPage> {
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
               // Ícone de deletar
               Center(
                 child: IconButton(
@@ -1704,6 +1738,22 @@ class _EditFormState extends State<EditFormPage> {
           'Por favor, selecione uma empresa, uma campanha, insira o nome do formulário e a URL de redirecionamento!',
           'Atenção');
       return;
+    }
+
+    // Validação dos nomes dos campos
+    final RegExp validNamePattern = RegExp(r'^[a-z]+(?:_[a-z]+)*$');
+    for (int i = 0; i < _fields.length; i++) {
+      String fieldName = _fields[i].nameController.text;
+      if (!validNamePattern.hasMatch(fieldName)) {
+        showErrorDialog(
+            context,
+            "O nome do campo '$fieldName' é inválido. Use apenas letras minúsculas e separe as palavras com '_' (sem espaços).",
+            "Erro de Validação");
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
     }
 
     setState(() {

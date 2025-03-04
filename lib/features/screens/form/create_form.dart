@@ -71,7 +71,8 @@ class _CreateFormState extends State<CreateForm> {
 
   Future<void> _loadEmpresas() async {
     try {
-      List<Map<String, dynamic>> empresas = await _firestoreService.getEmpresas();
+      List<Map<String, dynamic>> empresas =
+          await _firestoreService.getEmpresas();
       setState(() {
         _empresas = empresas;
       });
@@ -83,7 +84,7 @@ class _CreateFormState extends State<CreateForm> {
   Future<void> _loadCampanhas(String empresaId) async {
     try {
       List<Map<String, dynamic>> campanhas =
-      await _firestoreService.getCampanhas(empresaId);
+          await _firestoreService.getCampanhas(empresaId);
       setState(() {
         _campanhas = campanhas;
         _selectedCampanhaId = null; // Resetar a campanha quando a empresa muda
@@ -196,98 +197,114 @@ class _CreateFormState extends State<CreateForm> {
                     padding: const EdgeInsets.all(20.0),
                     child: isDesktop
                         ? Center(
-                      child: Container(
-                        constraints: BoxConstraints(maxWidth: 1800), // Largura máxima
-                        child: TextFormField(
-                          controller: _formNameController,
-                          decoration: InputDecoration(
-                            hintText: 'Nome do Formulário',
-                            hintStyle: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              color: Theme.of(context).colorScheme.onSecondary,
+                            child: Container(
+                              constraints: BoxConstraints(maxWidth: 1800),
+                              // Largura máxima
+                              child: TextFormField(
+                                controller: _formNameController,
+                                decoration: InputDecoration(
+                                  hintText: 'Nome do Formulário',
+                                  hintStyle: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
+                                  ),
+                                  contentPadding:
+                                      EdgeInsets.symmetric(horizontal: 20.0),
+                                  filled: true,
+                                  fillColor:
+                                      Theme.of(context).colorScheme.secondary,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
+                              ),
                             ),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 20.0),
-                            filled: true,
-                            fillColor: Theme.of(context).colorScheme.secondary,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide.none,
+                          )
+                        : TextFormField(
+                            controller: _formNameController,
+                            decoration: InputDecoration(
+                              hintText: 'Nome do Formulário',
+                              hintStyle: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                color:
+                                    Theme.of(context).colorScheme.onSecondary,
+                              ),
+                              contentPadding:
+                                  EdgeInsets.symmetric(horizontal: 20.0),
+                              filled: true,
+                              fillColor:
+                                  Theme.of(context).colorScheme.secondary,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide.none,
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                    )
-                        : TextFormField(
-                      controller: _formNameController,
-                      decoration: InputDecoration(
-                        hintText: 'Nome do Formulário',
-                        hintStyle: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          color: Theme.of(context).colorScheme.onSecondary,
-                        ),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 20.0),
-                        filled: true,
-                        fillColor: Theme.of(context).colorScheme.secondary,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
                   ),
 
                   Padding(
                     padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 10),
                     child: isDesktop
                         ? Center(
-                      child: Container(
-                        constraints: BoxConstraints(maxWidth: 1800), // Largura máxima
-                        child: TextFormField(
-                          controller: _redirectUrlController,
-                          decoration: InputDecoration(
-                            hintText: 'URL de Redirecionamento',
-                            hintStyle: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              color: Theme.of(context).colorScheme.onSecondary,
+                            child: Container(
+                              constraints: BoxConstraints(maxWidth: 1800),
+                              // Largura máxima
+                              child: TextFormField(
+                                controller: _redirectUrlController,
+                                decoration: InputDecoration(
+                                  hintText: 'URL de Redirecionamento',
+                                  hintStyle: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
+                                  ),
+                                  contentPadding:
+                                      EdgeInsets.symmetric(horizontal: 20.0),
+                                  filled: true,
+                                  fillColor:
+                                      Theme.of(context).colorScheme.secondary,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
+                                keyboardType: TextInputType.url,
+                              ),
                             ),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 20.0),
-                            filled: true,
-                            fillColor: Theme.of(context).colorScheme.secondary,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                          keyboardType: TextInputType.url,
-                        ),
-                      ),
-                    )
+                          )
                         : TextFormField(
-                      controller: _redirectUrlController,
-                      decoration: InputDecoration(
-                        hintText: 'URL de Redirecionamento',
-                        hintStyle: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          color: Theme.of(context).colorScheme.onSecondary,
-                        ),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 20.0),
-                        filled: true,
-                        fillColor: Theme.of(context).colorScheme.secondary,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                      keyboardType: TextInputType.url,
-                    ),
+                            controller: _redirectUrlController,
+                            decoration: InputDecoration(
+                              hintText: 'URL de Redirecionamento',
+                              hintStyle: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                color:
+                                    Theme.of(context).colorScheme.onSecondary,
+                              ),
+                              contentPadding:
+                                  EdgeInsets.symmetric(horizontal: 20.0),
+                              filled: true,
+                              fillColor:
+                                  Theme.of(context).colorScheme.secondary,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                            keyboardType: TextInputType.url,
+                          ),
                   ),
                   const SizedBox(height: 15),
                   // Campos dinâmicos
@@ -307,7 +324,8 @@ class _CreateFormState extends State<CreateForm> {
                             onPressed: _generateHtmlForm,
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 15),
-                              backgroundColor: Theme.of(context).colorScheme.primary,
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.primary,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(25),
                               ),
@@ -329,7 +347,8 @@ class _CreateFormState extends State<CreateForm> {
                             onPressed: _clearForm,
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 15),
-                              backgroundColor: Theme.of(context).colorScheme.primary,
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.primary,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(25),
                               ),
@@ -373,98 +392,108 @@ class _CreateFormState extends State<CreateForm> {
                   padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
                   child: isDesktop
                       ? Center(
-                    child: Container(
-                      constraints: BoxConstraints(maxWidth: 1800), // Largura máxima
-                      child: DropdownButtonFormField<String>(
-                        value: _selectedEmpresaId,
-                        onChanged: (val) {
-                          setState(() {
-                            _selectedEmpresaId = val;
-                            _loadCampanhas(val!);
-                          });
-                        },
-                        items: _empresas.map((empresa) {
-                          return DropdownMenuItem<String>(
-                            value: empresa['id'] as String?,
-                            child: Text(
-                              empresa['NomeEmpresa'] != null
-                                  ? empresa['NomeEmpresa'] as String
-                                  : 'Nome não disponível',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontWeight: FontWeight.w500,
-                                fontSize: 16,
-                                color: Theme.of(context).colorScheme.onSecondary,
+                          child: Container(
+                            constraints: BoxConstraints(maxWidth: 1800),
+                            // Largura máxima
+                            child: DropdownButtonFormField<String>(
+                              value: _selectedEmpresaId,
+                              onChanged: (val) {
+                                setState(() {
+                                  _selectedEmpresaId = val;
+                                  _loadCampanhas(val!);
+                                });
+                              },
+                              items: _empresas.map((empresa) {
+                                return DropdownMenuItem<String>(
+                                  value: empresa['id'] as String?,
+                                  child: Text(
+                                    empresa['NomeEmpresa'] != null
+                                        ? empresa['NomeEmpresa'] as String
+                                        : 'Nome não disponível',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 16,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSecondary,
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor:
+                                    Theme.of(context).colorScheme.secondary,
+                                contentPadding: EdgeInsetsDirectional.fromSTEB(
+                                    20, 0, 20, 0),
+                                border: UnderlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
+                                ),
                               ),
+                              hint: Text(
+                                'Selecione a empresa...',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  color:
+                                      Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                              dropdownColor:
+                                  Theme.of(context).colorScheme.background,
                             ),
-                          );
-                        }).toList(),
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: Theme.of(context).colorScheme.secondary,
-                          contentPadding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
-                          border: UnderlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide.none,
                           ),
-                        ),
-                        hint: Text(
-                          'Selecione a empresa...',
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                            color: Theme.of(context).colorScheme.onSecondary,
-                          ),
-                        ),
-                        dropdownColor: Theme.of(context).colorScheme.background,
-                      ),
-                    ),
-                  )
+                        )
                       : DropdownButtonFormField<String>(
-                    value: _selectedEmpresaId,
-                    onChanged: (val) {
-                      setState(() {
-                        _selectedEmpresaId = val;
-                        _loadCampanhas(val!);
-                      });
-                    },
-                    items: _empresas.map((empresa) {
-                      return DropdownMenuItem<String>(
-                        value: empresa['id'] as String?,
-                        child: Text(
-                          empresa['NomeEmpresa'] != null
-                              ? empresa['NomeEmpresa'] as String
-                              : 'Nome não disponível',
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontWeight: FontWeight.w500,
-                            fontSize: 16,
-                            color: Theme.of(context).colorScheme.onSecondary,
+                          value: _selectedEmpresaId,
+                          onChanged: (val) {
+                            setState(() {
+                              _selectedEmpresaId = val;
+                              _loadCampanhas(val!);
+                            });
+                          },
+                          items: _empresas.map((empresa) {
+                            return DropdownMenuItem<String>(
+                              value: empresa['id'] as String?,
+                              child: Text(
+                                empresa['NomeEmpresa'] != null
+                                    ? empresa['NomeEmpresa'] as String
+                                    : 'Nome não disponível',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 16,
+                                  color:
+                                      Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Theme.of(context).colorScheme.secondary,
+                            contentPadding:
+                                EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                            border: UnderlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
                           ),
+                          hint: Text(
+                            'Selecione a empresa...',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                          dropdownColor:
+                              Theme.of(context).colorScheme.background,
                         ),
-                      );
-                    }).toList(),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Theme.of(context).colorScheme.secondary,
-                      contentPadding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
-                      border: UnderlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                    hint: Text(
-                      'Selecione a empresa...',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: Theme.of(context).colorScheme.onSecondary,
-                      ),
-                    ),
-                    dropdownColor: Theme.of(context).colorScheme.background,
-                  ),
                 ),
               ),
             ],
@@ -480,98 +509,108 @@ class _CreateFormState extends State<CreateForm> {
                   padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
                   child: isDesktop
                       ? Center(
-                    child: Container(
-                      constraints: BoxConstraints(maxWidth: 1800), // Largura máxima
-                      child: DropdownButtonFormField<String>(
-                        value: _selectedCampanhaId,
-                        onChanged: (val) {
-                          setState(() {
-                            _selectedCampanhaId = val;
-                          });
-                        },
-                        items: _campanhas.map((campanha) {
-                          final nomeCampanha = campanha['nome_campanha'];
-                          return DropdownMenuItem<String>(
-                            value: campanha['id'] as String?,
-                            child: Text(
-                              nomeCampanha != null
-                                  ? nomeCampanha as String
-                                  : 'Nome não disponível',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontWeight: FontWeight.w500,
-                                fontSize: 16,
-                                color: Theme.of(context).colorScheme.onSecondary,
+                          child: Container(
+                            constraints: BoxConstraints(maxWidth: 1800),
+                            // Largura máxima
+                            child: DropdownButtonFormField<String>(
+                              value: _selectedCampanhaId,
+                              onChanged: (val) {
+                                setState(() {
+                                  _selectedCampanhaId = val;
+                                });
+                              },
+                              items: _campanhas.map((campanha) {
+                                final nomeCampanha = campanha['nome_campanha'];
+                                return DropdownMenuItem<String>(
+                                  value: campanha['id'] as String?,
+                                  child: Text(
+                                    nomeCampanha != null
+                                        ? nomeCampanha as String
+                                        : 'Nome não disponível',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 16,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSecondary,
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor:
+                                    Theme.of(context).colorScheme.secondary,
+                                contentPadding: EdgeInsetsDirectional.fromSTEB(
+                                    20, 0, 20, 0),
+                                border: UnderlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
+                                ),
                               ),
+                              hint: Text(
+                                'Selecione a campanha...',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  color:
+                                      Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                              dropdownColor:
+                                  Theme.of(context).colorScheme.background,
                             ),
-                          );
-                        }).toList(),
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: Theme.of(context).colorScheme.secondary,
-                          contentPadding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
-                          border: UnderlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide.none,
                           ),
-                        ),
-                        hint: Text(
-                          'Selecione a campanha...',
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                            color: Theme.of(context).colorScheme.onSecondary,
-                          ),
-                        ),
-                        dropdownColor: Theme.of(context).colorScheme.background,
-                      ),
-                    ),
-                  )
+                        )
                       : DropdownButtonFormField<String>(
-                    value: _selectedCampanhaId,
-                    onChanged: (val) {
-                      setState(() {
-                        _selectedCampanhaId = val;
-                      });
-                    },
-                    items: _campanhas.map((campanha) {
-                      final nomeCampanha = campanha['nome_campanha'];
-                      return DropdownMenuItem<String>(
-                        value: campanha['id'] as String?,
-                        child: Text(
-                          nomeCampanha != null
-                              ? nomeCampanha as String
-                              : 'Nome não disponível',
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontWeight: FontWeight.w500,
-                            fontSize: 16,
-                            color: Theme.of(context).colorScheme.onSecondary,
+                          value: _selectedCampanhaId,
+                          onChanged: (val) {
+                            setState(() {
+                              _selectedCampanhaId = val;
+                            });
+                          },
+                          items: _campanhas.map((campanha) {
+                            final nomeCampanha = campanha['nome_campanha'];
+                            return DropdownMenuItem<String>(
+                              value: campanha['id'] as String?,
+                              child: Text(
+                                nomeCampanha != null
+                                    ? nomeCampanha as String
+                                    : 'Nome não disponível',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 16,
+                                  color:
+                                      Theme.of(context).colorScheme.onSecondary,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Theme.of(context).colorScheme.secondary,
+                            contentPadding:
+                                EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                            border: UnderlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
                           ),
+                          hint: Text(
+                            'Selecione a campanha...',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                          dropdownColor:
+                              Theme.of(context).colorScheme.background,
                         ),
-                      );
-                    }).toList(),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Theme.of(context).colorScheme.secondary,
-                      contentPadding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
-                      border: UnderlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                    hint: Text(
-                      'Selecione a campanha...',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: Theme.of(context).colorScheme.onSecondary,
-                      ),
-                    ),
-                    dropdownColor: Theme.of(context).colorScheme.background,
-                  ),
                 ),
               ),
             ],
@@ -596,12 +635,53 @@ class _CreateFormState extends State<CreateForm> {
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
           child: Column(
+            spacing: 10,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Tooltip(
+                    triggerMode: TooltipTriggerMode.tap,
+                    richMessage: TextSpan(
+                      children: [
+                        WidgetSpan(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(maxWidth: 200),
+                            // Limita a largura
+                            child: Text(
+                              "Aviso: use '_' no lugar de espaço e letras minúsculas apenas.",
+                              style: TextStyle(
+                                color: Colors.white, // Cor do texto
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.secondary,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: CircleAvatar(
+                      backgroundColor: Colors.orange,
+                      radius: 12,
+                      child: Icon(
+                        Icons.warning,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               // CAMPO DO NOME
               TextFormField(
                 controller: fieldData.nameController,
                 readOnly: fieldData.isLocked,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[a-z_]')),
+                ],
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: Theme.of(context).colorScheme.background,
@@ -612,7 +692,7 @@ class _CreateFormState extends State<CreateForm> {
                     color: Theme.of(context).colorScheme.onSecondary,
                   ),
                   contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
+                      const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide.none,
@@ -633,7 +713,7 @@ class _CreateFormState extends State<CreateForm> {
                     color: Theme.of(context).colorScheme.onSecondary,
                   ),
                   contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
+                      const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide.none,
@@ -647,10 +727,10 @@ class _CreateFormState extends State<CreateForm> {
                 onChanged: fieldData.isLocked
                     ? null
                     : (value) {
-                  setState(() {
-                    fieldData.mask = value ?? '';
-                  });
-                },
+                        setState(() {
+                          fieldData.mask = value ?? '';
+                        });
+                      },
                 dropdownColor: Theme.of(context).colorScheme.background,
                 items: [
                   {'label': 'Nenhuma', 'value': ''},
@@ -686,7 +766,7 @@ class _CreateFormState extends State<CreateForm> {
                     color: Theme.of(context).colorScheme.onSecondary,
                   ),
                   contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
+                      const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide.none,
@@ -701,7 +781,7 @@ class _CreateFormState extends State<CreateForm> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 padding:
-                const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
+                    const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -779,8 +859,10 @@ class _CreateFormState extends State<CreateForm> {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 61),
         child: GridView.builder(
-          shrinkWrap: true, // Evita conflitos com o SingleChildScrollView
-          physics: const NeverScrollableScrollPhysics(), // Desabilita o scroll interno
+          shrinkWrap: true,
+          // Evita conflitos com o SingleChildScrollView
+          physics: const NeverScrollableScrollPhysics(),
+          // Desabilita o scroll interno
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 4, // 4 campos por linha no desktop
             crossAxisSpacing: 10,
@@ -796,418 +878,425 @@ class _CreateFormState extends State<CreateForm> {
   }
 
   Widget _buildStyleOptions(BuildContext context) {
-    return kIsWeb ? Padding(
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 55),
-      child: Card(
-        color: Theme.of(context).colorScheme.secondary,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        elevation: 3,
-        child: Padding(
-          padding: EdgeInsets.zero,
-          child: Column(
-            children: [
-              const SizedBox(height: 20),
-              Text(
-                'Estilo do Botão',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onSecondary,
-                ),
+    return kIsWeb
+        ? Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 55),
+            child: Card(
+              color: Theme.of(context).colorScheme.secondary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
               ),
-              const SizedBox(height: 5),
-              Padding(
-                padding: const EdgeInsets.all(10.0),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.background,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding:
-                  const EdgeInsets.symmetric(vertical: 0.2, horizontal: 6),
-                  child: ListTile(
-                    title: Text(
-                      'Gradiente do Botão',
+              elevation: 3,
+              child: Padding(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 20),
+                    Text(
+                      'Estilo do Botão',
                       style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSecondary,
-                      ),
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        GestureDetector(
-                          onTap: _pickButtonStartColor,
-                          child: Container(
-                            width: 30,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              color: _buttonStartColor,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        GestureDetector(
-                          onTap: _pickButtonEndColor,
-                          child: Container(
-                            width: 30,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              color: _buttonEndColor,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 5),
-              Padding(
-                padding: const EdgeInsets.all(10.0),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.background,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding:
-                  const EdgeInsets.symmetric(vertical: 0.2, horizontal: 6),
-                  child: ListTile(
-                    title: Text(
-                      'Cor do Texto do Botão',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSecondary,
-                      ),
-                    ),
-                    trailing: GestureDetector(
-                      onTap: _pickButtonTextColor,
-                      child: Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          color: _buttonTextColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 5),
-              Padding(
-                padding: const EdgeInsets.all(10.0),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.background,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding:
-                  const EdgeInsets.symmetric(vertical: 0.2, horizontal: 6),
-                  child: ListTile(
-                    title: Text(
-                      'Cor de Hover do Botão',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSecondary,
-                      ),
-                    ),
-                    trailing: GestureDetector(
-                      onTap: _pickButtonHoverColor,
-                      child: Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          color: _buttonHoverColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 5),
-              Padding(
-                padding: const EdgeInsets.all(10.0),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.background,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding:
-                  const EdgeInsets.symmetric(vertical: 0.2, horizontal: 6),
-                  child: ListTile(
-                    title: Text(
-                      'Cor de Foco dos Campos',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSecondary,
-                      ),
-                    ),
-                    trailing: GestureDetector(
-                      onTap: _pickInputFocusColor,
-                      child: Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          color: _inputFocusColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 5),
-              Padding(
-                padding: const EdgeInsets.all(10.0),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.background,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 4.0, horizontal: 4.5),
-                  child: TextField(
-                    keyboardType: TextInputType.numberWithOptions(decimal: true),
-                    maxLength: 2,
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Theme.of(context).colorScheme.background,
-                      hintText: 'Arredondamento da Borda (ex: 8.0)',
-                      hintStyle: TextStyle(
                         fontFamily: 'Poppins',
-                        fontSize: 14,
-                        color: Theme.of(context).colorScheme.onSecondary,
-                      ),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 20.0),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide.none,
-                      ),
-                      counterText: '',
-                    ),
-                    onChanged: (value) {
-                      setState(() {
-                        _buttonBorderRadius = double.tryParse(value) ?? 8.0;
-                      });
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(height: 15),
-            ],
-          ),
-        ),
-      ),
-    ) :
-      Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Card(
-        color: Theme.of(context).colorScheme.secondary,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        elevation: 3,
-        child: Padding(
-          padding: EdgeInsets.zero,
-          child: Column(
-            children: [
-              const SizedBox(height: 20),
-              Text(
-                'Estilo do Botão',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onSecondary,
-                ),
-              ),
-              const SizedBox(height: 5),
-              Padding(
-                padding: const EdgeInsets.all(10.0),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.background,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding:
-                  const EdgeInsets.symmetric(vertical: 0.2, horizontal: 6),
-                  child: ListTile(
-                    title: Text(
-                      'Gradiente do Botão',
-                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
                         color: Theme.of(context).colorScheme.onSecondary,
                       ),
                     ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        GestureDetector(
-                          onTap: _pickButtonStartColor,
-                          child: Container(
-                            width: 30,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              color: _buttonStartColor,
-                              shape: BoxShape.circle,
+                    const SizedBox(height: 5),
+                    Padding(
+                      padding: const EdgeInsets.all(10.0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.background,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 0.2, horizontal: 6),
+                        child: ListTile(
+                          title: Text(
+                            'Gradiente do Botão',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              GestureDetector(
+                                onTap: _pickButtonStartColor,
+                                child: Container(
+                                  width: 30,
+                                  height: 30,
+                                  decoration: BoxDecoration(
+                                    color: _buttonStartColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              GestureDetector(
+                                onTap: _pickButtonEndColor,
+                                child: Container(
+                                  width: 30,
+                                  height: 30,
+                                  decoration: BoxDecoration(
+                                    color: _buttonEndColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Padding(
+                      padding: const EdgeInsets.all(10.0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.background,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 0.2, horizontal: 6),
+                        child: ListTile(
+                          title: Text(
+                            'Cor do Texto do Botão',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                          trailing: GestureDetector(
+                            onTap: _pickButtonTextColor,
+                            child: Container(
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                color: _buttonTextColor,
+                                shape: BoxShape.circle,
+                              ),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        GestureDetector(
-                          onTap: _pickButtonEndColor,
-                          child: Container(
-                            width: 30,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              color: _buttonEndColor,
-                              shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Padding(
+                      padding: const EdgeInsets.all(10.0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.background,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 0.2, horizontal: 6),
+                        child: ListTile(
+                          title: Text(
+                            'Cor de Hover do Botão',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                          trailing: GestureDetector(
+                            onTap: _pickButtonHoverColor,
+                            child: Container(
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                color: _buttonHoverColor,
+                                shape: BoxShape.circle,
+                              ),
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 5),
-              Padding(
-                padding: const EdgeInsets.all(10.0),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.background,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding:
-                  const EdgeInsets.symmetric(vertical: 0.2, horizontal: 6),
-                  child: ListTile(
-                    title: Text(
-                      'Cor do Texto do Botão',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSecondary,
                       ),
                     ),
-                    trailing: GestureDetector(
-                      onTap: _pickButtonTextColor,
+                    const SizedBox(height: 5),
+                    Padding(
+                      padding: const EdgeInsets.all(10.0),
                       child: Container(
-                        width: 30,
-                        height: 30,
                         decoration: BoxDecoration(
-                          color: _buttonTextColor,
-                          shape: BoxShape.circle,
+                          color: Theme.of(context).colorScheme.background,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 0.2, horizontal: 6),
+                        child: ListTile(
+                          title: Text(
+                            'Cor de Foco dos Campos',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                          trailing: GestureDetector(
+                            onTap: _pickInputFocusColor,
+                            child: Container(
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                color: _inputFocusColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 5),
-              Padding(
-                padding: const EdgeInsets.all(10.0),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.background,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding:
-                  const EdgeInsets.symmetric(vertical: 0.2, horizontal: 6),
-                  child: ListTile(
-                    title: Text(
-                      'Cor de Hover do Botão',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSecondary,
-                      ),
-                    ),
-                    trailing: GestureDetector(
-                      onTap: _pickButtonHoverColor,
+                    const SizedBox(height: 5),
+                    Padding(
+                      padding: const EdgeInsets.all(10.0),
                       child: Container(
-                        width: 30,
-                        height: 30,
                         decoration: BoxDecoration(
-                          color: _buttonHoverColor,
-                          shape: BoxShape.circle,
+                          color: Theme.of(context).colorScheme.background,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 4.0, horizontal: 4.5),
+                        child: TextField(
+                          keyboardType:
+                              TextInputType.numberWithOptions(decimal: true),
+                          maxLength: 2,
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Theme.of(context).colorScheme.background,
+                            hintText: 'Arredondamento da Borda (ex: 8.0)',
+                            hintStyle: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 14,
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                            contentPadding:
+                                EdgeInsets.symmetric(horizontal: 20.0),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                            counterText: '',
+                          ),
+                          onChanged: (value) {
+                            setState(() {
+                              _buttonBorderRadius =
+                                  double.tryParse(value) ?? 8.0;
+                            });
+                          },
                         ),
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 15),
+                  ],
                 ),
               ),
-              const SizedBox(height: 5),
-              Padding(
-                padding: const EdgeInsets.all(10.0),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.background,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding:
-                  const EdgeInsets.symmetric(vertical: 0.2, horizontal: 6),
-                  child: ListTile(
-                    title: Text(
-                      'Cor de Foco dos Campos',
+            ),
+          )
+        : Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Card(
+              color: Theme.of(context).colorScheme.secondary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              elevation: 3,
+              child: Padding(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 20),
+                    Text(
+                      'Estilo do Botão',
                       style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSecondary,
-                      ),
-                    ),
-                    trailing: GestureDetector(
-                      onTap: _pickInputFocusColor,
-                      child: Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          color: _inputFocusColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 5),
-              Padding(
-                padding: const EdgeInsets.all(10.0),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.background,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 4.0, horizontal: 4.5),
-                  child: TextField(
-                    keyboardType: TextInputType.numberWithOptions(decimal: true),
-                    maxLength: 2,
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Theme.of(context).colorScheme.background,
-                      hintText: 'Arredondamento da Borda (ex: 8.0)',
-                      hintStyle: TextStyle(
                         fontFamily: 'Poppins',
-                        fontSize: 14,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
                         color: Theme.of(context).colorScheme.onSecondary,
                       ),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 20.0),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide.none,
-                      ),
-                      counterText: '',
                     ),
-                    onChanged: (value) {
-                      setState(() {
-                        _buttonBorderRadius = double.tryParse(value) ?? 8.0;
-                      });
-                    },
-                  ),
+                    const SizedBox(height: 5),
+                    Padding(
+                      padding: const EdgeInsets.all(10.0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.background,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 0.2, horizontal: 6),
+                        child: ListTile(
+                          title: Text(
+                            'Gradiente do Botão',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              GestureDetector(
+                                onTap: _pickButtonStartColor,
+                                child: Container(
+                                  width: 30,
+                                  height: 30,
+                                  decoration: BoxDecoration(
+                                    color: _buttonStartColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              GestureDetector(
+                                onTap: _pickButtonEndColor,
+                                child: Container(
+                                  width: 30,
+                                  height: 30,
+                                  decoration: BoxDecoration(
+                                    color: _buttonEndColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Padding(
+                      padding: const EdgeInsets.all(10.0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.background,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 0.2, horizontal: 6),
+                        child: ListTile(
+                          title: Text(
+                            'Cor do Texto do Botão',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                          trailing: GestureDetector(
+                            onTap: _pickButtonTextColor,
+                            child: Container(
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                color: _buttonTextColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Padding(
+                      padding: const EdgeInsets.all(10.0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.background,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 0.2, horizontal: 6),
+                        child: ListTile(
+                          title: Text(
+                            'Cor de Hover do Botão',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                          trailing: GestureDetector(
+                            onTap: _pickButtonHoverColor,
+                            child: Container(
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                color: _buttonHoverColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Padding(
+                      padding: const EdgeInsets.all(10.0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.background,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 0.2, horizontal: 6),
+                        child: ListTile(
+                          title: Text(
+                            'Cor de Foco dos Campos',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                          ),
+                          trailing: GestureDetector(
+                            onTap: _pickInputFocusColor,
+                            child: Container(
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                color: _inputFocusColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Padding(
+                      padding: const EdgeInsets.all(10.0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.background,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 4.0, horizontal: 4.5),
+                        child: TextField(
+                          keyboardType:
+                              TextInputType.numberWithOptions(decimal: true),
+                          maxLength: 2,
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Theme.of(context).colorScheme.background,
+                            hintText: 'Arredondamento da Borda (ex: 8.0)',
+                            hintStyle: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 14,
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
+                            contentPadding:
+                                EdgeInsets.symmetric(horizontal: 20.0),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                            counterText: '',
+                          ),
+                          onChanged: (value) {
+                            setState(() {
+                              _buttonBorderRadius =
+                                  double.tryParse(value) ?? 8.0;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                  ],
                 ),
               ),
-              const SizedBox(height: 15),
-            ],
-          ),
-        ),
-      ),
-    );
+            ),
+          );
   }
 
   // (E) MESMA FUNÇÃO _addField(), MAS COM A LÓGICA PARA CRIAR 3 CAMPOS SE A LISTA ESTIVER VAZIA
@@ -1681,6 +1770,22 @@ class _CreateFormState extends State<CreateForm> {
       return;
     }
 
+    // Validação dos nomes dos campos
+    final RegExp validNamePattern = RegExp(r'^[a-z]+(?:_[a-z]+)*$');
+    for (int i = 0; i < _fields.length; i++) {
+      String fieldName = _fields[i].nameController.text;
+      if (!validNamePattern.hasMatch(fieldName)) {
+        showErrorDialog(
+            context,
+            "O nome do campo '$fieldName' é inválido. Use apenas letras minúsculas e separe as palavras com '_' (sem espaços).",
+            "Erro de Validação");
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+    }
+
     setState(() {
       _isLoading = true;
     });
@@ -1735,7 +1840,6 @@ class _CreateFormState extends State<CreateForm> {
             // (2) SE FOR TELEFONE, ADICIONAMOS ESTE ID NO ARRAY phoneFieldsJS
             // ----------------------------------------------------------------
             phoneFieldsJS += "'$fieldName',";
-
           } else if (fieldData.mask == 'cpf') {
             maskScript = '''
         function $maskFunctionName(input) {
