@@ -413,6 +413,62 @@ class _EditCampaignPageState extends State<EditCampaignPage> {
                                 color: Theme.of(context).colorScheme.tertiary,
                                 size: 20,
                               ),
+                              suffixIcon: Focus(
+                                canRequestFocus: false,
+                                child: Tooltip(
+                                  triggerMode: TooltipTriggerMode.tap,
+                                  richMessage: TextSpan(
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 12,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSecondary,
+                                    ),
+                                    children: [
+                                      WidgetSpan(
+                                        child: ConstrainedBox(
+                                          constraints: BoxConstraints(
+                                            maxWidth: 200,
+                                          ),
+                                          child: Text(
+                                            "Para enviar uma mensagem com nome do lead, nome do atendente ou nome da empresa pode ser usado as seguintes variáveis:\n\n- {nome_cliente} - Primeiro nome do cliente listado no lead.\n- {nome_cliente_completo} - Nome completo do cliente listado no lead.\n- {nome_usuario} - Primeiro nome do usuário que esta enviando mensagem para o cliente do lead.\n- {nome_empresa} - Nome completo da empresa à quem o lead pertence.",
+                                            style: TextStyle(
+                                              fontFamily: 'Poppins',
+                                              fontSize: 12,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSecondary,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .secondary,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Container(
+                                    margin: EdgeInsets.only(right: 8.0),
+                                    width: 30,
+                                    height: 30,
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.info_outline,
+                                      color: Colors.white,
+                                      size: 16,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
                             textInputAction: TextInputAction.next,
                           ),
