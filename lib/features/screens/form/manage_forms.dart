@@ -926,6 +926,7 @@ class _ManageFormsState extends State<ManageForms> {
                                   ? Center(
                                       child: Text(
                                         'Selecione uma empresa para ver os formulários.',
+                                        textAlign: TextAlign.center,
                                         style: TextStyle(
                                           fontFamily: 'Poppins',
                                           fontSize: isDesktop
@@ -1330,6 +1331,7 @@ class _ManageFormsState extends State<ManageForms> {
                                 ? Center(
                                     child: Text(
                                       'Selecione uma empresa para ver os formulários.',
+                                      textAlign: TextAlign.center,
                                       style: TextStyle(
                                         fontFamily: 'Poppins',
                                         fontSize: 16,
