@@ -66,7 +66,8 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
               hintStyle: TextStyle(color: Colors.grey),
             ),
             textTheme: TextTheme(
-              labelMedium: TextStyle(color: Theme.of(context).colorScheme.onPrimary),
+              labelMedium:
+              TextStyle(color: Theme.of(context).colorScheme.onPrimary),
             ),
           ),
           child: child!,
@@ -102,7 +103,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
         print('empresaId: $_selectedEmpresaId');
         print('nome_campanha: $_nomeCampanha');
         print('descricao: $_descricao');
-        print('descricao: $_mensagem');
+        print('mensagem: $_mensagem');
         print('dataInicio: ${_dataInicio.toIso8601String()}');
         print('dataFim: ${_dataFim.toIso8601String()}');
 
@@ -136,7 +137,8 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
 
   Future<void> _loadEmpresas() async {
     try {
-      List<Map<String, dynamic>> empresas = await _firestoreService.getEmpresas();
+      List<Map<String, dynamic>> empresas =
+      await _firestoreService.getEmpresas();
       setState(() {
         _empresas = empresas;
       });
@@ -175,8 +177,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                           children: [
                             Icon(
                               Icons.arrow_back_ios_new,
-                              color:
-                              Theme.of(context).colorScheme.onBackground,
+                              color: Theme.of(context).colorScheme.onBackground,
                               size: 18,
                             ),
                             const SizedBox(width: 4),
@@ -208,14 +209,15 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                   Stack(
                     children: [
                       _isLoading
-                        ? CircularProgressIndicator()
-                        : IconButton(
-                          icon: Icon(
-                              Icons.save_alt_rounded,
-                              color: Theme.of(context).colorScheme.onBackground,
-                              size: 30
-                          ),
-                          onPressed: _isLoading ? null : _saveCampaign,
+                          ? CircularProgressIndicator()
+                          : IconButton(
+                        icon: Icon(
+                          Icons.save_alt_rounded,
+                          color:
+                          Theme.of(context).colorScheme.onBackground,
+                          size: 30,
+                        ),
+                        onPressed: _isLoading ? null : _saveCampaign,
                       ),
                     ],
                   ),
@@ -234,6 +236,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Campo Nome da Campanha
                   Padding(
                     padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
                     child: Row(
@@ -241,7 +244,8 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                       children: [
                         Expanded(
                           child: Padding(
-                            padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                            padding:
+                            EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
                             child: TextFormField(
                               decoration: InputDecoration(
                                 hintText: 'Digite o nome da campanha',
@@ -250,10 +254,12 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                   fontWeight: FontWeight.w500,
                                   fontSize: 12,
                                   letterSpacing: 0,
-                                  color: Theme.of(context).colorScheme.onSecondary,
+                                  color:
+                                  Theme.of(context).colorScheme.onSecondary,
                                 ),
                                 filled: true,
-                                fillColor: Theme.of(context).colorScheme.secondary,
+                                fillColor:
+                                Theme.of(context).colorScheme.secondary,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide: BorderSide.none,
@@ -280,6 +286,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                       ],
                     ),
                   ),
+                  // Campo Descrição
                   Padding(
                     padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
                     child: Row(
@@ -287,7 +294,8 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                       children: [
                         Expanded(
                           child: Padding(
-                            padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                            padding:
+                            EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
                             child: TextFormField(
                               decoration: InputDecoration(
                                 hintText: 'Digite a descrição',
@@ -296,10 +304,12 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                   fontWeight: FontWeight.w500,
                                   fontSize: 12,
                                   letterSpacing: 0,
-                                  color: Theme.of(context).colorScheme.onSecondary,
+                                  color:
+                                  Theme.of(context).colorScheme.onSecondary,
                                 ),
                                 filled: true,
-                                fillColor: Theme.of(context).colorScheme.secondary,
+                                fillColor:
+                                Theme.of(context).colorScheme.secondary,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide: BorderSide.none,
@@ -326,6 +336,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                       ],
                     ),
                   ),
+                  // Campo Mensagem Padrão com ícone de informação à direita
                   Padding(
                     padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
                     child: Row(
@@ -333,7 +344,8 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                       children: [
                         Expanded(
                           child: Padding(
-                            padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                            padding:
+                            EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
                             child: TextFormField(
                               decoration: InputDecoration(
                                 hintText: 'Digite a mensagem padrão',
@@ -342,10 +354,12 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                   fontWeight: FontWeight.w500,
                                   fontSize: 12,
                                   letterSpacing: 0,
-                                  color: Theme.of(context).colorScheme.onSecondary,
+                                  color:
+                                  Theme.of(context).colorScheme.onSecondary,
                                 ),
                                 filled: true,
-                                fillColor: Theme.of(context).colorScheme.secondary,
+                                fillColor:
+                                Theme.of(context).colorScheme.secondary,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide: BorderSide.none,
@@ -354,6 +368,62 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                   Icons.text_fields,
                                   color: Theme.of(context).colorScheme.tertiary,
                                   size: 20,
+                                ),
+                                suffixIcon: Focus(
+                                  canRequestFocus: false,
+                                  child: Tooltip(
+                                    triggerMode: TooltipTriggerMode.tap,
+                                    richMessage: TextSpan(
+                                      style: TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontSize: 12,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSecondary,
+                                      ),
+                                      children: [
+                                        WidgetSpan(
+                                          child: ConstrainedBox(
+                                            constraints: BoxConstraints(
+                                              maxWidth: 200,
+                                            ),
+                                            child: Text(
+                                              "Para enviar uma mensagem com nome do lead, nome do atendente ou nome da empresa pode ser usado as seguintes variáveis:\n\n- {nome_cliente} - Primeiro nome do cliente listado no lead.\n- {nome_cliente_completo} - Nome completo do cliente listado no lead.\n- {nome_usuario} - Primeiro nome do usuário que esta enviando mensagem para o cliente do lead.\n- {nome_empresa} - Nome completo da empresa à quem o lead pertence.",
+                                              style: TextStyle(
+                                                fontFamily: 'Poppins',
+                                                fontSize: 12,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .secondary,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Container(
+                                      margin: EdgeInsets.only(right: 8.0),
+                                      width: 30,
+                                      height: 30,
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        Icons.info_outline,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
                               textInputAction: TextInputAction.next,
@@ -366,13 +436,15 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                       ],
                     ),
                   ),
+                  // Campo Dropdown para selecionar a empresa
                   Padding(
                     padding: EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
                     child: Row(
                       children: [
                         Expanded(
                           child: Padding(
-                            padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                            padding:
+                            EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
                             child: DropdownButtonFormField<String>(
                               value: _selectedEmpresaId,
                               onChanged: (val) {
@@ -393,16 +465,17 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                       fontSize: 16,
                                       color: Theme.of(context)
                                           .colorScheme
-                                          .onSecondary, // Cor do texto do dropdown
+                                          .onSecondary,
                                     ),
                                   ),
                                 );
                               }).toList(),
                               decoration: InputDecoration(
                                 filled: true,
-                                fillColor: Theme.of(context).colorScheme.secondary,
-                                contentPadding:
-                                EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+                                fillColor:
+                                Theme.of(context).colorScheme.secondary,
+                                contentPadding: EdgeInsetsDirectional.fromSTEB(
+                                    20, 0, 20, 0),
                                 border: UnderlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide: BorderSide.none,
@@ -414,14 +487,12 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                   fontFamily: 'Poppins',
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSecondary, // Cor do hint
+                                  color:
+                                  Theme.of(context).colorScheme.onSecondary,
                                 ),
                               ),
-                              dropdownColor: Theme.of(context)
-                                  .colorScheme
-                                  .background, // Cor de fundo do dropdown
+                              dropdownColor:
+                              Theme.of(context).colorScheme.background,
                             ),
                           ),
                         ),
@@ -429,6 +500,7 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                     ),
                   ),
                   SizedBox(height: 35),
+                  // Campos de data de Início e Fim
                   Padding(
                     padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
                     child: Column(
@@ -438,7 +510,8 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                           children: [
                             Expanded(
                               child: TextFormField(
-                                controller: TextEditingController(text: _dateFormat.format(_dataInicio)),
+                                controller: TextEditingController(
+                                    text: _dateFormat.format(_dataInicio)),
                                 decoration: InputDecoration(
                                   labelText: 'Início',
                                   labelStyle: TextStyle(
@@ -446,7 +519,9 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                     fontSize: 20,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
                                   ),
                                   hintText: 'Selecione a data de início',
                                   hintStyle: TextStyle(
@@ -454,7 +529,9 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                     fontWeight: FontWeight.w500,
                                     fontSize: 12,
                                     letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
                                   ),
                                   enabledBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
@@ -465,28 +542,33 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: Theme.of(context).colorScheme.tertiary,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .tertiary,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   errorBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: Theme.of(context).colorScheme.error,
+                                      color:
+                                      Theme.of(context).colorScheme.error,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   focusedErrorBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: Theme.of(context).colorScheme.error,
+                                      color:
+                                      Theme.of(context).colorScheme.error,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   prefixIcon: Icon(
                                     Icons.calendar_today,
-                                    color: Theme.of(context).colorScheme.tertiary,
+                                    color:
+                                    Theme.of(context).colorScheme.tertiary,
                                     size: 20,
                                   ),
                                 ),
@@ -497,7 +579,8 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                             SizedBox(width: 20),
                             Expanded(
                               child: TextFormField(
-                                controller: TextEditingController(text: _dateFormat.format(_dataFim)),
+                                controller: TextEditingController(
+                                    text: _dateFormat.format(_dataFim)),
                                 decoration: InputDecoration(
                                   labelText: 'Fim',
                                   labelStyle: TextStyle(
@@ -505,7 +588,9 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                     fontSize: 20,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
                                   ),
                                   hintText: 'Selecione a data de fim',
                                   hintStyle: TextStyle(
@@ -513,7 +598,9 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                     fontWeight: FontWeight.w500,
                                     fontSize: 12,
                                     letterSpacing: 0,
-                                    color: Theme.of(context).colorScheme.onSecondary,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
                                   ),
                                   enabledBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
@@ -524,28 +611,33 @@ class _CreateCampaignPageState extends State<CreateCampaignPage> {
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: Theme.of(context).colorScheme.tertiary,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .tertiary,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   errorBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: Theme.of(context).colorScheme.error,
+                                      color:
+                                      Theme.of(context).colorScheme.error,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   focusedErrorBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: Theme.of(context).colorScheme.error,
+                                      color:
+                                      Theme.of(context).colorScheme.error,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   prefixIcon: Icon(
                                     Icons.calendar_today,
-                                    color: Theme.of(context).colorScheme.tertiary,
+                                    color:
+                                    Theme.of(context).colorScheme.tertiary,
                                     size: 20,
                                   ),
                                 ),
