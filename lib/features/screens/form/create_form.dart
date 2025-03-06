@@ -1986,44 +1986,44 @@ class _CreateFormState extends State<CreateForm> {
             return AlertDialog(
               backgroundColor: Theme.of(context).colorScheme.background,
               title: Text("Escolha a Cor de Foco dos Campos"),
-              content: Column(
-                children: [
-                  SingleChildScrollView(
-                    child: ColorPicker(
-                      key: ValueKey(pickedColor),
-                      pickerColor: pickedColor,
-                      onColorChanged: (color) {
-                        setStateDialog(() {
-                          pickedColor = color;
-                          hexController.text = _colorToHex(color);
-                        });
-                      },
-                      enableAlpha: false,
-                      displayThumbColor: true,
-                    ),
-                  ),
-                  TextField(
-                    controller: hexController,
-                    decoration: const InputDecoration(
-                      labelText: "Código Hexadecimal",
-                      hintText: "#FFFFFF",
-                    ),
-                    onChanged: (value) {
-                      final hexValue = value.replaceAll('#', '');
-                      if (hexValue.length == 6) {
-                        try {
-                          final newColor =
-                          Color(int.parse("FF" + hexValue, radix: 16));
+              content: SingleChildScrollView(
+                child: Column(
+                  children: [
+                      ColorPicker(
+                        key: ValueKey(pickedColor),
+                        pickerColor: pickedColor,
+                        onColorChanged: (color) {
                           setStateDialog(() {
-                            pickedColor = newColor;
+                            pickedColor = color;
+                            hexController.text = _colorToHex(color);
                           });
-                        } catch (e) {
-                          // Trate o erro se necessário
+                        },
+                        enableAlpha: false,
+                        displayThumbColor: true,
+                      ),
+                    TextField(
+                      controller: hexController,
+                      decoration: const InputDecoration(
+                        labelText: "Código Hexadecimal",
+                        hintText: "#FFFFFF",
+                      ),
+                      onChanged: (value) {
+                        final hexValue = value.replaceAll('#', '');
+                        if (hexValue.length == 6) {
+                          try {
+                            final newColor =
+                            Color(int.parse("FF" + hexValue, radix: 16));
+                            setStateDialog(() {
+                              pickedColor = newColor;
+                            });
+                          } catch (e) {
+                            // Trate o erro se necessário
+                          }
                         }
-                      }
-                    },
-                  ),
-                ],
+                      },
+                    ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
