@@ -1344,51 +1344,89 @@ class _CreateFormState extends State<CreateForm> {
 
   Future<void> _pickBorderColor(int index) async {
     Color pickedColor = _fields[index].borderColor;
+    TextEditingController hexController =
+    TextEditingController(text: _colorToHex(pickedColor));
+
     await showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: Theme.of(context).colorScheme.background,
-          title: Text("Escolha a Cor da Borda"),
-          content: SingleChildScrollView(
-            child: ColorPicker(
-              pickerColor: pickedColor,
-              onColorChanged: (color) {
-                pickedColor = color;
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: Text(
-                "Cancelar",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              backgroundColor: Theme.of(context).colorScheme.background,
+              title: Text("Escolha a Cor da Borda"),
+              content: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    ColorPicker(
+                      key: ValueKey(pickedColor),
+                      pickerColor: pickedColor,
+                      onColorChanged: (color) {
+                        setStateDialog(() {
+                          pickedColor = color;
+                          hexController.text = _colorToHex(color);
+                        });
+                      },
+                      enableAlpha: false,
+                      displayThumbColor: true,
+                    ),
+                    TextField(
+                      controller: hexController,
+                      decoration: const InputDecoration(
+                        labelText: "Código Hexadecimal",
+                        hintText: "#FFFFFF",
+                      ),
+                      onChanged: (value) {
+                        final hexValue = value.replaceAll('#', '');
+                        if (hexValue.length == 6) {
+                          try {
+                            final newColor =
+                            Color(int.parse("FF" + hexValue, radix: 16));
+                            setStateDialog(() {
+                              pickedColor = newColor;
+                            });
+                          } catch (e) {
+                            // Trate o erro se necessário
+                          }
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            ElevatedButton(
-              child: Text(
-                "Selecionar",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.outline,
+              actions: [
+                TextButton(
+                  child: Text(
+                    "Cancelar",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
-              ),
-              onPressed: () {
-                setState(() {
-                  _fields[index].borderColor = pickedColor;
-                });
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
+                ElevatedButton(
+                  child: Text(
+                    "Selecionar",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _fields[index].borderColor = pickedColor;
+                    });
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -1396,51 +1434,90 @@ class _CreateFormState extends State<CreateForm> {
 
   Future<void> _pickFieldStartColor(int index) async {
     Color pickedColor = _fields[index].fieldStartColor;
+    TextEditingController hexController =
+    TextEditingController(text: _colorToHex(pickedColor));
+
     await showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: Theme.of(context).colorScheme.background,
-          title: Text("Escolha a Cor Inicial do Gradiente do Campo"),
-          content: SingleChildScrollView(
-            child: ColorPicker(
-              pickerColor: pickedColor,
-              onColorChanged: (color) {
-                pickedColor = color;
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: Text(
-                "Cancelar",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              backgroundColor: Theme.of(context).colorScheme.background,
+              title: Text("Escolha a Cor Inicial do Gradiente do Campo"),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ColorPicker(
+                      key: ValueKey(pickedColor),
+                      pickerColor: pickedColor,
+                      onColorChanged: (color) {
+                        setStateDialog(() {
+                          pickedColor = color;
+                          hexController.text = _colorToHex(color);
+                        });
+                      },
+                      enableAlpha: false,
+                      displayThumbColor: true,
+                    ),
+                    TextField(
+                      controller: hexController,
+                      decoration: const InputDecoration(
+                        labelText: "Código Hexadecimal",
+                        hintText: "#FFFFFF",
+                      ),
+                      onChanged: (value) {
+                        final hexValue = value.replaceAll('#', '');
+                        if (hexValue.length == 6) {
+                          try {
+                            final newColor =
+                            Color(int.parse("FF" + hexValue, radix: 16));
+                            setStateDialog(() {
+                              pickedColor = newColor;
+                            });
+                          } catch (e) {
+                            // Trate o erro se necessário
+                          }
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            ElevatedButton(
-              child: Text(
-                "Selecionar",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.outline,
+              actions: [
+                TextButton(
+                  child: Text(
+                    "Cancelar",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
-              ),
-              onPressed: () {
-                setState(() {
-                  _fields[index].fieldStartColor = pickedColor;
-                });
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
+                ElevatedButton(
+                  child: Text(
+                    "Selecionar",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _fields[index].fieldStartColor = pickedColor;
+                    });
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -1448,51 +1525,89 @@ class _CreateFormState extends State<CreateForm> {
 
   Future<void> _pickFieldEndColor(int index) async {
     Color pickedColor = _fields[index].fieldEndColor;
+    TextEditingController hexController =
+    TextEditingController(text: _colorToHex(pickedColor));
+
     await showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: Theme.of(context).colorScheme.background,
-          title: Text("Escolha a Cor Final do Gradiente do Campo"),
-          content: SingleChildScrollView(
-            child: ColorPicker(
-              pickerColor: pickedColor,
-              onColorChanged: (color) {
-                pickedColor = color;
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: Text(
-                "Cancelar",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              backgroundColor: Theme.of(context).colorScheme.background,
+              title: Text("Escolha a Cor Final do Gradiente do Campo"),
+              content: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    ColorPicker(
+                      key: ValueKey(pickedColor),
+                      pickerColor: pickedColor,
+                      onColorChanged: (color) {
+                        setStateDialog(() {
+                          pickedColor = color;
+                          hexController.text = _colorToHex(color);
+                        });
+                      },
+                      enableAlpha: false,
+                      displayThumbColor: true,
+                    ),
+                    TextField(
+                      controller: hexController,
+                      decoration: const InputDecoration(
+                        labelText: "Código Hexadecimal",
+                        hintText: "#FFFFFF",
+                      ),
+                      onChanged: (value) {
+                        final hexValue = value.replaceAll('#', '');
+                        if (hexValue.length == 6) {
+                          try {
+                            final newColor =
+                            Color(int.parse("FF" + hexValue, radix: 16));
+                            setStateDialog(() {
+                              pickedColor = newColor;
+                            });
+                          } catch (e) {
+                            // Trate o erro se necessário
+                          }
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            ElevatedButton(
-              child: Text(
-                "Selecionar",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.outline,
+              actions: [
+                TextButton(
+                  child: Text(
+                    "Cancelar",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
-              ),
-              onPressed: () {
-                setState(() {
-                  _fields[index].fieldEndColor = pickedColor;
-                });
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
+                ElevatedButton(
+                  child: Text(
+                    "Selecionar",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _fields[index].fieldEndColor = pickedColor;
+                    });
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -1500,51 +1615,89 @@ class _CreateFormState extends State<CreateForm> {
 
   Future<void> _pickButtonStartColor() async {
     Color pickedColor = _buttonStartColor;
+    TextEditingController hexController =
+    TextEditingController(text: _colorToHex(pickedColor));
+
     await showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: Theme.of(context).colorScheme.background,
-          title: Text("Escolha a Cor Inicial do Gradiente do Botão"),
-          content: SingleChildScrollView(
-            child: ColorPicker(
-              pickerColor: pickedColor,
-              onColorChanged: (color) {
-                pickedColor = color;
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: Text(
-                "Cancelar",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              backgroundColor: Theme.of(context).colorScheme.background,
+              title: Text("Escolha a Cor Inicial do Gradiente do Botão"),
+              content: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    ColorPicker(
+                      key: ValueKey(pickedColor),
+                      pickerColor: pickedColor,
+                      onColorChanged: (color) {
+                        setStateDialog(() {
+                          pickedColor = color;
+                          hexController.text = _colorToHex(color);
+                        });
+                      },
+                      enableAlpha: false,
+                      displayThumbColor: true,
+                    ),
+                    TextField(
+                      controller: hexController,
+                      decoration: const InputDecoration(
+                        labelText: "Código Hexadecimal",
+                        hintText: "#FFFFFF",
+                      ),
+                      onChanged: (value) {
+                        final hexValue = value.replaceAll('#', '');
+                        if (hexValue.length == 6) {
+                          try {
+                            final newColor =
+                            Color(int.parse("FF" + hexValue, radix: 16));
+                            setStateDialog(() {
+                              pickedColor = newColor;
+                            });
+                          } catch (e) {
+                            // Trate o erro se necessário
+                          }
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            ElevatedButton(
-              child: Text(
-                "Selecionar",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.outline,
+              actions: [
+                TextButton(
+                  child: Text(
+                    "Cancelar",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
-              ),
-              onPressed: () {
-                setState(() {
-                  _buttonStartColor = pickedColor;
-                });
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
+                ElevatedButton(
+                  child: Text(
+                    "Selecionar",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _buttonStartColor = pickedColor;
+                    });
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -1552,51 +1705,89 @@ class _CreateFormState extends State<CreateForm> {
 
   Future<void> _pickButtonEndColor() async {
     Color pickedColor = _buttonEndColor;
+    TextEditingController hexController =
+    TextEditingController(text: _colorToHex(pickedColor));
+
     await showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: Theme.of(context).colorScheme.background,
-          title: Text("Escolha a Cor Final do Gradiente do Botão"),
-          content: SingleChildScrollView(
-            child: ColorPicker(
-              pickerColor: pickedColor,
-              onColorChanged: (color) {
-                pickedColor = color;
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: Text(
-                "Cancelar",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              backgroundColor: Theme.of(context).colorScheme.background,
+              title: Text("Escolha a Cor Final do Gradiente do Botão"),
+              content: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    ColorPicker(
+                      key: ValueKey(pickedColor),
+                      pickerColor: pickedColor,
+                      onColorChanged: (color) {
+                        setStateDialog(() {
+                          pickedColor = color;
+                          hexController.text = _colorToHex(color);
+                        });
+                      },
+                      enableAlpha: false,
+                      displayThumbColor: true,
+                    ),
+                    TextField(
+                      controller: hexController,
+                      decoration: const InputDecoration(
+                        labelText: "Código Hexadecimal",
+                        hintText: "#FFFFFF",
+                      ),
+                      onChanged: (value) {
+                        final hexValue = value.replaceAll('#', '');
+                        if (hexValue.length == 6) {
+                          try {
+                            final newColor =
+                            Color(int.parse("FF" + hexValue, radix: 16));
+                            setStateDialog(() {
+                              pickedColor = newColor;
+                            });
+                          } catch (e) {
+                            // Trate o erro se necessário
+                          }
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            ElevatedButton(
-              child: Text(
-                "Selecionar",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.outline,
+              actions: [
+                TextButton(
+                  child: Text(
+                    "Cancelar",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
-              ),
-              onPressed: () {
-                setState(() {
-                  _buttonEndColor = pickedColor;
-                });
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
+                ElevatedButton(
+                  child: Text(
+                    "Selecionar",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _buttonEndColor = pickedColor;
+                    });
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -1604,51 +1795,89 @@ class _CreateFormState extends State<CreateForm> {
 
   Future<void> _pickButtonTextColor() async {
     Color pickedColor = _buttonTextColor;
+    TextEditingController hexController =
+    TextEditingController(text: _colorToHex(pickedColor));
+
     await showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: Theme.of(context).colorScheme.background,
-          title: Text("Escolha a Cor do Texto do Botão"),
-          content: SingleChildScrollView(
-            child: ColorPicker(
-              pickerColor: pickedColor,
-              onColorChanged: (color) {
-                pickedColor = color;
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: Text(
-                "Cancelar",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              backgroundColor: Theme.of(context).colorScheme.background,
+              title: Text("Escolha a Cor do Texto do Botão"),
+              content: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    ColorPicker(
+                      key: ValueKey(pickedColor),
+                      pickerColor: pickedColor,
+                      onColorChanged: (color) {
+                        setStateDialog(() {
+                          pickedColor = color;
+                          hexController.text = _colorToHex(color);
+                        });
+                      },
+                      enableAlpha: false,
+                      displayThumbColor: true,
+                    ),
+                    TextField(
+                      controller: hexController,
+                      decoration: const InputDecoration(
+                        labelText: "Código Hexadecimal",
+                        hintText: "#FFFFFF",
+                      ),
+                      onChanged: (value) {
+                        final hexValue = value.replaceAll('#', '');
+                        if (hexValue.length == 6) {
+                          try {
+                            final newColor =
+                            Color(int.parse("FF" + hexValue, radix: 16));
+                            setStateDialog(() {
+                              pickedColor = newColor;
+                            });
+                          } catch (e) {
+                            // Trate o erro se necessário
+                          }
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            ElevatedButton(
-              child: Text(
-                "Selecionar",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.outline,
+              actions: [
+                TextButton(
+                  child: Text(
+                    "Cancelar",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
-              ),
-              onPressed: () {
-                setState(() {
-                  _buttonTextColor = pickedColor;
-                });
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
+                ElevatedButton(
+                  child: Text(
+                    "Selecionar",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _buttonTextColor = pickedColor;
+                    });
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -1656,51 +1885,89 @@ class _CreateFormState extends State<CreateForm> {
 
   Future<void> _pickButtonHoverColor() async {
     Color pickedColor = _buttonHoverColor;
+    TextEditingController hexController =
+    TextEditingController(text: _colorToHex(pickedColor));
+
     await showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: Theme.of(context).colorScheme.background,
-          title: Text("Escolha a Cor de Hover do Botão"),
-          content: SingleChildScrollView(
-            child: ColorPicker(
-              pickerColor: pickedColor,
-              onColorChanged: (color) {
-                pickedColor = color;
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: Text(
-                "Cancelar",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              backgroundColor: Theme.of(context).colorScheme.background,
+              title: Text("Escolha a Cor de Hover do Botão"),
+              content: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    ColorPicker(
+                      key: ValueKey(pickedColor),
+                      pickerColor: pickedColor,
+                      onColorChanged: (color) {
+                        setStateDialog(() {
+                          pickedColor = color;
+                          hexController.text = _colorToHex(color);
+                        });
+                      },
+                      enableAlpha: false,
+                      displayThumbColor: true,
+                    ),
+                    TextField(
+                      controller: hexController,
+                      decoration: const InputDecoration(
+                        labelText: "Código Hexadecimal",
+                        hintText: "#FFFFFF",
+                      ),
+                      onChanged: (value) {
+                        final hexValue = value.replaceAll('#', '');
+                        if (hexValue.length == 6) {
+                          try {
+                            final newColor =
+                            Color(int.parse("FF" + hexValue, radix: 16));
+                            setStateDialog(() {
+                              pickedColor = newColor;
+                            });
+                          } catch (e) {
+                            // Trate o erro se necessário
+                          }
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            ElevatedButton(
-              child: Text(
-                "Selecionar",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.outline,
+              actions: [
+                TextButton(
+                  child: Text(
+                    "Cancelar",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
-              ),
-              onPressed: () {
-                setState(() {
-                  _buttonHoverColor = pickedColor;
-                });
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
+                ElevatedButton(
+                  child: Text(
+                    "Selecionar",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _buttonHoverColor = pickedColor;
+                    });
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -1708,51 +1975,89 @@ class _CreateFormState extends State<CreateForm> {
 
   Future<void> _pickInputFocusColor() async {
     Color pickedColor = _inputFocusColor;
+    TextEditingController hexController =
+    TextEditingController(text: _colorToHex(pickedColor));
+
     await showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: Theme.of(context).colorScheme.background,
-          title: Text("Escolha a Cor de Foco dos Campos"),
-          content: SingleChildScrollView(
-            child: ColorPicker(
-              pickerColor: pickedColor,
-              onColorChanged: (color) {
-                pickedColor = color;
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: Text(
-                "Cancelar",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              backgroundColor: Theme.of(context).colorScheme.background,
+              title: Text("Escolha a Cor de Foco dos Campos"),
+              content: SingleChildScrollView(
+                child: Column(
+                  children: [
+                      ColorPicker(
+                        key: ValueKey(pickedColor),
+                        pickerColor: pickedColor,
+                        onColorChanged: (color) {
+                          setStateDialog(() {
+                            pickedColor = color;
+                            hexController.text = _colorToHex(color);
+                          });
+                        },
+                        enableAlpha: false,
+                        displayThumbColor: true,
+                      ),
+                    TextField(
+                      controller: hexController,
+                      decoration: const InputDecoration(
+                        labelText: "Código Hexadecimal",
+                        hintText: "#FFFFFF",
+                      ),
+                      onChanged: (value) {
+                        final hexValue = value.replaceAll('#', '');
+                        if (hexValue.length == 6) {
+                          try {
+                            final newColor =
+                            Color(int.parse("FF" + hexValue, radix: 16));
+                            setStateDialog(() {
+                              pickedColor = newColor;
+                            });
+                          } catch (e) {
+                            // Trate o erro se necessário
+                          }
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            ElevatedButton(
-              child: Text(
-                "Selecionar",
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.outline,
+              actions: [
+                TextButton(
+                  child: Text(
+                    "Cancelar",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
-              ),
-              onPressed: () {
-                setState(() {
-                  _inputFocusColor = pickedColor;
-                });
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
+                ElevatedButton(
+                  child: Text(
+                    "Selecionar",
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _inputFocusColor = pickedColor;
+                    });
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            );
+          },
         );
       },
     );
