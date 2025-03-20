@@ -27,11 +27,6 @@ class _ManageCompaniesState extends State<ManageCompanies> {
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(() {
-      setState(() {
-        _scrollOffset = _scrollController.offset;
-      });
-    });
     _determineUserDocumentAndListen();
   }
 
@@ -336,21 +331,16 @@ class _ManageCompaniesState extends State<ManageCompanies> {
 
   @override
   Widget build(BuildContext context) {
-    // ---------------------------------------------------------
-    // 1) Detecta se é desktop pela largura (> 1024, por exemplo)
-    // ---------------------------------------------------------
     final bool isDesktop = MediaQuery.of(context).size.width > 1024;
+    // Se o scrollController não tiver clientes, usamos 0.0 como offset
+    final double offset = _scrollController.hasClients ? _scrollController.offset : 0.0;
+    double computedAppBarHeight = (100.0 - (offset / 2)).clamp(0.0, 100.0);
+    double opacity = (1.0 - (offset / 100)).clamp(0.0, 1.0);
 
-    double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
-    double tabBarHeight = (kBottomNavigationBarHeight - (_scrollOffset / 2))
+    // Se for desktop, calcula também o tabBarHeight (se necessário)
+    double tabBarHeight = (kBottomNavigationBarHeight - (offset / 2))
         .clamp(0.0, kBottomNavigationBarHeight)
         .ceilToDouble();
-    double opacity = (1.0 - (_scrollOffset / 100)).clamp(0.0, 1.0);
-
-    // Definindo a física com base na visibilidade da AppBar e TabBar
-    final pageViewPhysics = (appBarHeight > 0 && tabBarHeight > 0)
-        ? AlwaysScrollableScrollPhysics()
-        : NeverScrollableScrollPhysics();
 
     if (isLoading) {
       return ConnectivityBanner(
@@ -359,7 +349,6 @@ class _ManageCompaniesState extends State<ManageCompanies> {
         ),
       );
     } else if (!hasGerenciarParceirosAccess) {
-      // Opcionalmente, você pode retornar uma tela vazia ou apenas uma mensagem
       return ConnectivityBanner(
         child: Scaffold(
           body: Container(),
@@ -370,94 +359,92 @@ class _ManageCompaniesState extends State<ManageCompanies> {
       final user = authProvider.user;
       final currentUserId = user?.uid;
 
-      // ---------------------------------------------------------
-      // 2) Retorna a tela normalmente, mas com o body adaptado:
-      //    - Se for desktop, adiciona um Container com maxWidth
-      // ---------------------------------------------------------
       return ConnectivityBanner(
         child: GestureDetector(
           child: Scaffold(
+            // Utiliza AnimatedBuilder para reconstruir apenas a AppBar com base no scroll
             appBar: PreferredSize(
-              preferredSize: Size.fromHeight(appBarHeight),
-              child: Opacity(
-                opacity: opacity,
-                child: AppBar(
-                  toolbarHeight: appBarHeight,
-                  automaticallyImplyLeading: false,
-                  flexibleSpace: SafeArea(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          // Botão de voltar e título
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              GestureDetector(
-                                onTap: () {
-                                  Navigator.pop(context);
-                                },
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.arrow_back_ios_new,
-                                      color: Theme.of(context).colorScheme.onBackground,
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Voltar',
-                                      style: TextStyle(
-                                        fontFamily: 'Poppins',
-                                        fontSize: 14,
-                                        color: Theme.of(context).colorScheme.onSecondary,
+              preferredSize: Size.fromHeight(100.0),
+              child: AnimatedBuilder(
+                animation: _scrollController,
+                builder: (context, child) {
+                  // Se quiser manter o efeito de altura, podemos calcular currentHeight
+                  final double currentOffset = _scrollController.hasClients ? _scrollController.offset : 0.0;
+                  final double currentHeight = (100.0 - (currentOffset / 2)).clamp(0.0, 100.0);
+
+                  // Define a opacidade fixamente como 1.0
+                  return AppBar(
+                    toolbarHeight: currentHeight,
+                    automaticallyImplyLeading: false,
+                    flexibleSpace: SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                GestureDetector(
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                  },
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.arrow_back_ios_new,
+                                        color: Theme.of(context).colorScheme.onBackground,
+                                        size: 18,
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Voltar',
+                                        style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: 14,
+                                          color: Theme.of(context).colorScheme.onSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Parceiros',
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w700,
-                                  color: Theme.of(context).colorScheme.onSecondary,
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Parceiros',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w700,
+                                    color: Theme.of(context).colorScheme.onSecondary,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          // Ícone no canto direito
-                          IconButton(
-                            icon: Icon(
-                              Icons.add_business,
-                              color: Theme.of(context).colorScheme.onBackground,
-                              size: 30,
+                              ],
                             ),
-                            onPressed: () async {
-                              _navigateWithBottomToTopTransition(context, AddCompany());
-                            },
-                          ),
-                        ],
+                            IconButton(
+                              icon: Icon(
+                                Icons.add_business,
+                                color: Theme.of(context).colorScheme.onBackground,
+                                size: 30,
+                              ),
+                              onPressed: () async {
+                                _navigateWithBottomToTopTransition(context, AddCompany());
+                              },
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  surfaceTintColor: Colors.transparent,
-                  backgroundColor: Theme.of(context).colorScheme.secondary,
-                ),
+                    surfaceTintColor: Colors.transparent,
+                    backgroundColor: Theme.of(context).colorScheme.secondary,
+                  );
+                },
               ),
             ),
 
-            // ----------------------------------------------------
-            // 3) Aqui aplicamos o "Container" com maxWidth para
-            //    a versão desktop. Note que o conteúdo é o mesmo,
-            //    apenas está dentro do Container caso seja desktop.
-            // ----------------------------------------------------
+            // O restante do corpo permanece inalterado
             body: isDesktop
                 ? Center(
               child: Container(
@@ -510,6 +497,10 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                               padding: EdgeInsets.all(10), // Aumenta o padding para desktop
                               child: ListTile(
                                 contentPadding: EdgeInsets.all(8), // Aumenta o padding interno do ListTile
+                                leading: CircleAvatar(
+                                  radius: 30, // ajuste o tamanho conforme desejado
+                                  backgroundImage: NetworkImage(company['photoUrl']),
+                                ),
                                 title: Text(
                                   nomeEmpresa,
                                   style: TextStyle(
@@ -535,7 +526,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                                       icon: Icon(
                                         Icons.edit,
                                         color: Theme.of(context).colorScheme.onSecondary,
-                                        size: 30, // Aumenta o tamanho do ícone para desktop
+                                        size: 30,
                                       ),
                                       onPressed: () {
                                         _navigateWithBottomToTopTransition(
@@ -566,7 +557,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                                       icon: Icon(
                                         Icons.delete,
                                         color: Colors.red,
-                                        size: 30, // Aumenta o tamanho do ícone para desktop
+                                        size: 30,
                                       ),
                                       onPressed: () {
                                         _showDeleteConfirmationDialog(
@@ -629,69 +620,82 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                       return Card(
                         elevation: 4,
                         color: Theme.of(context).colorScheme.secondary,
-                        margin: EdgeInsets.only(left: 10, right: 10, top: 20),
-                        child: ListTile(
-                          title: Text(
-                            nomeEmpresa,
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontWeight: FontWeight.w600,
-                              fontSize: 16,
-                              color: Theme.of(context).colorScheme.onSecondary,
+                        margin: EdgeInsets.only(top: 20),
+                        child: Container(
+                          padding: EdgeInsets.all(2), // Aumenta o padding para desktop
+                          child: ListTile(
+                            contentPadding: EdgeInsets.all(8), // Aumenta o padding interno do ListTile
+                            leading: CircleAvatar(
+                              radius: 30, // ajuste o tamanho conforme desejado
+                              backgroundImage: NetworkImage(company['photoUrl']),
                             ),
-                          ),
-                          subtitle: Text(
-                            'Contrato: $contract',
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontWeight: FontWeight.w400,
-                              fontSize: 14,
-                              color: Theme.of(context).colorScheme.onSecondary,
+                            title: Text(
+                              nomeEmpresa,
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w600,
+                                fontSize: 18, // Aumenta o tamanho da fonte para desktop
+                                color: Theme.of(context).colorScheme.onSecondary,
+                              ),
                             ),
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: Icon(
-                                  Icons.edit,
-                                  color: Theme.of(context).colorScheme.onSecondary,
+                            subtitle: Text(
+                              'Contrato: $contract',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w400,
+                                fontSize: 16, // Aumenta o tamanho da fonte para desktop
+                                color: Theme.of(context).colorScheme.onSecondary,
+                              ),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.edit,
+                                    color: Theme.of(context).colorScheme.onSecondary,
+                                    size: 25,
+                                  ),
+                                  onPressed: () {
+                                    _navigateWithBottomToTopTransition(
+                                      context,
+                                      EditCompanies(
+                                        companyId: company.id,
+                                        nomeEmpresa: nomeEmpresa,
+                                        email: company['email'],
+                                        contract: contract,
+                                        cnpj: company['cnpj'],
+                                        founded: company['founded'],
+                                        countArtsValue: company['countArtsValue'],
+                                        countVideosValue: company['countVideosValue'],
+                                        dashboard: company['dashboard'],
+                                        leads: company['leads'],
+                                        gerenciarColaboradores: company['gerenciarColaboradores'],
+                                        configurarDash: company['configurarDash'],
+                                        criarCampanha: company['criarCampanha'],
+                                        criarForm: company['criarForm'],
+                                        copiarTelefones: company['copiarTelefones'],
+                                        alterarSenha: company['alterarSenha'],
+                                        executarAPIs: company['executarAPIs'],
+                                      ),
+                                    );
+                                  },
                                 ),
-                                onPressed: () {
-                                  _navigateWithBottomToTopTransition(
-                                    context,
-                                    EditCompanies(
-                                      companyId: company.id,
-                                      nomeEmpresa: nomeEmpresa,
-                                      email: company['email'],
-                                      contract: contract,
-                                      cnpj: company['cnpj'],
-                                      founded: company['founded'],
-                                      countArtsValue: company['countArtsValue'],
-                                      countVideosValue: company['countVideosValue'],
-                                      dashboard: company['dashboard'],
-                                      leads: company['leads'],
-                                      gerenciarColaboradores: company['gerenciarColaboradores'],
-                                      configurarDash: company['configurarDash'],
-                                      criarCampanha: company['criarCampanha'],
-                                      criarForm: company['criarForm'],
-                                      copiarTelefones: company['copiarTelefones'],
-                                      alterarSenha: company['alterarSenha'],
-                                      executarAPIs: company['executarAPIs'],
-                                    ),
-                                  );
-                                },
-                              ),
-                              IconButton(
-                                icon: Icon(Icons.delete, color: Colors.red),
-                                onPressed: () {
-                                  _showDeleteConfirmationDialog(
-                                    company.id,
-                                    company['email'],
-                                  );
-                                },
-                              ),
-                            ],
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.delete,
+                                    color: Colors.red,
+                                    size: 25,
+                                  ),
+                                  onPressed: () {
+                                    _showDeleteConfirmationDialog(
+                                      company.id,
+                                      company['email'],
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       );

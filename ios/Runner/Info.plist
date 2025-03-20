@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Precisamos da sua permissão para que você possa tirar fotos.</string>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.seuapp.tarefa</string>
@@ -41,11 +43,13 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Este aplicativo requer acesso à rede local para depuração.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Este aplicativo precisa acessar sua biblioteca de fotos para permitir o upload de imagens.</string>
+	<string>Este aplicativo precisa acessar sua biblioteca de fotos para selecionar imagens.</string>
 	<key>NSUserTrackingUsageDescription</key>
-    <string>Precisamos da sua permissão de rastreamento para personalizar anúncios e melhorar nossos serviços.</string>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
+	<string>Precisamos da sua permissão de rastreamento para personalizar anúncios e melhorar nossos serviços.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Este aplicativo precisa salvar fotos na sua biblioteca.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Este aplicativo precisa acessar o microfone.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>processing</string>
@@ -78,5 +82,7 @@
 	<array>
 		<string>$(AppIdentifierPrefix)com.your.bundle</string>
 	</array>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
 </dict>
 </plist>
