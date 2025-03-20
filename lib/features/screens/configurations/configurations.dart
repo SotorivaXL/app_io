@@ -20,6 +20,7 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   String? userName;
   String? userEmail;
+  String? userPhotoUrl; // Nova variável para a URL da foto do usuário
   Map<String, dynamic>? userData;
   String? cnpj;
   String? contract;
@@ -49,7 +50,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _getUserData() async {
     final user = FirebaseAuth.instance.currentUser;
-
     if (user != null) {
       try {
         // Primeiro busca o documento na coleção 'users'
@@ -63,8 +63,8 @@ class _SettingsPageState extends State<SettingsPage> {
           userName = userData?['name'] ?? 'Nome não disponível';
           userEmail = user.email;
           role = userData?['role'] ?? 'Função não disponível';
-
-          // Busca a permissão de 'copiarTelefones'
+          // Tenta recuperar a foto do usuário
+          userPhotoUrl = userData?['photoUrl'];
           copiarTelefones = userData?['copiarTelefones'] ?? false;
         } else {
           // Caso não encontre, busca na coleção 'empresas'
@@ -79,8 +79,7 @@ class _SettingsPageState extends State<SettingsPage> {
             userEmail = user.email;
             cnpj = userData?['cnpj'] ?? 'CNPJ não disponível';
             contract = userData?['contract'] ?? 'Contrato não disponível';
-
-            // Busca a permissão de 'copiarTelefones'
+            userPhotoUrl = userData?['photoUrl'];
             copiarTelefones = userData?['copiarTelefones'] ?? false;
           } else {
             showErrorDialog(context, 'Usuário não encontrado.', "Atenção");
@@ -92,7 +91,6 @@ class _SettingsPageState extends State<SettingsPage> {
         SharedPreferences prefs = await SharedPreferences.getInstance();
         await prefs.setString('userName', userName ?? '');
 
-        // Atualiza o estado da tela
         setState(() {});
       } catch (e) {
         showErrorDialog(context, 'Erro ao carregar os dados: $e', "Erro");
@@ -536,13 +534,11 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Detecta se o dispositivo é desktop com base na largura da tela
     final bool isDesktop = MediaQuery.of(context).size.width > 1024;
-
     return ConnectivityBanner(
       child: Scaffold(
         bottomNavigationBar: isDesktop
-            ? null // Sem bottomNavBar no desktop
+            ? null
             : Container(
                 color: Theme.of(context).colorScheme.error,
                 padding: EdgeInsets.symmetric(vertical: 10, horizontal: 20),
@@ -567,9 +563,7 @@ class _SettingsPageState extends State<SettingsPage> {
         body: isDesktop
             ? Center(
                 child: Container(
-                  constraints: BoxConstraints(
-                    maxWidth: 1850, // Define a largura máxima para desktop
-                  ),
+                  constraints: BoxConstraints(maxWidth: 1850),
                   padding: EdgeInsets.symmetric(horizontal: 50),
                   child: SingleChildScrollView(
                     child: Column(
@@ -583,11 +577,18 @@ class _SettingsPageState extends State<SettingsPage> {
                                 radius: 65,
                                 backgroundColor:
                                     Theme.of(context).colorScheme.primary,
-                                child: Icon(
-                                  Icons.camera_alt,
-                                  color: Theme.of(context).colorScheme.outline,
-                                  size: 50,
-                                ),
+                                backgroundImage: userPhotoUrl != null
+                                    ? NetworkImage(userPhotoUrl!)
+                                    : null,
+                                child: userPhotoUrl == null
+                                    ? Icon(
+                                        Icons.camera_alt,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .outline,
+                                        size: 50,
+                                      )
+                                    : null,
                               ),
                               SizedBox(height: 30),
                               Text(
@@ -827,7 +828,6 @@ class _SettingsPageState extends State<SettingsPage> {
                                               ),
                                             ),
                                     ),
-
                                     ElevatedButton.icon(
                                       onPressed: _showLogoutConfirmationDialog,
                                       icon: Icon(
@@ -852,9 +852,8 @@ class _SettingsPageState extends State<SettingsPage> {
                                       style: ElevatedButton.styleFrom(
                                         padding: EdgeInsetsDirectional.fromSTEB(
                                             35, 20, 35, 20),
-                                        backgroundColor: Theme.of(context)
-                                            .colorScheme
-                                            .error,
+                                        backgroundColor:
+                                            Theme.of(context).colorScheme.error,
                                         elevation: 3,
                                         shape: RoundedRectangleBorder(
                                           borderRadius:
@@ -892,12 +891,18 @@ class _SettingsPageState extends State<SettingsPage> {
                                     radius: 55,
                                     backgroundColor:
                                         Theme.of(context).colorScheme.primary,
-                                    child: Icon(
-                                      Icons.camera_alt,
-                                      color:
-                                          Theme.of(context).colorScheme.outline,
-                                      size: 40,
-                                    ),
+                                    backgroundImage: userPhotoUrl != null
+                                        ? NetworkImage(userPhotoUrl!)
+                                        : null,
+                                    child: userPhotoUrl == null
+                                        ? Icon(
+                                            Icons.camera_alt,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .outline,
+                                            size: 40,
+                                          )
+                                        : null,
                                   ),
                                   SizedBox(height: 20),
                                   Text(
