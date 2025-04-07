@@ -12,6 +12,7 @@ import 'package:app_io/util/services/connectivity_service.dart';
 import 'package:app_io/util/themes/app_theme.dart';
 import 'package:app_tracking_transparency/app_tracking_transparency.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -22,37 +23,45 @@ import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
-final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+FlutterLocalNotificationsPlugin();
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  /// Solicita a permissão de rastreamento antes de tudo
+  // Solicita a permissão de rastreamento para iOS (ATT)
   if (!kIsWeb && Platform.isIOS) {
     await _forceAppTrackingPermission();
   }
 
-  // Inicialize o Firebase
+  // Inicializa o Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  // Desabilita a persistência local no Firestore (caso necessário)
   FirebaseFirestore.instance.settings = Settings(
     persistenceEnabled: false,
   );
 
-  // Inicialize o serviço de conectividade
+  // Inicializa o serviço de conectividade
   final connectivityService = ConnectivityService();
   connectivityService.initialize();
 
+  // Define orientação do app para retrato
   if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
     ]);
   }
 
-  // Inicialize o Flutter Local Notifications
+  // Inicializa as notificações locais
   await initializeLocalNotifications();
+
+  // Ativa o Firebase App Check usando o provedor App Attest para iOS
+  await FirebaseAppCheck.instance.activate(
+    appleProvider: AppleProvider.appAttest,
+  );
 
   runApp(
     MultiProvider(
@@ -78,10 +87,12 @@ Future<void> _forceAppTrackingPermission() async {
 
 Future<void> initializeLocalNotifications() async {
   // Configuração para Android
-  const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const AndroidInitializationSettings androidSettings =
+  AndroidInitializationSettings('@mipmap/ic_launcher');
 
   // Configuração para iOS
-  const DarwinInitializationSettings iosSettings = DarwinInitializationSettings();
+  const DarwinInitializationSettings iosSettings =
+  DarwinInitializationSettings();
 
   // Configuração geral
   const InitializationSettings settings = InitializationSettings(
@@ -103,8 +114,6 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-
-    // Inicialize o FirebaseMessaging
     _initializeFirebaseMessaging();
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -115,7 +124,7 @@ class _MyAppState extends State<MyApp> {
     try {
       _firebaseMessaging = FirebaseMessaging.instance;
 
-      // Solicitar permissão no iOS
+      // Solicitar permissão no iOS para notificações
       if (!kIsWeb && Platform.isIOS) {
         NotificationSettings settings = await _firebaseMessaging!.requestPermission(
           alert: true,
@@ -125,19 +134,19 @@ class _MyAppState extends State<MyApp> {
         print('Permissões de notificação: ${settings.authorizationStatus}');
       }
 
-      // Obter o token FCM e salvá-lo no Firestore
+      // Obter o token FCM e salvar no Firestore
       _firebaseMessaging!.getToken().then((token) {
         if (token != null) {
           _saveTokenToFirestore(token);
         }
       });
 
-      // Escutar atualizações de token
+      // Atualizações de token
       _firebaseMessaging!.onTokenRefresh.listen((newToken) {
         _saveTokenToFirestore(newToken);
       });
 
-      // Escutar notificações no foreground
+      // Escutar notificações em primeiro plano
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         print('Mensagem recebida no foreground: ${message.notification?.title}');
         if (message.notification != null) {
@@ -185,9 +194,9 @@ class _MyAppState extends State<MyApp> {
     );
 
     flutterLocalNotificationsPlugin.show(
-      0, // ID da notificação
-      title, // Título
-      body, // Corpo
+      0,
+      title,
+      body,
       platformDetails,
       payload: payload.toString(),
     );
@@ -218,9 +227,7 @@ class _MyAppState extends State<MyApp> {
         '/login': (context) => LoginPage(),
         '/admin': (context) => AuthGuard(child: AdminPanelPage()),
       },
-      onGenerateRoute: (settings) {
-        return null;
-      },
+      onGenerateRoute: (settings) => null,
       onUnknownRoute: (settings) {
         return MaterialPageRoute(
           builder: (context) => Scaffold(

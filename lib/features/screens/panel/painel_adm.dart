@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'package:app_io/auth/providers/auth_provider.dart';
 import 'package:app_io/features/screens/apis/manage_apis.dart';
+import 'package:app_io/features/screens/calender/calender.dart';
 import 'package:app_io/features/screens/campaign/manage_campaigns.dart';
 import 'package:app_io/features/screens/collaborator/manage_collaborators.dart';
 import 'package:app_io/features/screens/company/manage_companies.dart';
 import 'package:app_io/features/screens/configurations/dashboard_configurations.dart';
 import 'package:app_io/features/screens/form/manage_forms.dart';
-import 'package:app_io/features/screens/meeting_requests/meeting_requests.dart';
+import 'package:app_io/features/screens/requests/requests.dart';
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';
 import 'package:app_io/util/services/firestore_service.dart';
@@ -30,6 +31,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   bool isLoading = true;
   bool _isEmpresaUser =
       false; // Será true se o documento for encontrado em "empresas"
+  String? createdBy;
 
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
       _userDocSubscription;
@@ -119,6 +121,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       hasCriarFormAccess = userData?['criarForm'] ?? false;
       hasCriarCampanhaAccess = userData?['criarCampanha'] ?? false;
       hasExecutarAPIs = userData?['executarAPIs'] ?? false;
+      createdBy = userData?['createdBy'];
       isLoading = false;
     });
 
@@ -284,6 +287,15 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
+    final user = authProvider.user;
+    bool showCalendar = false;
+    if (user != null) {
+      if (user.uid == "NNLWiMhjJdS8GMCnZiL99zQJ4Tz1" || user.uid == "m9AMYnjRhjfrP1HtBm5Ra75Jv0F2") {
+        showCalendar = true;
+      } else if (createdBy == "NNLWiMhjJdS8GMCnZiL99zQJ4Tz1" || createdBy == "m9AMYnjRhjfrP1HtBm5Ra75Jv0F2") {
+        showCalendar = true;
+      }
+    }
     final bool isDesktop = MediaQuery.of(context).size.width > 1024;
 
     if (isLoading) {
@@ -416,15 +428,15 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                                 context, DashboardConfigurations()),
                             isDesktop: isDesktop,
                           ),
-                        // Exibe o card de Solicitações de Reunião somente se o documento do usuário foi encontrado na coleção "empresas"
+                        // Exibe o card de Solicitações somente se o documento do usuário foi encontrado na coleção "empresas"
                         if (_isEmpresaUser)
                           _buildCardOption(
                             context,
-                            title: 'Solicitações de Reunião',
-                            subtitle: 'Solicitações de Reuniões abertas',
+                            title: 'Solicitações',
+                            subtitle: 'Solicitações de Reunião e Gravação abertas',
                             icon: Icons.comment,
                             onTap: () =>
-                                _navigateWithFade(context, MeetingRequests()),
+                                _navigateWithFade(context, Requests()),
                             isDesktop: isDesktop,
                           ),
                       ],
@@ -498,11 +510,21 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                       if (_isEmpresaUser)
                         _buildCardOption(
                           context,
-                          title: 'Solicitações de Reunião',
-                          subtitle: 'Solicitações de Reuniões abertas',
+                          title: 'Solicitações',
+                          subtitle: 'Solicitações de Reunião e Gravação abertas',
                           icon: Icons.comment,
                           onTap: () =>
-                              _navigateWithFade(context, MeetingRequests()),
+                              _navigateWithFade(context, Requests()),
+                          isDesktop: isDesktop,
+                        ),
+                      if (showCalendar)
+                        _buildCardOption(
+                          context,
+                          title: 'Calendário',
+                          subtitle: 'Reuniões, gravações, feriados, etc.',
+                          icon: Icons.calendar_month,
+                          onTap: () =>
+                              _navigateWithFade(context, Calender()),
                           isDesktop: isDesktop,
                         ),
                       if (!hasGerenciarParceirosAccess &&
