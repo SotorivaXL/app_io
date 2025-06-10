@@ -5,6 +5,7 @@ import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';
 import 'package:app_io/util/utils.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -85,9 +86,13 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
         'uid': uid,
       });
 
+      // Deleta a pasta do colaborador no Firebase Storage
+      await _deleteStorageFolder(uid);
+
       // Notifica o sucesso
       showErrorDialog(context, "Colaborador excluído com sucesso!", "Sucesso");
     } catch (e) {
+      print("Erro ao excluir colaborador: $e");
       showErrorDialog(context, "Falha ao excluir colaborador", "Atenção");
     }
   }
@@ -337,6 +342,24 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
     }
   }
 
+  Future<void> _deleteStorageFolder(String uid) async {
+    final folderRef = FirebaseStorage.instance.ref().child(uid);
+    try {
+      final listResult = await folderRef.listAll();
+      // Apaga cada arquivo encontrado
+      for (var item in listResult.items) {
+        await item.delete();
+      }
+      // Se houver subpastas, pode-se iterar sobre elas também (opcional)
+      for (var prefix in listResult.prefixes) {
+        await _deleteStorageFolder(prefix.fullPath);
+      }
+    } catch (e) {
+      print("Erro ao deletar pasta do Storage para o uid $uid: $e");
+      rethrow;
+    }
+  }
+
   @override
   void dispose() {
     _userDocSubscription?.cancel();
@@ -472,6 +495,10 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                           margin: EdgeInsets.only(top: 20, right: 15, left: 15),
                           // Aumentando a altura do ListTile
                           child: ListTile(
+                            leading: CircleAvatar(
+                              radius: 30, // ajuste o tamanho conforme desejado
+                              backgroundImage: NetworkImage(collaborator['photoUrl']),
+                            ),
                             // ADICIONADO: aumenta o padding interno
                             contentPadding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
                             title: Text(
@@ -556,8 +583,12 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                     final collaborator = collaborators[index];
                     return Card(
                       elevation: 4,
-                      margin: EdgeInsets.only(top: 20, right: 15, left: 15),
+                      margin: EdgeInsets.only(top: 20),
                       child: ListTile(
+                        leading: CircleAvatar(
+                          radius: 30, // ajuste o tamanho conforme desejado
+                          backgroundImage: NetworkImage(collaborator['photoUrl']),
+                        ),
                         title: Text(
                           collaborator['name'] ?? 'Nome não disponível',
                           style: TextStyle(
