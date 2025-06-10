@@ -3,18 +3,43 @@
     {
       "source": "functions-legacy",
       "codebase": "legacy",
-      "runtime": "nodejs18"
+      "runtime": "nodejs18",
+      "endpoints": {
+        "deleteMessage": {
+          "region": "us-central1",
+          "allowUnauthenticated": true,
+          "deleteMessage": {
+            "allowUnauthenticated": true,
+            "environmentVariables": {
+              "ZAPI_ID": "VALOR_A",
+              "ZAPI_TOKEN": "VALOR_B",
+              "ZAPI_CLIENT_TOKEN": "VALOR_C"
+            }
+          }
+        }
+      }
     },
     {
       "source": "functions-v2",
       "codebase": "v2",
-      "runtime": "nodejs20"
+      "runtime": "nodejs20",
+      "endpoints": {
+        "deleteMessage": {
+          "region": "us-central1",
+          "allowUnauthenticated": true
+        }
+      },
+      "env": {
+        "ZAPI_ID": "3DE6EEE377956091867532C54B267657",
+        "ZAPI_TOKEN": "7C7315CDD9A2B7EF6EBB80AD"
+      }
     }
   ],
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+
   "flutter": {
     "platforms": {
       "android": {

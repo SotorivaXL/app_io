@@ -5,6 +5,7 @@ import 'package:app_io/features/screens/campaign/manage_campaigns.dart';
 import 'package:app_io/features/screens/collaborator/manage_collaborators.dart';
 import 'package:app_io/features/screens/company/manage_companies.dart';
 import 'package:app_io/features/screens/configurations/dashboard_configurations.dart';
+import 'package:app_io/features/screens/crm/whatsapp_chats.dart';
 import 'package:app_io/features/screens/form/manage_forms.dart';
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';
@@ -27,6 +28,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   bool hasCriarFormAccess = false; // Atualizado
   bool hasCriarCampanhaAccess = false; // Atualizado
   bool isLoading = true;
+  bool hasGerenciarWhatsappAccess = false;
 
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
   _userDocSubscription;
@@ -111,12 +113,14 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
 
     setState(() {
       hasGerenciarParceirosAccess = userData?['gerenciarParceiros'] ?? false;
-      hasGerenciarColaboradoresAccess =
-          userData?['gerenciarColaboradores'] ?? false;
+      hasGerenciarColaboradoresAccess = userData?['gerenciarColaboradores'] ?? false;
       hasConfigurarDashAccess = userData?['configurarDash'] ?? false;
       hasCriarFormAccess = userData?['criarForm'] ?? false;
       hasCriarCampanhaAccess = userData?['criarCampanha'] ?? false;
       hasExecutarAPIs = userData?['executarAPIs'] ?? false;
+      // --- NOVO CAMPO:
+      hasGerenciarWhatsappAccess = userData?['gerenciarWhatsapp'] ?? false;
+
       isLoading = false;
     });
 
@@ -397,6 +401,18 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                             },
                             isDesktop: isDesktop,
                           ),
+                        if (hasGerenciarWhatsappAccess)
+                          _buildCardOption(
+                            context,
+                            title: 'Gerenciar WhatsApp',
+                            subtitle: 'Gerenciar mensagens',
+                            icon: Icons.message,
+                            onTap: () async {
+                              _navigateWithFade(
+                                  context, WhatsAppChats());
+                            },
+                            isDesktop: isDesktop,
+                          ),
                       ],
                     ),
                     if (!hasGerenciarParceirosAccess &&
@@ -517,6 +533,18 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                           onTap: () async {
                             _navigateWithFade(
                                 context, DashboardConfigurations());
+                          },
+                          isDesktop: isDesktop,
+                        ),
+
+                      if (hasGerenciarWhatsappAccess)
+                        _buildCardOption(
+                          context,
+                          title: 'Gerenciar WhatsApp',
+                          subtitle: 'Gerenciar mensagens',
+                          icon: Icons.message,
+                          onTap: () async {
+                            _navigateWithFade(context, WhatsAppChats());
                           },
                           isDesktop: isDesktop,
                         ),
