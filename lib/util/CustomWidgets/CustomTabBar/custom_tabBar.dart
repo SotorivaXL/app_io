@@ -13,6 +13,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:app_io/features/screens/crm/whatsapp_chats.dart';
 
 class CustomTabBarPage extends StatefulWidget {
   @override
@@ -150,6 +151,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     }
 
     List<Widget> newPages = [];
+
+    newPages.add(const WhatsAppChats());
 
     if (newHasDashboardAccess) {
       newPages.add(DashboardPage());
@@ -361,19 +364,12 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
         ),
         bottomNavigationBar: isDesktop
             ? null // Remove a barra de navegação inferior no desktop
-            : SizedBox(
-          height: (!kIsWeb && Platform.isIOS)
-              ? (111 - (_scrollOffset / 2))
-              .clamp(0.0, 111)
-              .ceilToDouble()
-              : (79 - (_scrollOffset / 2))
-              .clamp(0.0, 79)
-              .ceilToDouble(),
+            : SafeArea(
+          // Garante que não fique colado na parte inferior do sistema
           child: Opacity(
             opacity: (1.0 - (_scrollOffset / 40)).clamp(0.0, 1.0),
             child: BottomNavyBar(
-              backgroundColor:
-              Theme.of(context).colorScheme.secondary,
+              backgroundColor: Theme.of(context).colorScheme.secondary,
               showInactiveTitle: false,
               selectedIndex: _currentIndex,
               showElevation: true,
@@ -543,6 +539,16 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
 
   List<BottomNavyBarItem> _buildBottomNavyBarItems() {
     List<BottomNavyBarItem> items = [];
+
+    items.add(
+      BottomNavyBarItem(
+        icon: Icon(Icons.chat),
+        title: Text('Chats'),
+        inactiveColor: Theme.of(context).colorScheme.onSecondary,
+        activeColor: Theme.of(context).colorScheme.tertiary,
+        textAlign: TextAlign.center,
+      ),
+    );
 
     if (hasDashboardAccess) {
       items.add(

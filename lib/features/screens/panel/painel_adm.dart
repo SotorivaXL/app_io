@@ -5,6 +5,7 @@ import 'package:app_io/features/screens/campaign/manage_campaigns.dart';
 import 'package:app_io/features/screens/collaborator/manage_collaborators.dart';
 import 'package:app_io/features/screens/company/manage_companies.dart';
 import 'package:app_io/features/screens/configurations/dashboard_configurations.dart';
+import 'package:app_io/features/screens/crm/whatsapp_chats.dart';
 import 'package:app_io/features/screens/form/manage_forms.dart';
 import 'package:app_io/features/screens/meeting_requests/meeting_requests.dart';
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
@@ -28,6 +29,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   bool hasCriarFormAccess = false;
   bool hasCriarCampanhaAccess = false;
   bool isLoading = true;
+  bool hasGerenciarWhatsappAccess = false;
   bool _isEmpresaUser =
       false; // Será true se o documento for encontrado em "empresas"
 
@@ -113,12 +115,14 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
     if (!mounted) return;
     setState(() {
       hasGerenciarParceirosAccess = userData?['gerenciarParceiros'] ?? false;
-      hasGerenciarColaboradoresAccess =
-          userData?['gerenciarColaboradores'] ?? false;
+      hasGerenciarColaboradoresAccess = userData?['gerenciarColaboradores'] ?? false;
       hasConfigurarDashAccess = userData?['configurarDash'] ?? false;
       hasCriarFormAccess = userData?['criarForm'] ?? false;
       hasCriarCampanhaAccess = userData?['criarCampanha'] ?? false;
       hasExecutarAPIs = userData?['executarAPIs'] ?? false;
+      // --- NOVO CAMPO:
+      hasGerenciarWhatsappAccess = userData?['gerenciarWhatsapp'] ?? false;
+
       isLoading = false;
     });
 
@@ -427,6 +431,18 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                                 _navigateWithFade(context, MeetingRequests()),
                             isDesktop: isDesktop,
                           ),
+                        if (hasGerenciarWhatsappAccess)
+                          _buildCardOption(
+                            context,
+                            title: 'Gerenciar WhatsApp',
+                            subtitle: 'Gerenciar mensagens',
+                            icon: Icons.message,
+                            onTap: () async {
+                              _navigateWithFade(
+                                  context, WhatsAppChats());
+                            },
+                            isDesktop: isDesktop,
+                          ),
                       ],
                     ),
                   ),
@@ -495,6 +511,49 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                               context, DashboardConfigurations()),
                           isDesktop: isDesktop,
                         ),
+
+                      if (hasGerenciarWhatsappAccess)
+                        _buildCardOption(
+                          context,
+                          title: 'Gerenciar WhatsApp',
+                          subtitle: 'Gerenciar mensagens',
+                          icon: Icons.message,
+                          onTap: () async {
+                            _navigateWithFade(context, WhatsAppChats());
+                          },
+                          isDesktop: isDesktop,
+                        ),
+                    ],
+                  ),
+                  if (!hasGerenciarParceirosAccess &&
+                      !hasGerenciarColaboradoresAccess &&
+                      !hasConfigurarDashAccess &&
+                      !hasCriarFormAccess &&
+                      !hasCriarCampanhaAccess)
+                    Align(
+                      alignment: Alignment.topCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 20.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.lock,
+                              size: isDesktop ? 120 : 100,
+                              color: Theme.of(context)
+                                  .colorScheme.primary,
+                            ),
+                            SizedBox(height: isDesktop ? 30 : 20),
+                            Text(
+                              'Você não tem nenhuma permissão nesta tela.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: isDesktop ? 22 : 18,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context)
+                                    .colorScheme.onSecondary,
+                              ),
                       if (_isEmpresaUser)
                         _buildCardOption(
                           context,

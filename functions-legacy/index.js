@@ -122,7 +122,6 @@ exports.deleteCompany = functions.https.onCall(async (data, context) => {
     }
 
     const companyId = data.companyId;
-
     if (!companyId) {
         throw new functions.https.HttpsError(
             'invalid-argument',
@@ -144,22 +143,33 @@ exports.deleteCompany = functions.https.onCall(async (data, context) => {
             // Continua mesmo assim
         }
 
-        // 3. Buscar todos os usuários com 'createdBy' igual ao companyId
+        // 3. Deletar os arquivos da empresa no Firebase Storage
+        const bucket = admin.storage().bucket();
+        const companyFolder = companyId + '/'; // Supõe que os arquivos estão em uma pasta nomeada com o companyId
+        const [companyFiles] = await bucket.getFiles({ prefix: companyFolder });
+        for (const file of companyFiles) {
+            try {
+                await file.delete();
+                console.log(`Arquivo ${file.name} deletado da empresa.`);
+            } catch (error) {
+                console.error(`Erro ao deletar arquivo ${file.name} da empresa:`, error);
+            }
+        }
+
+        // 4. Buscar todos os usuários com 'createdBy' igual ao companyId
         const usersSnapshot = await admin.firestore()
             .collection('users')
             .where('createdBy', '==', companyId)
             .get();
-
         const userUids = [];
-
         usersSnapshot.forEach(doc => {
-            const uid = doc.id; // Usando o ID do documento como UID do usuário
+            const uid = doc.id; // Usa o ID do documento como UID do usuário
             if (uid) {
                 userUids.push(uid);
             }
         });
 
-        // 4. Deletar usuários do Firebase Authentication e Firestore
+        // 5. Para cada usuário vinculado, deletar conta, documento e arquivos no Storage
         for (const uid of userUids) {
             try {
                 // Deletar do Firebase Authentication
@@ -169,13 +179,25 @@ exports.deleteCompany = functions.https.onCall(async (data, context) => {
                 // Deletar do Firestore
                 await admin.firestore().collection('users').doc(uid).delete();
                 console.log(`Usuário ${uid} deletado do Firestore.`);
+
+                // Deletar os arquivos do usuário no Storage
+                const userFolder = uid + '/';
+                const [userFiles] = await bucket.getFiles({ prefix: userFolder });
+                for (const file of userFiles) {
+                    try {
+                        await file.delete();
+                        console.log(`Arquivo ${file.name} deletado do usuário ${uid}.`);
+                    } catch (error) {
+                        console.error(`Erro ao deletar arquivo ${file.name} do usuário ${uid}:`, error);
+                    }
+                }
             } catch (error) {
-                console.error(`Erro ao deletar usuário ${uid}:`, error);
+                console.error(`Erro ao deletar usuário ${uid}:, error`);
                 // Continua tentando com os próximos usuários
             }
         }
 
-        return {success: true, message: 'Empresa e usuários vinculados excluídos com sucesso.'};
+        return { success: true, message: 'Empresa e usuários vinculados excluídos com sucesso.' };
     } catch (error) {
         console.error('Erro ao excluir empresa e usuários vinculados:', error);
         throw new functions.https.HttpsError('unknown', 'Erro ao excluir empresa e usuários vinculados.');
@@ -185,7 +207,10 @@ exports.deleteCompany = functions.https.onCall(async (data, context) => {
 exports.createUserAndCompany = functions.https.onCall(async (data, context) => {
     // Verifica se o usuário está autenticado
     if (!context.auth) {
-        throw new functions.https.HttpsError('failed-precondition', 'A função deve ser chamada enquanto autenticado.');
+        throw new functions.https.HttpsError(
+            'failed-precondition',
+            'A função deve ser chamada enquanto autenticado.'
+        );
     }
 
     const {
@@ -212,7 +237,6 @@ exports.createUserAndCompany = functions.https.onCall(async (data, context) => {
             disabled: false,
         });
 
-        // Verifica se o CNPJ está presente para decidir entre empresa e colaborador
         if (cnpj) {
             // Adiciona os dados da empresa no Firestore
             await admin.firestore().collection('empresas').doc(userRecord.uid).set({
@@ -229,6 +253,7 @@ exports.createUserAndCompany = functions.https.onCall(async (data, context) => {
                 criarCampanha: accessRights.criarCampanha || false,
                 criarForm: accessRights.criarForm || false,
                 alterarSenha: accessRights.alterarSenha || false,
+                executarAPIs: accessRights.executarAPIs || false,
                 contract: contract || '',
                 countArtsValue: countArtsValue || 0,
                 countVideosValue: countVideosValue || 0,
@@ -236,7 +261,11 @@ exports.createUserAndCompany = functions.https.onCall(async (data, context) => {
                 emailVerified: false,
             });
 
-            return {success: true, message: 'Usuário e empresa criados com sucesso.'};
+            return {
+                success: true,
+                message: 'Usuário e empresa criados com sucesso.',
+                uid: userRecord.uid
+            };
         } else {
             // Adiciona os dados do colaborador no Firestore na coleção 'users'
             await admin.firestore().collection('users').doc(userRecord.uid).set({
@@ -254,10 +283,15 @@ exports.createUserAndCompany = functions.https.onCall(async (data, context) => {
                 emailVerified: false,
             });
 
-            return {success: true, message: 'Usuário colaborador criado com sucesso.'};
+            return {
+                success: true,
+                message: 'Usuário colaborador criado com sucesso.',
+                uid: userRecord.uid
+            };
         }
     } catch (error) {
-        throw new functions.https.HttpsError('internal', 'Erro ao criar usuário ou empresa.', error);
+        console.error('Erro ao criar usuário ou empresa:', error);
+        throw new functions.https.HttpsError('internal', 'Erro ao criar usuário ou empresa.');
     }
 });
 
@@ -1246,5 +1280,31 @@ exports.updateCompany = functions.https.onRequest(async (req, res) => {
     } catch (error) {
         console.error("Error updating company:", error);
         res.status(500).send("Erro ao atualizar empresa");
+    }
+});
+
+exports.deleteUser = functions.https.onCall(async (data, context) => {
+    // Verifica se o parâmetro uid foi enviado
+    const uid = data.uid;
+    if (!uid) {
+        throw new functions.https.HttpsError('invalid-argument', 'O uid é obrigatório.');
+    }
+
+    try {
+        // Deleta o usuário do Firebase Authentication
+        await admin.auth().deleteUser(uid);
+
+        // Deleta todos os arquivos na pasta do usuário no Firebase Storage
+        const bucket = admin.storage().bucket();
+        const prefix = uid + '/'; // Supondo que os arquivos estejam organizados em uma pasta cujo nome é o uid
+        const [files] = await bucket.getFiles({ prefix });
+
+        const deletePromises = files.map(file => file.delete());
+        await Promise.all(deletePromises);
+
+        return { success: true };
+    } catch (error) {
+        console.error("Erro ao excluir usuário:", error);
+        throw new functions.https.HttpsError('unknown', 'Erro ao excluir usuário', error);
     }
 });

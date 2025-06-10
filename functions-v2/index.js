@@ -10,6 +10,18 @@ const express = require("express");
 admin.initializeApp();
 const db = admin.firestore();
 const auth = admin.auth();
+const app = express();
+app.use(cors({ origin: true }));
+const { defineSecret } = require('firebase-functions/params');
+const { SQSClient, SendMessageCommand } = require("@aws-sdk/client-sqs");
+
+const sqsClient = new SQSClient({
+    region: process.env.AWS_REGION || "us-east-2",
+    credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    },
+});
 
 // Configuração centralizada
 const META_CONFIG = {
@@ -427,3 +439,341 @@ const sanitizeMetaData = (data) => {
         return acc;
     }, {});
 };
+
+exports.zApiWebhook = onRequest(async (req, res) => {
+    try {
+        logger.info("Recebido webhook da Z-API:", req.body);
+        const data = req.body;
+
+        // Processa somente se for callback de mensagem recebida
+        if (data && data.type === "ReceivedCallback") {
+            // "phone" é usado como chatId
+            const chatId = data.phone;
+
+            // Determina o nome do chat: usa data.chatName se disponível, senão data.senderName, senão o chatId
+            const chatName = data.chatName || data.senderName || chatId;
+
+            // Define o conteúdo e o tipo da mensagem conforme os campos disponíveis
+            let messageContent = "";
+            let messageType = "text";
+            if (data.text && data.text.message) {
+                messageContent = data.text.message;
+                messageType = "text";
+            } else if (data.audio && data.audio.audioUrl) {
+                messageContent = data.audio.audioUrl;
+                messageType = "audio";
+            } else if (data.image && data.image.imageUrl) {
+                messageContent = data.image.imageUrl;
+                messageType = "image";
+            } else if (data.video && data.video.videoUrl) {
+                messageContent = data.video.videoUrl;
+                messageType = "video";
+            } if (data.sticker && data.sticker.stickerUrl) {
+                messageContent = data.sticker.stickerUrl;
+                messageType = "sticker";
+            }
+
+            // Converte o campo "momment" (milissegundos) para um horário formatado "HH:MM"
+            let formattedTime = "";
+            if (data.momment) {
+                const dateObj = new Date(data.momment);
+                const hours = dateObj.getHours().toString().padStart(2, '0');
+                const minutes = dateObj.getMinutes().toString().padStart(2, '0');
+                formattedTime = `${hours}:${minutes}`;
+            } else {
+                const now = new Date();
+                formattedTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+            }
+
+            // Sender e foto: para grupos, utiliza participantPhone; caso contrário, usa phone
+            const sender = data.participantPhone || data.phone;
+            const senderName = data.senderName || "";
+            const senderPhoto = data.senderPhoto || data.photo || "";
+
+            const chatDocRef = admin.firestore().collection("whatsappChats").doc(chatId);
+            const msgDocRef = chatDocRef.collection("messages").doc();
+
+            // Salva a mensagem recebida
+            await msgDocRef.set({
+                content: messageContent,
+                type: messageType,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                fromMe: data.fromMe === true,
+                sender: sender,
+                senderName: senderName,
+                senderPhoto: senderPhoto,
+            });
+
+            // Atualiza o documento do chat com as informações úteis
+            const updateData = {
+                chatId: chatId,
+                name: chatName,
+                contactPhoto: senderPhoto,
+                lastMessage: messageContent,
+                lastMessageTime: formattedTime,
+                type: messageType,  // <-- Adiciona aqui o tipo da mensagem
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            };
+            if (data.fromMe !== true) {
+                updateData.unreadCount = admin.firestore.FieldValue.increment(1);
+            }
+            await chatDocRef.set(updateData, { merge: true });
+        }
+
+        res.status(200).send("OK");
+    } catch (error) {
+        logger.error("Erro no webhook Z-API:", error);
+        res.status(500).send("Erro interno");
+    }
+});
+
+exports.sendMessage = onRequest(async (req, res) => {
+    // Cabeçalhos CORS
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Content-Type");
+
+    if (req.method === "OPTIONS") {
+        return res.status(204).send("");
+    }
+
+    logger.info("sendMessage function called", { method: req.method, body: req.body });
+
+    // Se o payload tiver um campo "type", trata-se de callback – ignora
+    if (req.body.type) {
+        logger.warn("Ignorando payload de callback", { type: req.body.type });
+        return res.status(200).send("Callback ignorado");
+    }
+
+    if (req.method !== "POST") {
+        logger.warn("Método não permitido", { method: req.method });
+        return res.status(405).send("Method Not Allowed");
+    }
+
+    try {
+        // Espera os seguintes campos: chatId, message (legenda para mídias), fileType e fileData
+        const { chatId, message, fileType, fileData, clientMessageId } = req.body;
+        if (!chatId || (!message && !fileData)) {
+            logger.warn("Parâmetros ausentes", { chatId, message, fileData, clientMessageId });
+            return res.status(400).send("Faltam parâmetros");
+        }
+
+        // Idempotência: gera um identificador único se não fornecido
+        const uniqueId = clientMessageId || `${chatId}_${Date.now()}`;
+
+        // Recupera as variáveis de ambiente
+        const instanceId = process.env.ZAPI_ID;
+        const token = process.env.ZAPI_TOKEN;
+        const clientToken = process.env.ZAPI_CLIENT_TOKEN;
+        if (!instanceId || !token) {
+            logger.error("Variáveis de ambiente ZAPI_ID ou ZAPI_TOKEN não definidas");
+            return res.status(500).send("Configuração do backend incorreta");
+        }
+        if (!clientToken) {
+            logger.error("Variável de ambiente ZAPI_CLIENT_TOKEN não definida");
+            return res.status(500).send("Client-Token não definido na configuração do backend");
+        }
+        logger.info("Valores das variáveis de ambiente", { instanceId, token, clientToken });
+
+        // Define o endpoint e payload com base no fileType
+        let endpoint = "";
+        let payload = {};
+        if (fileType === "image") {
+            endpoint = "/send-image";
+            // Se o fileData não contiver o prefixo "data:image", adiciona-o (assumindo JPEG; adapte conforme necessário)
+            let imageData = fileData;
+            if (!fileData.startsWith("data:image/")) {
+                imageData = "data:image/jpeg;base64," + fileData;
+            }
+            payload = { phone: chatId, image: imageData, message: message };
+        } else if (fileType === "audio") {
+            endpoint = "/send-audio";
+            // Se o fileData não iniciar com "data:audio/", adicione o prefixo (aqui assumimos audio/mp4; ajuste se necessário)
+            let audioData = fileData;
+            if (!fileData.startsWith("data:audio/")) {
+                audioData = "data:audio/mp4;base64," + fileData;
+            }
+            payload = { phone: chatId, audio: audioData, message: message };
+        } else if (fileType === "video") {
+            endpoint = "/send-video";
+            payload = { phone: chatId, video: fileData, message: message };
+        } else {
+            endpoint = "/send-text";
+            payload = { phone: chatId, message: message };
+        }
+
+        const zApiUrl = `https://api.z-api.io/instances/${instanceId}/token/${token}${endpoint}`;
+        logger.info("Enviando mensagem via Z-API", { url: zApiUrl, chatId, payload });
+
+        const zApiResponse = await axios.post(
+            zApiUrl,
+            payload,
+            {
+                headers: {
+                    "Content-Type": "application/json",
+                    "Client-Token": clientToken
+                }
+            }
+        );
+        logger.info("Resposta da Z-API", { data: zApiResponse.data });
+
+        const chatDocRef = admin.firestore().collection("whatsappChats").doc(chatId);
+
+        if (clientMessageId) {
+            const existingMessages = await chatDocRef
+                .collection("messages")
+                .where("clientMessageId", "==", uniqueId)
+                .get();
+            if (!existingMessages.empty) {
+                logger.warn("Mensagem duplicada detectada", { clientMessageId: uniqueId });
+                return res.status(200).send(zApiResponse.data);
+            }
+        }
+
+        // Prepara os dados para salvar no Firestore
+        let firestoreData = {
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            fromMe: true,
+            sender: zApiResponse.data.sender || null,
+            clientMessageId: uniqueId,
+            type: (fileType && fileType !== "text") ? fileType : "text",
+        };
+
+        if (fileType && fileType !== "text") {
+            firestoreData.content = fileData; // Salva o valor original (sem prefixo) ou, se preferir, o imageData
+            firestoreData.caption = message;   // Legenda
+        } else {
+            firestoreData.content = message;
+        }
+
+        await chatDocRef.collection("messages").add(firestoreData);
+
+        await chatDocRef.set({
+            chatId: chatId,
+            lastMessage: (fileType && fileType !== "text" && message) ? message : firestoreData.content,
+            lastMessageTime: admin.firestore.FieldValue.serverTimestamp(),
+            type: firestoreData.type, // <-- Aqui o type que você definiu em firestoreData
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        return res.status(200).send(zApiResponse.data);
+    } catch (error) {
+        logger.error("Erro ao enviar mensagem:", error.response ? error.response.data : error);
+        return res
+            .status(500)
+            .send(error.response ? error.response.data : error.toString());
+    }
+});
+
+exports.deleteMessage = functions.https.onRequest(async (req, res) => {
+    // Configura CORS
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Content-Type");
+
+    if (req.method === "OPTIONS") {
+        return res.status(204).send("");
+    }
+
+    functions.logger.info("deleteMessage function called", {
+        method: req.method,
+        body: req.body,
+    });
+
+    if (req.method !== "POST") {
+        functions.logger.warn("Método não permitido", { method: req.method });
+        return res.status(405).send("Method Not Allowed");
+    }
+
+    try {
+        // Aqui, basta termos chatId e docId (ID do documento no Firestore)
+        const { chatId, docId } = req.body;
+
+        if (!chatId || !docId) {
+            functions.logger.warn("Parâmetros ausentes", { chatId, docId });
+            return res.status(400).send("Faltam parâmetros para deletar a mensagem (chatId e docId)");
+        }
+
+        // Remove o documento do Firestore
+        await admin
+            .firestore()
+            .collection("whatsappChats")
+            .doc(chatId)
+            .collection("messages")
+            .doc(docId)
+            .delete();
+
+        functions.logger.info("Mensagem excluída localmente com sucesso", { chatId, docId });
+        return res.status(200).send({ success: true });
+    } catch (error) {
+        functions.logger.error("Erro ao deletar mensagem:", error);
+        return res.status(500).send(error.toString());
+    }
+});
+
+exports.sendMeetingRequestToSQS = onRequest(async (req, res) => {
+    // Configura CORS
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Content-Type");
+
+    if (req.method === "OPTIONS") {
+        return res.status(204).send("");
+    }
+
+    try {
+        // Apenas aceitar POST
+        if (req.method !== "POST") {
+            console.log("[sendMeetingRequestToSQS] Método não permitido:", req.method); // ADICIONADO
+            return res.status(405).send("Método não permitido");
+        }
+
+        console.log("[sendMeetingRequestToSQS] Requisição recebida com body:", req.body); // ADICIONADO
+
+        // Extraia os dados do corpo da requisição
+        const { motivo, assunto, dataReuniao, nomeEmpresa, tipoSolicitacao, createdAt } = req.body;
+
+        // Validação simples
+        if (!motivo || !dataReuniao || !nomeEmpresa || !tipoSolicitacao) {
+            console.log("[sendMeetingRequestToSQS] Campos obrigatórios ausentes no body."); // ADICIONADO
+            return res.status(400).json({ error: "Campos obrigatórios ausentes" });
+        }
+
+        // Constrói o payload para enviar ao SQS
+        const payload = {
+            motivo,
+            assunto,
+            dataReuniao,
+            nomeEmpresa,
+            tipoSolicitacao,
+            createdAt: createdAt || new Date().toISOString(),
+        };
+
+        console.log("[sendMeetingRequestToSQS] Payload construído:", payload); // ADICIONADO
+
+        // Parâmetros para enviar a mensagem para o SQS
+        const params = {
+            MessageBody: JSON.stringify(payload),
+            QueueUrl: process.env.AWS_QUEUE_URL,
+        };
+
+        console.log("[sendMeetingRequestToSQS] Enviando mensagem à fila SQS:", params.QueueUrl); // ADICIONADO
+
+        // Cria o comando e envia a mensagem
+        const command = new SendMessageCommand(params);
+        const result = await sqsClient.send(command);
+
+        console.log("[sendMeetingRequestToSQS] Conexão com SQS bem-sucedida!"); // ADICIONADO
+        console.log("[sendMeetingRequestToSQS] Mensagem enviada ao SQS. Result:", result); // ADICIONADO
+        console.log("[sendMeetingRequestToSQS] Payload enviado:", payload); // ADICIONADO
+
+        return res.status(200).json({
+            message: "Dados enviados para o SQS com sucesso",
+            result: result,
+            payload: payload,
+        });
+    } catch (error) {
+        console.error("[sendMeetingRequestToSQS] Erro ao enviar dados para o SQS:", error);
+        return res.status(500).json({ error: "Erro interno ao enviar dados para o SQS" });
+    }
+});
