@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:app_io/features/screens/crm/whatsapp_chats.dart';
+import 'package:app_io/features/screens/reports/dash_principal_relatórios.dart';
 
 class CustomTabBarPage extends StatefulWidget {
   @override
@@ -153,6 +154,8 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     List<Widget> newPages = [];
 
     newPages.add(const WhatsAppChats());
+
+    newPages.add(const ReportsPage());
 
     if (newHasDashboardAccess) {
       newPages.add(DashboardPage());
@@ -538,64 +541,50 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   }
 
   List<BottomNavyBarItem> _buildBottomNavyBarItems() {
-    List<BottomNavyBarItem> items = [];
+    final cs = Theme.of(context).colorScheme;
 
-    items.add(
+    return [
+      // 0 – Chats
       BottomNavyBarItem(
-        icon: Icon(Icons.chat),
-        title: Text('Chats'),
-        inactiveColor: Theme.of(context).colorScheme.onSecondary,
-        activeColor: Theme.of(context).colorScheme.tertiary,
-        textAlign: TextAlign.center,
+        icon        : const Icon(Icons.chat),
+        title       : const Text('Chats'),
+        inactiveColor: cs.onSecondary,
+        activeColor : cs.tertiary,
       ),
-    );
 
-    if (hasDashboardAccess) {
-      items.add(
-        BottomNavyBarItem(
-          icon: Icon(Icons.dashboard),
-          title: Text('Início'),
-          inactiveColor: Theme.of(context).colorScheme.onSecondary,
-          activeColor: Theme.of(context).colorScheme.tertiary,
-          textAlign: TextAlign.center,
-        ),
-      );
-    }
-
-    if (hasLeadsAccess) {
-      items.add(
-        BottomNavyBarItem(
-          icon: Icon(Icons.people),
-          title: Text('Leads'),
-          inactiveColor: Theme.of(context).colorScheme.onSecondary,
-          activeColor: Theme.of(context).colorScheme.tertiary,
-          textAlign: TextAlign.center,
-        ),
-      );
-    }
-
-    if (hasAdmPanelAccess) {
-      items.add(
-        BottomNavyBarItem(
-          icon: Icon(Icons.admin_panel_settings),
-          title: Text('Painel Adm'),
-          inactiveColor: Theme.of(context).colorScheme.onSecondary,
-          activeColor: Theme.of(context).colorScheme.tertiary,
-          textAlign: TextAlign.center,
-        ),
-      );
-    }
-
-    items.add(
+      // 1 – Relatórios
       BottomNavyBarItem(
-        icon: Icon(Icons.settings),
-        title: Text('Config.'),
-        inactiveColor: Theme.of(context).colorScheme.onSecondary,
-        activeColor: Theme.of(context).colorScheme.tertiary,
-        textAlign: TextAlign.center,
+        icon        : const Icon(Icons.bar_chart),
+        title       : const Text('Relatórios'),
+        inactiveColor: cs.onSecondary,
+        activeColor : cs.tertiary,
       ),
-    );
 
-    return items;
+      // 3 – Leads
+      if (hasLeadsAccess)
+        BottomNavyBarItem(
+          icon        : const Icon(Icons.people),
+          title       : const Text('Leads'),
+          inactiveColor: cs.onSecondary,
+          activeColor : cs.tertiary,
+        ),
+
+      // 4 – Painel Adm
+      if (hasAdmPanelAccess)
+        BottomNavyBarItem(
+          icon        : const Icon(Icons.admin_panel_settings),
+          title       : const Text('Painel Adm'),
+          inactiveColor: cs.onSecondary,
+          activeColor : cs.tertiary,
+        ),
+
+      // 5 – Configurações
+      BottomNavyBarItem(
+        icon        : const Icon(Icons.settings),
+        title       : const Text('Config.'),
+        inactiveColor: cs.onSecondary,
+        activeColor : cs.tertiary,
+      ),
+    ];
   }
 }
