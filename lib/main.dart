@@ -32,7 +32,7 @@ void main() async {
     await _forceAppTrackingPermission();
   }
 
-  // Inicialize o Firebase
+  // Inicialize o FirebaseOloco
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );

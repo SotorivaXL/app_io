@@ -15,13 +15,15 @@ app.use(cors({ origin: true }));
 const { defineSecret } = require('firebase-functions/params');
 const { SQSClient, SendMessageCommand } = require("@aws-sdk/client-sqs");
 
-const sqsClient = new SQSClient({
-    region: process.env.AWS_REGION || "us-east-2",
-    credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    },
-});
+function buildSqsClient() {
+    return new SQSClient({
+        region: process.env.AWS_REGION || "us-east-2",
+        credentials: {
+            accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+        },
+    });
+}
 
 // Configuração centralizada
 const META_CONFIG = {
@@ -440,6 +442,12 @@ const sanitizeMetaData = (data) => {
     }, {});
 };
 
+const INBOUND_TYPES = [
+    "ReceivedCallback",        // padrão
+    "MessageReceived",         // 1ª resposta em chat novo
+    "TextReceived",            // algumas contas enviam assim
+];
+
 exports.zApiWebhook = onRequest(async (req, res) => {
     try {
         logger.info("Recebido webhook da Z-API:", req.body);
@@ -711,7 +719,7 @@ exports.deleteMessage = functions.https.onRequest(async (req, res) => {
     }
 });
 
-exports.sendMeetingRequestToSQS = onRequest(async (req, res) => {
+exports.sendMeetingRequestToSQS = onRequest( async (req, res) => {
     // Configura CORS
     res.set("Access-Control-Allow-Origin", "*");
     res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -759,9 +767,9 @@ exports.sendMeetingRequestToSQS = onRequest(async (req, res) => {
 
         console.log("[sendMeetingRequestToSQS] Enviando mensagem à fila SQS:", params.QueueUrl); // ADICIONADO
 
-        // Cria o comando e envia a mensagem
-        const command = new SendMessageCommand(params);
-        const result = await sqsClient.send(command);
+        const sqsClient = buildSqsClient();
+        const command   = new SendMessageCommand(params);
+        const result    = await sqsClient.send(command);
 
         console.log("[sendMeetingRequestToSQS] Conexão com SQS bem-sucedida!"); // ADICIONADO
         console.log("[sendMeetingRequestToSQS] Mensagem enviada ao SQS. Result:", result); // ADICIONADO
@@ -777,3 +785,91 @@ exports.sendMeetingRequestToSQS = onRequest(async (req, res) => {
         return res.status(500).json({ error: "Erro interno ao enviar dados para o SQS" });
     }
 });
+
+exports.createChat_v2 = onRequest(
+    {
+        cors: true,
+        invoker: 'public',
+    },
+    async (req, res) => {
+        // Pre-flight CORS
+        if (req.method === 'OPTIONS') return res.status(204).send('');
+        if (req.method !== 'POST')    return res.status(405).send('Method Not Allowed');
+
+        let { phone } = req.body || {};
+
+        if (!phone) return res.status(400).json({ error: 'Parâmetro phone ausente' });
+
+        phone = phone.replace(/\D/g, '');          // <-- tira +, espaços, etc.
+
+        if (!/^\d{10,15}$/.test(phone)) {          // <-- APENAS dígitos
+            return res.status(400).json({ error: "Parâmetro 'phone' inválido" });
+        }
+
+        // variáveis já definidas no projeto (Secret Manager ou env comum)
+        const { ZAPI_ID, ZAPI_TOKEN, ZAPI_CLIENT_TOKEN } = process.env;
+
+        try {
+            const url = `https://api.z-api.io/instances/${ZAPI_ID}/token/${ZAPI_TOKEN}/createChat`;
+            const headers = {
+                'Content-Type': 'application/json',
+                'Client-Token': ZAPI_CLIENT_TOKEN,
+            };
+
+            const zRes = await axios.post(url, { phone }, { headers });
+            logger.info('Status Z-API:', zRes.status, zRes.data);
+
+            logger.info('Resposta Z-API', zRes.data);
+            return res.status(200).json({ status: 'success', data: zRes.data });
+        } catch (err) {
+            logger.error('Z-API erro', err.response?.status, err.response?.data);
+            const status = err.response?.status || 500;
+            return res.status(status).json({
+                status: 'error',
+                message: err.response?.data || err.message,
+            });
+        }
+    }
+);
+
+exports.whatsappWebhook = onRequest(
+    { secrets: ['WHATSAPP_VERIFY_TOKEN'] },
+    async (req, res) => {
+
+        const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
+        if (req.method === 'GET') {
+            const mode  = req.query['hub.mode'];
+            const token = req.query['hub.verify_token'];
+            const chall = req.query['hub.challenge'];
+
+            if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+                return res.status(200).send(chall);  // ✓ Verified
+            }
+            return res.sendStatus(403);             // ✗ Wrong token
+        }
+
+        // 2) Notificações (POST)
+        if (req.method === 'POST') {
+            try {
+                const change = req.body.entry?.[0].changes?.[0].value;
+                const msg    = change?.messages?.[0];
+
+                if (msg?.referral) {
+                    const conv = change.conversation;
+                    await admin.firestore().collection('conversations').add({
+                        waConversationId : conv.id,
+                        adId             : msg.referral.source_id,
+                        adUrl            : msg.referral.source_url,
+                        originType       : conv.origin.type,      // referral_conversion
+                        firstMessage     : msg.text?.body ?? ''
+                    });
+                }
+                return res.sendStatus(200);
+            } catch (err) {
+                console.error('Webhook error', err);
+                return res.sendStatus(500);
+            }
+        }
+
+        res.sendStatus(405); // Método não permitido
+    });
