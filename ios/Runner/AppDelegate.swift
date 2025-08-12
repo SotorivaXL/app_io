@@ -3,6 +3,7 @@ import Flutter
 import FirebaseCore
 import FirebaseMessaging
 import UserNotifications
+import GoogleMaps // Importa o GoogleMaps
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -14,6 +15,9 @@ import UserNotifications
     // Inicializa o Firebase
     FirebaseApp.configure()
     print("Firebase configurado com sucesso.")
+
+    // Inicializa o Google Maps com sua chave de API
+    GMSServices.provideAPIKey("AIzaSyDMrSrMu5iWV3FmkJg7oMGqZQHI4EDJd0U") // Substitua pela sua chave
 
     // Configura o delegado para receber notificações
     UNUserNotificationCenter.current().delegate = self

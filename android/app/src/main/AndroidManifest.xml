@@ -45,8 +45,10 @@
 
         <!-- ②  pequeno ícone branco (24×24) que colocamos em res/drawable  -->
         <meta-data
-                android:name="com.google.firebase.messaging.default_notification_icon"
+            android:name="com.google.firebase.messaging.default_notification_icon"
                 android:resource="@drawable/ic_stat_ioconnect" />
+
+        <meta-data android:name="com.google.android.geo.API_KEY" android:value="AIzaSyDMrSrMu5iWV3FmkJg7oMGqZQHI4EDJd0U"/>
 
         <!-- mantenha esse também -->
         <meta-data

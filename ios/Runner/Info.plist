@@ -50,6 +50,10 @@
 	<string>Este aplicativo precisa salvar fotos na sua biblioteca.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Este aplicativo precisa acessar o microfone.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+    <string>Este aplicativo precisa acessar sua localização para exibir o mapa.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Este aplicativo precisa acessar sua localização para exibir o mapa.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>processing</string>

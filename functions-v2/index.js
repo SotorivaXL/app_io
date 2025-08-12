@@ -418,7 +418,6 @@ const sanitizeMetaData = (data) => {
         return acc;
     }, {});
 };
-
 //FUNCTIONS AWS
 
 exports.sendMeetingRequestToSQS = onRequest(async (req, res) => {
@@ -547,7 +546,7 @@ exports.zApiWebhook = onRequest(async (req, res) => {
     try {
         logger.info("Recebido webhook da Z-API:", req.body);
         const data = req.body;
-
+      
         /** ───────────────────────────────────────────────────────────
          *  0. Helpers locais
          *  ────────────────────────────────────────────────────────── */
@@ -676,7 +675,6 @@ exports.sendMessage = onRequest(async (req, res) => {
     if (req.method === "OPTIONS") {
         return res.status(204).send("");
     }
-
     logger.info("sendMessage function called", {method: req.method, body: req.body});
 
     // Se o payload tiver um campo "type", trata-se de callback – ignora
@@ -824,7 +822,6 @@ exports.sendMessage = onRequest(async (req, res) => {
         } else {
             firestoreData.content = message;
         }
-
         await msgsColRef.add(firestoreData);
 
         await chatDocRef.set({
@@ -885,6 +882,95 @@ exports.deleteMessage = functions.https.onRequest(async (req, res) => {
     }
 });
 
+exports.sendMeetingRequestToSQS = onRequest(async (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Content-Type");
+
+    if (req.method === "OPTIONS") {
+        return res.status(204).send("");
+    }
+
+    try {
+        if (req.method !== "POST") {
+            console.log("[sendMeetingRequestToSQS] Método não permitido:", req.method);
+            return res.status(405).send("Método não permitido");
+        }
+
+        console.log("[sendMeetingRequestToSQS] Requisição recebida com body:", req.body);
+
+        const {
+          tipoSolicitacao,
+          motivo,
+          assunto,
+          dataReuniao,
+          descricao,
+          dataGravacaoInicio,
+          dataGravacaoFim,
+          lat,
+          lng,
+          precisaRoteiro,
+          nomeEmpresa,
+          createdAt
+        } = req.body;
+
+        if (!nomeEmpresa || !tipoSolicitacao) {
+          return res.status(400).json({ error: "Campos obrigatórios ausentes" });
+        }
+
+        if (tipoSolicitacao === "Reunião") {
+          if (!motivo || !assunto || !dataReuniao) {
+            return res.status(400).json({ error: "Campos de Reunião ausentes" });
+          }
+        } else if (tipoSolicitacao === "Gravação") {
+          if (!descricao || !dataGravacaoInicio || !dataGravacaoFim) {
+            return res.status(400).json({ error: "Campos de Gravação ausentes" });
+          }
+          // lat, lng, precisaRoteiro podem ser opcionais ou obrigatórios conforme sua necessidade
+        }
+
+        // Monta o objeto final
+        const payload = {
+          tipoSolicitacao,
+          nomeEmpresa,
+          createdAt: createdAt || new Date().toISOString(),
+          motivo,
+          assunto,
+          dataReuniao,
+          descricao,
+          dataGravacaoInicio,
+          dataGravacaoFim,
+          lat,
+          lng,
+          precisaRoteiro
+        };
+
+        console.log("[sendMeetingRequestToSQS] Payload construído:", payload);
+
+        const params = {
+            MessageBody: JSON.stringify(payload),
+            QueueUrl: process.env.AWS_QUEUE_URL,
+        };
+
+        console.log("[sendMeetingRequestToSQS] Enviando mensagem à fila SQS:", params.QueueUrl);
+
+        const command = new SendMessageCommand(params);
+        const result = await sqsClient.send(command);
+
+        console.log("[sendMeetingRequestToSQS] Conexão com SQS bem-sucedida!");
+        console.log("[sendMeetingRequestToSQS] Mensagem enviada ao SQS. Result:", result);
+        console.log("[sendMeetingRequestToSQS] Payload enviado:", payload);
+
+        return res.status(200).json({
+            message: "Dados enviados para o SQS com sucesso",
+            result: result,
+            payload: payload,
+        });
+    } catch (error) {
+        console.error("[sendMeetingRequestToSQS] Erro ao enviar dados para o SQS:", error);
+        return res.status(500).json({ error: "Erro interno ao enviar dados para o SQS" });
+    }
+});
 exports.createChat_v2 = onRequest(
     { cors: true, invoker: 'public' },
     async (req, res) => {
@@ -1180,6 +1266,3 @@ exports.onChatStatusChange = onDocumentUpdated(
         if (Object.keys(updates).length) await chatRef.set(updates, {merge:true});
     }
 );
-
-//FIM DAS FUNCTIONS PARA ATUALIZAR TEMPO DE ATENDIMENTO
-

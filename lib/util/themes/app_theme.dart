@@ -86,6 +86,7 @@ class AppTheme {
       onSecondaryContainer: Color(0xFF252423),
       onPrimaryContainer: Color(0xFFf5f8fe),
       onTertiaryContainer: Color(0xFF2B2B2E),
+      onInverseSurface: Color(0xFFC999FF),
       surfaceBright: Color(0xFFB7B3C6),
       onTertiary: constantGreen,
     ),
