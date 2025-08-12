@@ -10,6 +10,7 @@ const express = require("express");
 admin.initializeApp();
 const db = admin.firestore();
 const auth = admin.auth();
+const crypto = require('crypto');
 
 // Configuração centralizada
 const META_CONFIG = {
@@ -146,7 +147,7 @@ exports.deleteCompany = functions.https.onCall(async (data, context) => {
         // 3. Deletar os arquivos da empresa no Firebase Storage
         const bucket = admin.storage().bucket();
         const companyFolder = companyId + '/'; // Supõe que os arquivos estão em uma pasta nomeada com o companyId
-        const [companyFiles] = await bucket.getFiles({ prefix: companyFolder });
+        const [companyFiles] = await bucket.getFiles({prefix: companyFolder});
         for (const file of companyFiles) {
             try {
                 await file.delete();
@@ -182,7 +183,7 @@ exports.deleteCompany = functions.https.onCall(async (data, context) => {
 
                 // Deletar os arquivos do usuário no Storage
                 const userFolder = uid + '/';
-                const [userFiles] = await bucket.getFiles({ prefix: userFolder });
+                const [userFiles] = await bucket.getFiles({prefix: userFolder});
                 for (const file of userFiles) {
                     try {
                         await file.delete();
@@ -197,103 +198,209 @@ exports.deleteCompany = functions.https.onCall(async (data, context) => {
             }
         }
 
-        return { success: true, message: 'Empresa e usuários vinculados excluídos com sucesso.' };
+        return {success: true, message: 'Empresa e usuários vinculados excluídos com sucesso.'};
     } catch (error) {
         console.error('Erro ao excluir empresa e usuários vinculados:', error);
         throw new functions.https.HttpsError('unknown', 'Erro ao excluir empresa e usuários vinculados.');
     }
 });
 
-exports.createUserAndCompany = functions.https.onCall(async (data, context) => {
-    // Verifica se o usuário está autenticado
-    if (!context.auth) {
-        throw new functions.https.HttpsError(
-            'failed-precondition',
-            'A função deve ser chamada enquanto autenticado.'
-        );
-    }
-
-    const {
-        email,
-        password,
-        nomeEmpresa,
-        name,
-        role,
-        birth,
-        founded,
-        cnpj,
-        accessRights,
-        contract,
-        countArtsValue,
-        countVideosValue
-    } = data;
-
-    try {
-        // Cria o novo usuário
-        const userRecord = await admin.auth().createUser({
-            email: email,
-            password: password,
-            emailVerified: false,
-            disabled: false,
-        });
-
-        if (cnpj) {
-            // Adiciona os dados da empresa no Firestore
-            await admin.firestore().collection('empresas').doc(userRecord.uid).set({
-                NomeEmpresa: nomeEmpresa,
-                email: email,
-                cnpj: cnpj,
-                founded: founded,
-                dashboard: accessRights.dashboard || false,
-                leads: accessRights.leads || false,
-                gerenciarColaboradores: accessRights.gerenciarColaboradores || false,
-                gerenciarParceiros: accessRights.gerenciarParceiros || false,
-                configurarDash: accessRights.configurarDash || false,
-                copiarTelefones: accessRights.copiarTelefones || false,
-                criarCampanha: accessRights.criarCampanha || false,
-                criarForm: accessRights.criarForm || false,
-                alterarSenha: accessRights.alterarSenha || false,
-                executarAPIs: accessRights.executarAPIs || false,
-                contract: contract || '',
-                countArtsValue: countArtsValue || 0,
-                countVideosValue: countVideosValue || 0,
-                isDevAccount: false,
-                emailVerified: false,
-            });
-
-            return {
-                success: true,
-                message: 'Usuário e empresa criados com sucesso.',
-                uid: userRecord.uid
-            };
-        } else {
-            // Adiciona os dados do colaborador no Firestore na coleção 'users'
-            await admin.firestore().collection('users').doc(userRecord.uid).set({
-                name: name,
-                email: email,
-                role: role,
-                birth: birth,
-                dashboard: accessRights.dashboard || false,
-                leads: accessRights.leads || false,
-                configurarDash: accessRights.configurarDash || false,
-                copiarTelefones: accessRights.copiarTelefones || false,
-                criarCampanha: accessRights.criarCampanha || false,
-                criarForm: accessRights.criarForm || false,
-                createdBy: context.auth.uid,
-                emailVerified: false,
-            });
-
-            return {
-                success: true,
-                message: 'Usuário colaborador criado com sucesso.',
-                uid: userRecord.uid
-            };
+exports.createUserAndCompany = functions
+    .runWith({secrets: ['ENCRYPTION_KEY']})
+    .https.onCall(async (data, context) => {
+        if (!context.auth) {
+            throw new functions.https.HttpsError(
+                'failed-precondition',
+                'A função deve ser chamada enquanto autenticado.'
+            );
         }
-    } catch (error) {
-        console.error('Erro ao criar usuário ou empresa:', error);
-        throw new functions.https.HttpsError('internal', 'Erro ao criar usuário ou empresa.');
-    }
-});
+
+        const {
+            email,
+            password,
+            nomeEmpresa,
+            name,
+            role,
+            birth,
+            founded,
+            cnpj,
+            accessRights = {},
+            contract,
+            countArtsValue,
+            countVideosValue,
+
+            // NOVO: campos para o WhatsApp/Z-API
+            phoneNumber,       // e.g. "+5511999999999" (pode vir com máscara; será saneado)
+            instanceId,        // ZAPI_ID
+            token,             // ZAPI_TOKEN
+            clientToken,       // Client-Token da Z-API
+            phoneId: payloadPhoneId, // opcional: força o id do doc do telefone
+        } = data;
+
+        const coalesceBool = (vals, defVal) => {
+            for (const v of vals) if (typeof v === 'boolean') return v;
+            return !!defVal;
+        };
+
+        // helper p/ limpar o telefone (deixa só dígitos)
+        const onlyDigits = (str) => (str || '').toString().replace(/\D/g, '');
+
+        try {
+            const userRecord = await admin.auth().createUser({
+                email,
+                password,
+                emailVerified: false,
+                disabled: false,
+            });
+
+            const hasAnyAdminSubPerm =
+                !!(accessRights.gerenciarParceiros ||
+                    accessRights.gerenciarColaboradores ||
+                    accessRights.configurarDash ||
+                    accessRights.criarForm ||
+                    accessRights.criarCampanha);
+
+            const perms = {
+                // MÓDULOS
+                modChats: coalesceBool([accessRights.modChats, accessRights.gerenciarWhatsapp], true),
+                modIndicadores: coalesceBool([accessRights.modIndicadores, accessRights.dashboard], true),
+                modPainel: coalesceBool([accessRights.modPainel], hasAnyAdminSubPerm),
+                modConfig: coalesceBool([accessRights.modConfig], true),
+                modRelatorios: coalesceBool([accessRights.modRelatorios], false),
+
+                // Internas do Painel
+                gerenciarParceiros: !!accessRights.gerenciarParceiros,
+                gerenciarColaboradores: !!accessRights.gerenciarColaboradores,
+                configurarDash: !!accessRights.configurarDash,
+                criarForm: !!accessRights.criarForm,
+                criarCampanha: !!accessRights.criarCampanha,
+
+                // Outras
+                leads: !!accessRights.leads,
+                copiarTelefones: !!accessRights.copiarTelefones,
+                executarAPIs: !!accessRights.executarAPIs,
+                alterarSenha: !!accessRights.alterarSenha,
+            };
+
+            if (cnpj) {
+                // ===== EMPRESA =====
+                const companyRef = admin.firestore().collection('empresas').doc(userRecord.uid);
+
+                await companyRef.set({
+                    NomeEmpresa: nomeEmpresa,
+                    email,
+                    cnpj,
+                    founded,
+
+                    // MÓDULOS
+                    modChats: perms.modChats,
+                    modIndicadores: perms.modIndicadores,
+                    modPainel: perms.modPainel,
+                    modConfig: perms.modConfig,
+                    modRelatorios: perms.modRelatorios,
+
+                    // Internas do Painel
+                    gerenciarParceiros: perms.gerenciarParceiros,
+                    gerenciarColaboradores: perms.gerenciarColaboradores,
+                    configurarDash: perms.configurarDash,
+                    criarForm: perms.criarForm,
+                    criarCampanha: perms.criarCampanha,
+
+                    // Outras
+                    leads: perms.leads,
+                    copiarTelefones: perms.copiarTelefones,
+                    executarAPIs: perms.executarAPIs,
+                    alterarSenha: perms.alterarSenha,
+
+                    contract: contract || '',
+                    countArtsValue: countArtsValue || 0,
+                    countVideosValue: countVideosValue || 0,
+                    isDevAccount: false,
+                    emailVerified: false,
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                }, {merge: true});
+
+                // ===== NOVO: salvar telefone e credenciais da Z-API =====
+                const digits = onlyDigits(phoneNumber);
+                const phoneId = payloadPhoneId || digits; // docId padrão = dígitos do telefone
+
+                if (phoneId) {
+                    const phoneDocRef = companyRef.collection('phones').doc(phoneId);
+
+                    const phonePayload = {
+                        phoneId,
+                        // GRAVA CIFRADO
+                        instanceId: seal(instanceId || ''),
+                        token: seal(token || ''),
+                        clientToken: seal(clientToken || ''),
+                        // telefone pode ficar em claro (se quiser cifrar, aplique seal)
+                        phone: digits || null,
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    };
+
+                    await phoneDocRef.set(phonePayload, {merge: true});
+                }
+
+                return {
+                    success: true,
+                    message: 'Usuário e empresa criados com sucesso.',
+                    uid: userRecord.uid,
+                    phoneId: (payloadPhoneId || onlyDigits(phoneNumber)) || null,
+                };
+
+            } else {
+                // ===== COLABORADOR =====
+                await admin.firestore().collection('users').doc(userRecord.uid).set({
+                    name,
+                    email,
+                    role,
+                    birth,
+                    createdBy: context.auth.uid,
+
+                    // MÓDULOS
+                    modChats: perms.modChats,
+                    modIndicadores: perms.modIndicadores,
+                    modPainel: perms.modPainel,
+                    modConfig: perms.modConfig,
+                    modRelatorios: perms.modRelatorios,
+
+                    // Internas do Painel
+                    gerenciarParceiros: perms.gerenciarParceiros,
+                    gerenciarColaboradores: perms.gerenciarColaboradores,
+                    configurarDash: perms.configurarDash,
+                    criarForm: perms.criarForm,
+                    criarCampanha: perms.criarCampanha,
+
+                    // Outras
+                    leads: perms.leads,
+                    copiarTelefones: perms.copiarTelefones,
+                    executarAPIs: perms.executarAPIs,
+                    alterarSenha: perms.alterarSenha,
+
+                    emailVerified: false,
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                }, {merge: true});
+
+                return {success: true, message: 'Usuário colaborador criado com sucesso.', uid: userRecord.uid};
+            }
+        } catch (error) {
+            console.error('createUserAndCompany failed:', error);
+
+            // exemplos de mapeamento comuns
+            if (error?.code === 'auth/email-already-exists') {
+                throw new functions.https.HttpsError('already-exists', 'E-mail já está em uso.');
+            }
+            if (error?.code === 'auth/invalid-password') {
+                throw new functions.https.HttpsError('invalid-argument', 'Senha inválida.');
+            }
+            if (error?.code === 'permission-denied') {
+                throw new functions.https.HttpsError('permission-denied', 'Sem permissão para criar usuários.');
+            }
+
+            throw new functions.https.HttpsError('internal', error?.message || 'Falha interna.');
+        }
+    });
 
 exports.setCompanyClaims = functions.https.onCall(async (data, context) => {
     try {
@@ -1297,14 +1404,149 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
         // Deleta todos os arquivos na pasta do usuário no Firebase Storage
         const bucket = admin.storage().bucket();
         const prefix = uid + '/'; // Supondo que os arquivos estejam organizados em uma pasta cujo nome é o uid
-        const [files] = await bucket.getFiles({ prefix });
+        const [files] = await bucket.getFiles({prefix});
 
         const deletePromises = files.map(file => file.delete());
         await Promise.all(deletePromises);
 
-        return { success: true };
+        return {success: true};
     } catch (error) {
         console.error("Erro ao excluir usuário:", error);
         throw new functions.https.HttpsError('unknown', 'Erro ao excluir usuário', error);
     }
 });
+
+// INICIO DE FUNÇÕES PARA CRIPTOGRAFIA
+
+function getKey() {
+    const raw = process.env.ENCRYPTION_KEY; // vem do runWith(secrets)
+    if (!raw) throw new Error('Missing ENCRYPTION_KEY secret');
+    const key = Buffer.from(raw, 'base64');
+    if (key.length !== 32) throw new Error('ENCRYPTION_KEY inválida (precisa ter 32 bytes após base64-decoding)');
+    return key;
+}
+
+// Retorna string base64: IV(12) + TAG(16) + CIPHERTEXT
+function seal(plain) {
+    if (plain == null || plain === '') return null;
+    const key = getKey();
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const ct = Buffer.concat([cipher.update(String(plain), 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return Buffer.concat([iv, tag, ct]).toString('base64');
+}
+
+function open(sealed) {
+    if (!sealed) return null;
+    const key = getKey();
+    const buf = Buffer.from(sealed, 'base64');
+    const iv = buf.subarray(0, 12);
+    const tag = buf.subarray(12, 28);
+    const ct = buf.subarray(28);
+    const dec = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    dec.setAuthTag(tag);
+    return Buffer.concat([dec.update(ct), dec.final()]).toString('utf8');
+}
+
+async function assertCanManageCompany(context, targetCompanyId) {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Auth required');
+    }
+
+    const caller = context.auth.uid;
+    if (caller === targetCompanyId) return;
+
+    // Se tiver custom claim, libera
+    if (context.auth.token && context.auth.token.gerenciarParceiros) return;
+
+    // Procura permissão tanto em empresas quanto em users
+    const empDoc = await admin.firestore().collection('empresas').doc(caller).get();
+    if (empDoc.exists && empDoc.data()?.gerenciarParceiros) return;
+
+    const userDoc = await admin.firestore().collection('users').doc(caller).get();
+    if (userDoc.exists && userDoc.data()?.gerenciarParceiros) return;
+
+    throw new functions.https.HttpsError('permission-denied', 'Sem permissão');
+}
+
+// Upsert com criptografia
+exports.upsertCompanyPhoneConfig = functions
+    .runWith({secrets: ['ENCRYPTION_KEY']})
+    .https.onCall(async (data, context) => {
+            const {companyId, phoneNumber, instanceId, token, clientToken, oldPhoneId} = data;
+            await assertCanManageCompany(context, companyId);
+
+            const onlyDigits = (s) => (s || '').toString().replace(/\D/g, '');
+            const digits = onlyDigits(phoneNumber);
+            if (!digits) throw new functions.https.HttpsError('invalid-argument', 'Número inválido');
+
+            const phoneId = digits; // docId = número
+            const col = admin.firestore().collection('empresas').doc(companyId).collection('phones');
+            const payload = {
+                phoneId,
+                instanceId: seal(instanceId || ''),
+                token: seal(token || ''),
+                clientToken: seal(clientToken || ''),
+                phone: digits,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            };
+
+            // se trocou o número/docId, cria novo e apaga antigo
+            if (oldPhoneId && oldPhoneId !== phoneId) {
+                await col.doc(phoneId).set(payload, {merge: true});
+                await col.doc(oldPhoneId).delete().catch(() => {
+                });
+            } else {
+                await col.doc(phoneId).set(payload, {merge: true});
+            }
+
+            return {success: true, phoneId};
+        }
+    );
+
+// Ler descriptografado (para preencher o formulário no Edit)
+exports.getCompanyPhoneConfig = functions
+    .runWith({secrets: ['ENCRYPTION_KEY']})
+    .https.onCall(async (data, context) => {
+        const {companyId} = data;
+        await assertCanManageCompany(context, companyId);
+
+        const snap = await admin.firestore()
+            .collection('empresas').doc(companyId)
+            .collection('phones').limit(1).get();
+
+        if (snap.empty) return {exists: false};
+
+        const d = snap.docs[0].data();
+        return {
+            exists: true,
+            phoneId: d.phoneId,
+            phone: d.phone || null,
+            instanceId: openMaybe(d.instanceId),
+            token: openMaybe(d.token),
+            clientToken: openMaybe(d.clientToken),
+        };
+    });
+
+function openMaybe(sealed) {
+    if (!sealed) return '';
+    try {
+        const key = getKey();
+        const buf = Buffer.from(sealed, 'base64');
+        // tamanho mínimo: 12 (IV) + 16 (TAG) + 1 (CT)
+        if (buf.length < 29) throw new Error('not sealed');
+        const iv = buf.subarray(0, 12);
+        const tag = buf.subarray(12, 28);
+        const ct = buf.subarray(28);
+        const dec = crypto.createDecipheriv('aes-256-gcm', key, iv);
+        dec.setAuthTag(tag);
+        return Buffer.concat([dec.update(ct), dec.final()]).toString('utf8');
+    } catch {
+        // valor antigo sem criptografia
+        return String(sealed);
+    }
+}
+
+// FIM DAS FUNCTIONS DE CRIPTOGRAFIA

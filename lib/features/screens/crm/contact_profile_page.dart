@@ -24,37 +24,76 @@ class ContactProfilePage extends StatefulWidget {
 class _ContactProfilePageState extends State<ContactProfilePage> {
   /* mapeia id-da-tag  → (nome, cor)  */
   final Map<String, TagItem> _tagMap = {};
+  late DocumentReference<Map<String, dynamic>> _chatDoc;
+  late CollectionReference<Map<String, dynamic>> _tagCol;
+  bool _refsReady = false;   // só construímos a UI depois que tudo está pronto
 
   @override
   void initState() {
     super.initState();
-    _loadCompanyTags();          // carrega todas as tags da empresa
+    _initRefsAndListeners();
   }
 
+  String formatBrazilPhone(String raw) {
+    final digits = raw.replaceAll(RegExp(r'\D'), '');
 
-  Future<void> _loadCompanyTags() async {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
+    // só tratamos Brasil (+55); fora disso devolvemos cru
+    if (!digits.startsWith('55')) return raw;
+
+    final ddd   = digits.substring(2, 4);      // código de área
+    final local = digits.substring(4);         // resto
+
+    if (local.length == 9) {                   // celular 9-dígitos: 9 XXXX XXXX
+      return '+55 $ddd ${local.substring(0,5)}-${local.substring(5)}';
+    } else if (local.length == 8) {            // fixo 8-dígitos: XXXX XXXX
+      return '+55 $ddd ${local.substring(0,4)}-${local.substring(4)}';
+    } else {
+      // qualquer outro formato – devolve cru p/ você revisar depois
+      return '+55 $ddd $local';
+    }
+  }
+
+  Future<void> _initRefsAndListeners() async {
+    /* 1) quem é o usuário? */
+    final uid      = FirebaseAuth.instance.currentUser!.uid;
     final userSnap = await FirebaseFirestore.instance
         .collection('users').doc(uid).get();
-    final companyId = (userSnap.exists && (userSnap['createdBy'] ?? '').toString().isNotEmpty)
-        ? userSnap['createdBy'] as String
+    final user     = userSnap.data() ?? {};
+
+    /* 2) empresa dona do operador */
+    final companyId = (user['createdBy'] as String?)?.isNotEmpty == true
+        ? user['createdBy'] as String
         : uid;
 
-    FirebaseFirestore.instance
-        .collection('empresas')
-        .doc(companyId)
-        .collection('tags')
-        .snapshots()
-        .listen((qs) {
+    /* 3) telefone padrão escolhido no login */
+    final phoneId = user['defaultPhoneId'] as String?;
+    if (phoneId == null) return;               // sem número ⇒ nada a fazer
+
+    /* 4) monta refs */
+    _chatDoc = FirebaseFirestore.instance
+        .collection('empresas').doc(companyId)
+        .collection('phones').doc(phoneId)
+        .collection('whatsappChats').doc(widget.chatId);
+
+    _tagCol  = FirebaseFirestore.instance
+        .collection('empresas').doc(companyId)
+        .collection('tags');
+
+    /* 5) listener de TODAS as tags da empresa */
+    _tagCol.orderBy('name').snapshots().listen((qs) {
       setState(() {
         _tagMap
           ..clear()
           ..addEntries(qs.docs.map((d) => MapEntry(d.id, TagItem.fromDoc(d))));
       });
     });
+
+    /* 6) pronto! */
+    if (mounted) setState(() => _refsReady = true);
   }
 
   void _openTagManager() {
+    if (!_refsReady) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -120,11 +159,8 @@ class _ContactProfilePageState extends State<ContactProfilePage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    /* formata o telefone (ex.: (46) 98827-2844) */
-    final phoneMask = widget.chatId.replaceFirstMapped(
-      RegExp(r'^(\d{2})(\d{2})(\d{5})(\d{4})$'),
-          (m) => '(${m[2]}) ${m[3]}-${m[4]}',
-    );
+    final rawDigits   = widget.chatId.split('@').first;   // 55… sem domínio
+    final phonePretty = formatBrazilPhone(rawDigits);
 
     return Scaffold(
       backgroundColor: theme.colorScheme.background,
@@ -150,20 +186,15 @@ class _ContactProfilePageState extends State<ContactProfilePage> {
       ),
 
       /*────────────────── corpo ──────────────────*/
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('whatsappChats')
-            .doc(widget.chatId)
-            .snapshots(),
+      body: !_refsReady
+          ? const Center(child: CircularProgressIndicator())   // ainda montando refs
+          : StreamBuilder<DocumentSnapshot>(
+        stream: _chatDoc.snapshots(),                    // caminho CORRETO
         builder: (ctx, snap) {
-          /* ids das tags ligadas a este chat */
-          final data = (snap.data?.data() as Map<String, dynamic>?) ?? {};
-          final tagIds = (data['tags'] as List<dynamic>?)
-              ?.cast<String>()
-              .toList() ??
-              [];
-
-          final tagItems = tagIds
+          /* ---------- tags ligadas ao chat ---------- */
+          final data    = (snap.data?.data() as Map<String,dynamic>?) ?? {};
+          final tagIds  = List<String>.from(data['tags'] ?? const []);
+          final tagItems= tagIds
               .where(_tagMap.containsKey)
               .map((id) => _tagMap[id]!)
               .toList();
@@ -208,7 +239,7 @@ class _ContactProfilePageState extends State<ContactProfilePage> {
                   child: Row(
                     children: [
                       Text(
-                        phoneMask,
+                        phonePretty,
                         style: TextStyle(
                           fontSize: 15,
                           color: theme.colorScheme.onSecondary,

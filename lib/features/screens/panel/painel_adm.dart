@@ -15,6 +15,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../products/manage_products.dart';
+
 class AdminPanelPage extends StatefulWidget {
   @override
   _AdminPanelPageState createState() => _AdminPanelPageState();
@@ -30,6 +32,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   bool hasCriarCampanhaAccess = false;
   bool isLoading = true;
   bool hasGerenciarWhatsappAccess = false;
+  bool hasGerenciarProdutosAccess = false;
   bool _isEmpresaUser =
       false; // Será true se o documento for encontrado em "empresas"
 
@@ -120,7 +123,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       hasCriarFormAccess = userData?['criarForm'] ?? false;
       hasCriarCampanhaAccess = userData?['criarCampanha'] ?? false;
       hasExecutarAPIs = userData?['executarAPIs'] ?? false;
-      // --- NOVO CAMPO:
+      hasGerenciarProdutosAccess = userData?['gerenciarProdutos'] ?? false;
       hasGerenciarWhatsappAccess = userData?['gerenciarWhatsapp'] ?? false;
 
       isLoading = false;
@@ -131,7 +134,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         !hasConfigurarDashAccess &&
         !hasCriarFormAccess &&
         !hasExecutarAPIs &&
-        !hasCriarCampanhaAccess) {
+        !hasCriarCampanhaAccess &&
+        !hasGerenciarProdutosAccess) {
       if (!_hasShownPermissionRevokedDialog) {
         _hasShownPermissionRevokedDialog = true;
         WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -309,7 +313,9 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         !hasConfigurarDashAccess &&
         !hasCriarFormAccess &&
         !hasExecutarAPIs &&
-        !hasCriarCampanhaAccess) {
+        !hasCriarCampanhaAccess &&
+        !hasGerenciarWhatsappAccess &&
+        !hasGerenciarProdutosAccess) {
       return ConnectivityBanner(
         child: Scaffold(
           body: isDesktop
@@ -434,12 +440,22 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                       onTap: () => _navigateWithFade(context, WhatsAppChats()),
                       isDesktop: true,
                     ),
+                  if (hasGerenciarProdutosAccess)
+                    _buildCardOption(
+                      context,
+                      title   : 'Gerenciar Produtos',
+                      subtitle: 'Criar, editar e excluir produtos',
+                      icon    : Icons.inventory_2_outlined,
+                      onTap   : () => _navigateWithFade(context, const ManageProducts()),
+                      isDesktop: isDesktop,
+                    ),
                   if (!hasGerenciarParceirosAccess &&
                       !hasGerenciarColaboradoresAccess &&
                       !hasConfigurarDashAccess &&
                       !hasCriarFormAccess &&
                       !hasExecutarAPIs &&
-                      !hasCriarCampanhaAccess)
+                      !hasCriarCampanhaAccess &&
+                      !hasGerenciarProdutosAccess)
                     Padding(
                       padding: const EdgeInsets.only(top: 40),
                       child: Column(
@@ -536,21 +552,23 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                         _navigateWithFade(context, MeetingRequests()),
                     isDesktop: false,
                   ),
-                if (hasGerenciarWhatsappAccess)
+                if (hasGerenciarProdutosAccess)
                   _buildCardOption(
                     context,
-                    title: 'Gerenciar WhatsApp',
-                    subtitle: 'Gerenciar mensagens',
-                    icon: Icons.message,
-                    onTap: () => _navigateWithFade(context, WhatsAppChats()),
-                    isDesktop: false,
+                    title   : 'Gerenciar Produtos',
+                    subtitle: 'Criar, editar e excluir produtos',
+                    icon    : Icons.inventory_2_outlined,
+                    onTap   : () => _navigateWithFade(context, const ManageProducts()),
+                    isDesktop: isDesktop,
                   ),
                 if (!hasGerenciarParceirosAccess &&
                     !hasGerenciarColaboradoresAccess &&
                     !hasConfigurarDashAccess &&
                     !hasCriarFormAccess &&
                     !hasExecutarAPIs &&
-                    !hasCriarCampanhaAccess)
+                    !hasCriarCampanhaAccess &&
+                    !hasGerenciarProdutosAccess &&
+                    !hasGerenciarWhatsappAccess)
                   Padding(
                     padding: const EdgeInsets.only(top: 40),
                     child: Column(

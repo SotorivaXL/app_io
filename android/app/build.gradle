@@ -16,6 +16,10 @@ if (localPropertiesFile.exists()) {
     }
 }
 
+ext {
+    kotlin_version = '1.9.23'
+}
+
 def flutterVersionCode = localProperties.getProperty("flutter.versionCode")
 if (flutterVersionCode == null) {
     flutterVersionCode = "2"
@@ -35,11 +39,12 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "com.iomarketing.ioconnect"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        coreLibraryDesugaringEnabled true
     }
 
     defaultConfig {
@@ -65,6 +70,13 @@ android {
             signingConfig = signingConfigs.release
         }
     }
+
+    packagingOptions {
+        jniLibs {
+            // Fall back to the pre‑Android‑15 style:
+            useLegacyPackaging true
+        }
+    }
 }
 
 flutter {
@@ -77,8 +89,6 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     }
 }
 
-android {
-    defaultConfig{
-        minSdkVersion 23
-    }
+dependencies {
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"
 }

@@ -1,8 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:app_io/features/screens/configurations/configurations.dart';
-import 'package:app_io/features/screens/dasboard/dashboard_page.dart';
-import 'package:app_io/features/screens/leads/leads_page.dart';
+import 'package:app_io/features/screens/reports/reports_page.dart';
 import 'package:app_io/features/screens/panel/painel_adm.dart';
 import 'package:app_io/util/CustomWidgets/BirthdayAnimationPopup/birthday_animation_popup.dart';
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
@@ -14,7 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:app_io/features/screens/crm/whatsapp_chats.dart';
-import 'package:app_io/features/screens/reports/dash_principal_relatórios.dart';
+import 'package:app_io/features/screens/indicators/dash_principal_reports.dart';
 
 class CustomTabBarPage extends StatefulWidget {
   @override
@@ -29,14 +28,19 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   List<Widget> _pages = [];
   int _currentIndex = 0;
 
-  bool hasLeadsAccess = false;
-  bool hasDashboardAccess = false;
-  bool hasGerenciarParceirosAccess = false;
-  bool hasGerenciarColaboradoresAccess = false;
-  bool hasConfigurarDashAccess = false;
-  bool hasCriarFormAccess = false;
-  bool hasCriarCampanhaAccess = false;
-  bool hasAdmPanelAccess = true;
+// ====== MÓDULOS NA TABBAR (visibilidade das páginas) ======
+  bool canChats       = true;   // acesso ao módulo "Chats"
+  bool canIndicators  = true;   // acesso ao módulo "Indicadores"
+  bool canAdminPanel  = false;  // acesso ao módulo "Painel"
+  bool canConfig      = true;   // acesso à "Config." (recomendado manter true)
+  bool canReports     = false;  // (opcional) módulo "Relatórios"
+
+// ====== Permissões granulares DENTRO do Painel (mantidas) ======
+  bool canGerenciarParceiros      = false;
+  bool canGerenciarColaboradores  = false;
+  bool canConfigurarDash          = false;
+  bool canCriarForm               = false;
+  bool canCriarCampanha           = false;
 
   // Controle para expandir/recolher a barra lateral no desktop
   bool _isSidebarExpanded = true;
@@ -111,77 +115,66 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     });
   }
 
-  void updateAdmPanelAccess() {
-    hasAdmPanelAccess = hasGerenciarParceirosAccess ||
-        hasGerenciarColaboradoresAccess ||
-        hasConfigurarDashAccess ||
-        hasCriarFormAccess ||
-        hasCriarCampanhaAccess;
-  }
-
   void _updatePermissions(DocumentSnapshot doc) {
-    var userData = doc.data() as Map<String, dynamic>;
-    print('Dados do usuário: $userData');
+    final data = (doc.data() as Map<String, dynamic>?) ?? {};
+    debugPrint('Dados do usuário (perms): $data');
 
-    // Extrai apenas os campos que interessam para a UI
-    bool newHasLeadsAccess = userData['leads'] ?? false;
-    bool newHasDashboardAccess = userData['dashboard'] ?? false;
-    bool newHasConfigurarDashAccess = userData['configurarDash'] ?? false;
-    bool newHasCriarCampanhaAccess = userData['criarCampanha'] ?? false;
-    bool newHasCriarFormAccess = userData['criarForm'] ?? false;
-    bool newHasGerenciarColaboradoresAccess =
-        userData['gerenciarColaboradores'] ?? false;
-    bool newHasGerenciarParceirosAccess =
-        userData['gerenciarParceiros'] ?? false;
+    // 1) Lê permissões de MÓDULOS (defaults pensados p/ não quebrar nada)
+    final bool newCanChats      = (data['modChats'] ?? true) as bool;
+    final bool newCanIndicators = (data['modIndicadores'] ?? true) as bool;
+    final bool newCanAdminPanel = (data['modPainel'] ?? false) as bool;
+    final bool newCanConfig     = (data['modConfig'] ?? true) as bool;
+    final bool newCanReports    = (data['modRelatorios'] ?? false) as bool; // opcional
 
-    bool newHasAdmPanelAccess = newHasGerenciarParceirosAccess ||
-        newHasGerenciarColaboradoresAccess ||
-        newHasConfigurarDashAccess ||
-        newHasCriarFormAccess ||
-        newHasCriarCampanhaAccess;
+    // 2) Lê permissões granulares do Painel (já existiam)
+    final bool newParceiros     = (data['gerenciarParceiros'] ?? false) as bool;
+    final bool newColabs        = (data['gerenciarColaboradores'] ?? false) as bool;
+    final bool newConfigDash    = (data['configurarDash'] ?? false) as bool;
+    final bool newCriarForm     = (data['criarForm'] ?? false) as bool;
+    final bool newCriarCamp     = (data['criarCampanha'] ?? false) as bool;
 
-    // Se as permissões relevantes não foram alteradas, não atualiza o estado
-    if (hasLeadsAccess == newHasLeadsAccess &&
-        hasDashboardAccess == newHasDashboardAccess &&
-        hasConfigurarDashAccess == newHasConfigurarDashAccess &&
-        hasCriarCampanhaAccess == newHasCriarCampanhaAccess &&
-        hasCriarFormAccess == newHasCriarFormAccess &&
-        hasGerenciarColaboradoresAccess == newHasGerenciarColaboradoresAccess &&
-        hasGerenciarParceirosAccess == newHasGerenciarParceirosAccess) {
-      return;
-    }
+    // 3) Se nada mudou, não refaz UI
+    final nothingChanged =
+        canChats == newCanChats &&
+            canIndicators == newCanIndicators &&
+            canAdminPanel == newCanAdminPanel &&
+            canConfig == newCanConfig &&
+            canReports == newCanReports &&
+            canGerenciarParceiros == newParceiros &&
+            canGerenciarColaboradores == newColabs &&
+            canConfigurarDash == newConfigDash &&
+            canCriarForm == newCriarForm &&
+            canCriarCampanha == newCriarCamp;
 
-    List<Widget> newPages = [];
+    if (nothingChanged) return;
 
-    newPages.add(const WhatsAppChats());
-
-    newPages.add(const ReportsPage());
-
-    if (newHasDashboardAccess) {
-      newPages.add(DashboardPage());
-    }
-
-    if (newHasLeadsAccess) {
-      newPages.add(LeadsPage());
-    }
-
-    if (newHasAdmPanelAccess) {
-      newPages.add(AdminPanelPage());
-    }
-
-    newPages.add(SettingsPage());
+    // 4) Monta as páginas NA ORDEM padronizada
+    final pages = <Widget>[];
+    if (newCanChats)      pages.add(const WhatsAppChats());
+    if (newCanIndicators) pages.add(const IndicatorsPage());
+    if (newCanAdminPanel) pages.add(AdminPanelPage());
+    if (newCanReports)    pages.add(ReportsPage()); // opcional
+    if (newCanConfig)     pages.add(SettingsPage());
 
     setState(() {
-      hasLeadsAccess = newHasLeadsAccess;
-      hasDashboardAccess = newHasDashboardAccess;
-      hasConfigurarDashAccess = newHasConfigurarDashAccess;
-      hasCriarCampanhaAccess = newHasCriarCampanhaAccess;
-      hasCriarFormAccess = newHasCriarFormAccess;
-      hasGerenciarColaboradoresAccess = newHasGerenciarColaboradoresAccess;
-      hasGerenciarParceirosAccess = newHasGerenciarParceirosAccess;
-      hasAdmPanelAccess = newHasAdmPanelAccess;
+      canChats      = newCanChats;
+      canIndicators = newCanIndicators;
+      canAdminPanel = newCanAdminPanel;
+      canConfig     = newCanConfig;
+      canReports    = newCanReports;
 
-      _pages = newPages;
+      canGerenciarParceiros     = newParceiros;
+      canGerenciarColaboradores = newColabs;
+      canConfigurarDash         = newConfigDash;
+      canCriarForm              = newCriarForm;
+      canCriarCampanha          = newCriarCamp;
+
+      _pages = pages;
+
+      if (_pages.isEmpty) {
+        // Evita PageView sem páginas
+        _pages = [SettingsPage()];
+      }
 
       if (_currentIndex >= _pages.length) {
         _currentIndex = _pages.length - 1;
@@ -197,17 +190,13 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   }
 
   String _getTitle() {
-    if (_currentIndex < _pages.length) {
-      if (_pages[_currentIndex] is AdminPanelPage) {
-        return 'Painel Administrativo';
-      } else if (_pages[_currentIndex] is DashboardPage) {
-        return 'Início';
-      } else if (_pages[_currentIndex] is LeadsPage) {
-        return 'Leads';
-      } else if (_pages[_currentIndex] is SettingsPage) {
-        return 'Configurações';
-      }
-    }
+    if (_currentIndex >= _pages.length) return 'IO Connect';
+    final p = _pages[_currentIndex];
+    if (p is WhatsAppChats)   return 'Chat';
+    if (p is IndicatorsPage)  return 'Indicadores';
+    if (p is AdminPanelPage)  return 'Painel Administrativo';
+    if (p is ReportsPage)     return 'Relatórios';
+    if (p is SettingsPage)    return 'Configurações';
     return 'IO Connect';
   }
 
@@ -286,6 +275,10 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   Widget build(BuildContext context) {
     final bool isDesktop = MediaQuery.of(context).size.width > 1024;
 
+    // 1) Monte os itens UMA vez
+    final bottomItems = _buildBottomNavyBarItems();
+    final bool showBottomBar = !isDesktop && bottomItems.length >= 2 && bottomItems.length <= 5;
+
     return ConnectivityBanner(
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.background,
@@ -346,51 +339,46 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
             if (isDesktop) _buildDesktopSidebar(),
             Expanded(
               child: NotificationListener<ScrollNotification>(
-                onNotification: (ScrollNotification scrollInfo) {
-                  return false;
-                },
-                child: PageView(
+                onNotification: (_) => false,
+                child: _pages.isEmpty
+                // 2) Evita PageView sem páginas antes das permissões chegarem
+                    ? const Center(child: CircularProgressIndicator())
+                    : PageView(
                   controller: _pageController,
                   onPageChanged: (index) {
-                    if (mounted) {
-                      setState(() {
-                        _currentIndex = index;
-                      });
-                    }
+                    if (mounted) setState(() => _currentIndex = index);
                   },
-                  physics: AlwaysScrollableScrollPhysics(),
+                  physics: const AlwaysScrollableScrollPhysics(),
                   children: _pages,
                 ),
               ),
             ),
           ],
         ),
-        bottomNavigationBar: isDesktop
-            ? null // Remove a barra de navegação inferior no desktop
-            : SafeArea(
-          // Garante que não fique colado na parte inferior do sistema
+
+        // 3) Só mostra a bottom bar se houver 2–5 itens
+        bottomNavigationBar: showBottomBar
+            ? SafeArea(
           child: Opacity(
             opacity: (1.0 - (_scrollOffset / 40)).clamp(0.0, 1.0),
             child: BottomNavyBar(
               backgroundColor: Theme.of(context).colorScheme.secondary,
               showInactiveTitle: false,
-              selectedIndex: _currentIndex,
+              selectedIndex: _currentIndex.clamp(0, bottomItems.length - 1),
               showElevation: true,
               itemCornerRadius: 24,
               iconSize: 25,
               curve: Curves.easeIn,
               onItemSelected: (index) {
-                if (mounted) {
-                  setState(() {
-                    _currentIndex = index;
-                  });
-                  _pageController.jumpToPage(index);
-                }
+                if (!mounted) return;
+                setState(() => _currentIndex = index);
+                _pageController.jumpToPage(index);
               },
-              items: _buildBottomNavyBarItems(),
+              items: bottomItems, // <- usa a lista já calculada
             ),
           ),
-        ),
+        )
+            : null,
       ),
     );
   }
@@ -437,79 +425,60 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   List<Widget> _buildDesktopSidebarItems() {
     List<Widget> items = [];
 
-    // Função para criar um item da barra lateral
     Widget buildSidebarItem(IconData icon, String title, Type pageType) {
-      // Determina se este item está selecionado
-      bool isSelected =
+      final bool isSelected =
           _pages.isNotEmpty && _pages[_currentIndex].runtimeType == pageType;
 
       return Padding(
-        padding: const EdgeInsets.symmetric(
-            vertical: 5), // Ajuste o espaçamento conforme necessário
+        padding: const EdgeInsets.symmetric(vertical: 5),
         child: Tooltip(
-          message: title, // Exibe o título como dica ao passar o mouse
+          message: title,
           child: InkWell(
             onTap: () {
-              int pageIndex = getPageIndexByType(pageType);
+              final pageIndex = getPageIndexByType(pageType);
               if (pageIndex != -1) {
                 setState(() {
                   _currentIndex = pageIndex;
                   _pageController.jumpToPage(pageIndex);
                 });
               } else {
-                print('Página do tipo $pageType não encontrada.');
+                debugPrint('Página do tipo $pageType não encontrada.');
               }
             },
             child: Container(
               decoration: isSelected
                   ? BoxDecoration(
-                color: Theme.of(context)
-                    .colorScheme
-                    .primary, // Fundo roxo com opacidade ajustável
-                borderRadius: BorderRadius.only(
-                  topRight: Radius.circular(8),
-                  bottomRight: Radius.circular(8),
-                  bottomLeft: Radius.circular(8),
-                  topLeft: Radius.circular(8),
-                ), // Bordas arredondadas no lado direito
+                color: Theme.of(context).colorScheme.primary,
+                borderRadius: const BorderRadius.all(Radius.circular(8)),
               )
                   : null,
               padding: _isSidebarExpanded
-                  ? EdgeInsets.only(
-                  left: 15, right: 15, top: 20, bottom: 20)
-              // Padding para barra expandida
-                  : EdgeInsets.symmetric(
-                  horizontal: 0, vertical: 20), // Padding para barra recolhida
+                  ? const EdgeInsets.symmetric(horizontal: 15, vertical: 20)
+                  : const EdgeInsets.symmetric(horizontal: 0,  vertical: 20),
               margin: _isSidebarExpanded
-                  ? EdgeInsets.only(
-                  right: 16) // Margem à direita para barra expandida
-                  : EdgeInsets.only(
-                  right: 8, left: 8), // Margem à direita para barra recolhida
+                  ? const EdgeInsets.only(right: 16)
+                  : const EdgeInsets.only(right: 8, left: 8),
               child: Row(
-                mainAxisAlignment: _isSidebarExpanded
-                    ? MainAxisAlignment.start
-                // Alinha ícone e texto à esquerda
-                    : MainAxisAlignment.center,
-                // Centraliza ícone quando recolhido
+                mainAxisAlignment:
+                _isSidebarExpanded ? MainAxisAlignment.start : MainAxisAlignment.center,
                 children: [
                   Icon(
                     icon,
                     color: isSelected
                         ? Colors.white
                         : Theme.of(context).colorScheme.onSecondary,
-                    size: 32, // Tamanho aumentado dos ícones
+                    size: 32,
                   ),
                   if (_isSidebarExpanded)
                     Padding(
                       padding: const EdgeInsets.only(left: 15),
-                      // Espaçamento entre ícone e texto
                       child: Text(
                         title,
                         style: TextStyle(
                           color: isSelected
                               ? Colors.white
                               : Theme.of(context).colorScheme.onSecondary,
-                          fontSize: 17, // Tamanho da fonte aumentado
+                          fontSize: 17,
                         ),
                       ),
                     ),
@@ -521,21 +490,20 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
       );
     }
 
-    // Adiciona os itens com base nas permissões
-    if (hasDashboardAccess) {
-      items.add(buildSidebarItem(Icons.dashboard, 'Início', DashboardPage));
+    // Gera itens na MESMA ordem de _pages
+    for (final page in _pages) {
+      if (page is WhatsAppChats) {
+        items.add(buildSidebarItem(Icons.chat, 'Chat', WhatsAppChats));
+      } else if (page is IndicatorsPage) {
+        items.add(buildSidebarItem(Icons.bar_chart, 'Indicadores', IndicatorsPage));
+      } else if (page is AdminPanelPage) {
+        items.add(buildSidebarItem(Icons.admin_panel_settings, 'Painel Adm', AdminPanelPage));
+      } else if (page is ReportsPage) {
+        items.add(buildSidebarItem(Icons.edit_document, 'Relatórios', ReportsPage));
+      } else if (page is SettingsPage) {
+        items.add(buildSidebarItem(Icons.settings, 'Configurações', SettingsPage));
+      }
     }
-
-    if (hasLeadsAccess) {
-      items.add(buildSidebarItem(Icons.people, 'Leads', LeadsPage));
-    }
-
-    if (hasAdmPanelAccess) {
-      items.add(
-          buildSidebarItem(Icons.admin_panel_settings, 'Painel Adm', AdminPanelPage));
-    }
-
-    items.add(buildSidebarItem(Icons.settings, 'Configurações', SettingsPage));
 
     return items;
   }
@@ -543,48 +511,29 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   List<BottomNavyBarItem> _buildBottomNavyBarItems() {
     final cs = Theme.of(context).colorScheme;
 
-    return [
-      // 0 – Chats
-      BottomNavyBarItem(
-        icon        : const Icon(Icons.chat),
-        title       : const Text('Chats'),
-        inactiveColor: cs.onSecondary,
-        activeColor : cs.tertiary,
-      ),
+    BottomNavyBarItem makeItem(IconData icon, String label) => BottomNavyBarItem(
+      icon         : Icon(icon),
+      title        : Text(label),
+      inactiveColor: cs.onSecondary,
+      activeColor  : cs.tertiary,
+    );
 
-      // 1 – Relatórios
-      BottomNavyBarItem(
-        icon        : const Icon(Icons.bar_chart),
-        title       : const Text('Relatórios'),
-        inactiveColor: cs.onSecondary,
-        activeColor : cs.tertiary,
-      ),
+    final items = <BottomNavyBarItem>[];
 
-      // 3 – Leads
-      if (hasLeadsAccess)
-        BottomNavyBarItem(
-          icon        : const Icon(Icons.people),
-          title       : const Text('Leads'),
-          inactiveColor: cs.onSecondary,
-          activeColor : cs.tertiary,
-        ),
-
-      // 4 – Painel Adm
-      if (hasAdmPanelAccess)
-        BottomNavyBarItem(
-          icon        : const Icon(Icons.admin_panel_settings),
-          title       : const Text('Painel Adm'),
-          inactiveColor: cs.onSecondary,
-          activeColor : cs.tertiary,
-        ),
-
-      // 5 – Configurações
-      BottomNavyBarItem(
-        icon        : const Icon(Icons.settings),
-        title       : const Text('Config.'),
-        inactiveColor: cs.onSecondary,
-        activeColor : cs.tertiary,
-      ),
-    ];
+    // Mesma ordem de _pages
+    for (final page in _pages) {
+      if (page is WhatsAppChats) {
+        items.add(makeItem(Icons.chat, 'Chat'));
+      } else if (page is IndicatorsPage) {
+        items.add(makeItem(Icons.bar_chart, 'Indicadores'));
+      } else if (page is AdminPanelPage) {
+        items.add(makeItem(Icons.admin_panel_settings, 'Painel Adm'));
+      } else if (page is ReportsPage) {
+        items.add(makeItem(Icons.edit_document, 'Relatórios'));
+      } else if (page is SettingsPage) {
+        items.add(makeItem(Icons.settings, 'Config.'));
+      }
+    }
+    return items;
   }
 }

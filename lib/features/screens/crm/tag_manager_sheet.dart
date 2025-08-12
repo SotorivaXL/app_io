@@ -10,9 +10,9 @@ import 'package:string_similarity/string_similarity.dart';
 class UpperCaseTextFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue,
-      TextEditingValue newValue,
-      ) {
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
     return newValue.copyWith(
       text: newValue.text.toUpperCase(),
       selection: newValue.selection,
@@ -25,6 +25,7 @@ class TagItem {
   final String id;
   final String name;
   final Color color;
+
   TagItem(this.id, this.name, this.color);
 
   factory TagItem.fromDoc(DocumentSnapshot d) =>
@@ -34,6 +35,7 @@ class TagItem {
 /* ─────────────────────── LISTA / SELEÇÃO ─────────────────────── */
 class TagManagerSheet extends StatefulWidget {
   final String chatId;
+
   const TagManagerSheet({super.key, required this.chatId});
 
   @override
@@ -42,8 +44,9 @@ class TagManagerSheet extends StatefulWidget {
 
 class _TagManagerSheetState extends State<TagManagerSheet> {
   /* refs --------- */
-  CollectionReference? _tagCol; // torna-se não-nulo após descoberta
-  late final DocumentReference _chatDoc;
+  late DocumentReference<Map<String, dynamic>> _chatDoc;
+  late CollectionReference<Map<String, dynamic>> _tagCol;
+  bool _refsReady = false; // para sabermos se já podemos usar
 
   /* estado -------- */
   List<TagItem> _allTags = [];
@@ -65,64 +68,67 @@ class _TagManagerSheetState extends State<TagManagerSheet> {
 
   /* ── quem é a empresa? ───────────────────────────────────────── */
   Future<void> _discoverCompanyAndListen() async {
+    // 1) usuário logado
     final uid = FirebaseAuth.instance.currentUser!.uid;
-
     final userSnap =
-    await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final userData = userSnap.data() ?? {};
 
-    // regra única: colaborador → createdBy ; empresa → próprio uid
-    final companyId = (userSnap.exists &&
-        (userSnap.data()?['createdBy'] ?? '')
-            .toString()
-            .isNotEmpty)
-        ? userSnap['createdBy'] as String
-        : uid;
+    // 2) quem é a empresa dona deste operador?
+    final companyId = (userData['createdBy'] as String?)?.isNotEmpty == true
+        ? userData['createdBy'] as String // colaborador
+        : uid; // conta-empresa
+
+    // 3) telefone padrão que o operador escolheu
+    final phoneId = userData['defaultPhoneId'] as String?;
+    if (phoneId == null) return; // não há telefone cadastrado → aborta
+
+    _chatDoc = FirebaseFirestore.instance
+        .collection('empresas')
+        .doc(companyId)
+        .collection('phones')
+        .doc(phoneId)
+        .collection('whatsappChats')
+        .doc(widget.chatId);
 
     _tagCol = FirebaseFirestore.instance
         .collection('empresas')
         .doc(companyId)
         .collection('tags');
 
-    /* escuta tags da empresa */
-    _subs.add(_tagCol!
-        .orderBy('name')
-        .snapshots()
-        .listen((qs) =>
-        setState(() =>
-        _allTags = qs.docs.map(TagItem.fromDoc).toList())));
+    // 5) listeners
+    _subs.add(_tagCol.orderBy('name').snapshots().listen((qs) =>
+        setState(() => _allTags = qs.docs.map(TagItem.fromDoc).toList())));
 
-    /* escuta ids seleccionados do chat */
     _subs.add(_chatDoc.snapshots().listen((snap) {
       if (!snap.exists) return;
       final ids = List<String>.from(snap['tags'] ?? const []);
       setState(() => _selected = ids.toSet());
     }));
 
-    // força rebuild para sair da splash de loading
-    if (mounted) setState(() {});
+    // 6) avisa que já podemos usar as refs
+    if (mounted) setState(() => _refsReady = true);
   }
 
   @override
   void dispose() {
-    for (final s in _subs)
-      s.cancel();
+    for (final s in _subs) s.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
 
   /* add / remove ------------------------------------------------- */
   Future<void> _toggleTag(String id, bool add) async {
+    if (!_refsReady) return; // ainda não carregou
     await _chatDoc.update({
-      'tags': add
-          ? FieldValue.arrayUnion([id])
-          : FieldValue.arrayRemove([id]),
+      'tags': add ? FieldValue.arrayUnion([id]) : FieldValue.arrayRemove([id]),
     });
   }
 
   /* abre 2º bottom-sheet para criar tag -------------------------- */
 // dentro de _TagManagerSheetState:
   void _openNewTagSheet([TagItem? tag]) {
-    if (_tagCol == null) return;
+    if (!_refsReady) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -132,7 +138,7 @@ class _TagManagerSheetState extends State<TagManagerSheet> {
       ),
       builder: (_) => NewTagSheet(
         chatDoc: _chatDoc,
-        tagCol: _tagCol!,
+        tagCol: _tagCol,
         tagToEdit: tag,
         existingTags: _allTags,
       ),
@@ -144,21 +150,22 @@ class _TagManagerSheetState extends State<TagManagerSheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-
-    // ainda descobrindo companyId
-    if (_tagCol == null) {
+    if (!_refsReady) {
       return const SizedBox(
         height: 220,
         child: Center(child: CircularProgressIndicator()),
       );
     }
 
+    final chatDoc = _chatDoc; // já foram inicializados
+    final tagCol = _tagCol;
+
     /* aplica filtro de pesquisa */
     final visibleTags = _query.isEmpty
         ? _allTags
         : _allTags
-        .where((t) => t.name.toLowerCase().contains(_query.toLowerCase()))
-        .toList();
+            .where((t) => t.name.toLowerCase().contains(_query.toLowerCase()))
+            .toList();
 
     /* --------------------------- UI --------------------------- */
     return SafeArea(
@@ -168,10 +175,7 @@ class _TagManagerSheetState extends State<TagManagerSheet> {
           top: 16,
           left: 20,
           right: 20,
-          bottom: MediaQuery
-              .of(context)
-              .viewInsets
-              .bottom,
+          bottom: MediaQuery.of(context).viewInsets.bottom,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -195,21 +199,23 @@ class _TagManagerSheetState extends State<TagManagerSheet> {
             const Padding(
               padding: EdgeInsets.only(left: 4),
               child: Text('Etiquetas',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
             ),
             const SizedBox(height: 8),
-
             TextField(
               controller: _searchCtrl,
               onChanged: (v) => setState(() => _query = v),
               style: TextStyle(color: theme.colorScheme.onBackground),
               decoration: InputDecoration(
                 hintText: 'Buscar etiquetas…',
+                hintStyle: TextStyle(
+                    color: theme.colorScheme.onSecondary,
+                    fontWeight: FontWeight.w500),
                 isDense: true,
                 filled: true,
                 fillColor: theme.colorScheme.background,
                 contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
 
                 // arredonda todo o background
                 border: OutlineInputBorder(
@@ -231,71 +237,86 @@ class _TagManagerSheetState extends State<TagManagerSheet> {
             /* lista */
             _allTags.isEmpty
                 ? const Padding(
-              padding: EdgeInsets.symmetric(vertical: 32),
-              child: Center(
-                child: Text(
-                  'Nenhuma etiqueta cadastrada',
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-              ),
-            )
-                : Flexible(
-              child: ListView.separated(
-                padding: EdgeInsets.zero,
-                itemCount: visibleTags.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
-                itemBuilder: (_, i) {
-                  final tag = visibleTags[i];
-                  final sel = _selected.contains(tag.id);
-                  final onDark =
-                      ThemeData.estimateBrightnessForColor(tag.color) ==
-                          Brightness.dark;
-
-                  return Row(
-                    children: [
-                      Checkbox(
-                        value: sel,
-                        activeColor: theme.primaryColor,
-                        checkColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        onChanged: (_) => _toggleTag(tag.id, !sel),
+                    padding: EdgeInsets.symmetric(vertical: 32),
+                    child: Center(
+                      child: Text(
+                        'Nenhuma etiqueta cadastrada',
+                        style: TextStyle(fontSize: 14, color: Colors.grey),
                       ),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => _toggleTag(tag.id, !sel),
-                          child: Container(
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: tag.color,
-                              borderRadius: BorderRadius.circular(8),
+                    ),
+                  )
+                : Flexible(
+                    child: ListView.separated(
+                      padding: EdgeInsets.zero,
+                      itemCount: visibleTags.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (_, i) {
+                        final tag = visibleTags[i];
+                        final sel = _selected.contains(tag.id);
+                        final onDark =
+                            ThemeData.estimateBrightnessForColor(tag.color) ==
+                                Brightness.dark;
+
+                        return Row(
+                          children: [
+                            Checkbox(
+                              value: sel,
+                              activeColor: theme.primaryColor,
+                              checkColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+
+                              side: MaterialStateBorderSide.resolveWith(
+                                    (states) {
+                                  // Marcar ➜ deixa como está (borda some sob o fill)
+                                  if (states.contains(MaterialState.selected)) {
+                                    return const BorderSide(color: Colors.transparent);
+                                  }
+                                  // Desmarcado ➜ contorno na cor desejada
+                                  return BorderSide(color: cs.onSecondary, width: 2);
+                                },
+                              ),
+                              onChanged: (_) => _toggleTag(tag.id, !sel),
                             ),
-                            alignment: Alignment.centerLeft,
-                            padding:
-                            const EdgeInsets.symmetric(horizontal: 16),
-                            child: Text(
-                              tag.name.toUpperCase(),
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: onDark ? Colors.white : Colors.black,
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => _toggleTag(tag.id, !sel),
+                                child: Container(
+                                  height: 38,
+                                  decoration: BoxDecoration(
+                                    color: tag.color,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  alignment: Alignment.centerLeft,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16),
+                                  child: Text(
+                                    tag.name.toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color:
+                                          onDark ? Colors.white : Colors.black,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.edit, size: 18),
-                        splashRadius: 20,
-                        onPressed: () => _openNewTagSheet(tag),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-
+                            IconButton(
+                              icon: Icon(
+                                Icons.edit,
+                                size: 18,
+                                color: Theme.of(context).colorScheme.onSecondary,
+                              ),
+                              splashRadius: 20,
+                              onPressed: () => _openNewTagSheet(tag),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
             const SizedBox(height: 20),
 
             /* botão “Criar uma nova etiqueta” ocupando 100 % da largura */
@@ -360,22 +381,22 @@ class _NewTagSheetState extends State<NewTagSheet> {
   }
 
   String normalize(String txt) =>
-          txt.toUpperCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+      txt.toUpperCase().replaceAll(RegExp(r'\s+'), ' ').trim();
 
   double similarityHybrid(String a, String b) {
-      final lev = StringSimilarity.compareTwoStrings(normalize(a), normalize(b));
+    final lev = StringSimilarity.compareTwoStrings(normalize(a), normalize(b));
 
-      List<String> tok(String s) =>
-          normalize(s).split(' ').where((w) => w.isNotEmpty).toList();
+    List<String> tok(String s) =>
+        normalize(s).split(' ').where((w) => w.isNotEmpty).toList();
 
-      final wa = tok(a);
-      final wb = tok(b);
-      final common = wa.where((w) => wb.contains(w)).length;
-      final wordOverlap = wa.isEmpty ? 0 : common / wa.length; // 0‒1
+    final wa = tok(a);
+    final wb = tok(b);
+    final common = wa.where((w) => wb.contains(w)).length;
+    final wordOverlap = wa.isEmpty ? 0 : common / wa.length; // 0‒1
 
-      // média simples das duas métricas
-      return (lev + wordOverlap) / 2;
-    }
+    // média simples das duas métricas
+    return (lev + wordOverlap) / 2;
+  }
 
   Future<void> _save() async {
     final raw = _nameCtrl.text.trim();
@@ -387,7 +408,7 @@ class _NewTagSheetState extends State<NewTagSheet> {
 
     final possibles = widget.existingTags.where((t) {
       final sim = similarityHybrid(normNew, t.name);
-    return sim >= threshold || normNew.startsWith(normalize(t.name));
+      return sim >= threshold || normNew.startsWith(normalize(t.name));
     }).toList();
 
     if (possibles.isNotEmpty && widget.tagToEdit == null) {
@@ -396,7 +417,8 @@ class _NewTagSheetState extends State<NewTagSheet> {
         context: context,
         builder: (_) => AlertDialog(
           title: const Text('Etiqueta parecida encontrada'),
-          content: Text('Já existe a etiqueta “$exists”.\nDeseja criar mesmo assim?'),
+          content: Text(
+              'Já existe a etiqueta “$exists”.\nDeseja criar mesmo assim?'),
           actions: [
             TextButton(
               child: const Text('Cancelar'),
@@ -418,16 +440,22 @@ class _NewTagSheetState extends State<NewTagSheet> {
 
     if (widget.tagToEdit != null) {
       id = widget.tagToEdit!.id;
-      await widget.tagCol.doc(id).update({'name': rawUp, 'color': _picked.value});
+      await widget.tagCol
+          .doc(id)
+          .update({'name': rawUp, 'color': _picked.value});
     } else {
-      final dup = await widget.tagCol.where('name', isEqualTo: rawUp).limit(1).get();
+      final dup =
+          await widget.tagCol.where('name', isEqualTo: rawUp).limit(1).get();
       if (dup.docs.isNotEmpty) {
         id = dup.docs.first.id;
       } else {
-        final doc = await widget.tagCol.add({'name': rawUp, 'color': _picked.value});
+        final doc =
+            await widget.tagCol.add({'name': rawUp, 'color': _picked.value});
         id = doc.id;
       }
-      await widget.chatDoc.update({'tags': FieldValue.arrayUnion([id])});
+      await widget.chatDoc.update({
+        'tags': FieldValue.arrayUnion([id])
+      });
     }
 
     if (mounted) Navigator.pop(context);
@@ -448,7 +476,7 @@ class _NewTagSheetState extends State<NewTagSheet> {
         actions: [
           TextButton(
             style: TextButton.styleFrom(
-              foregroundColor: Colors.white,   // ← texto branco
+              foregroundColor: Colors.white, // ← texto branco
             ),
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancelar'),
@@ -475,7 +503,7 @@ class _NewTagSheetState extends State<NewTagSheet> {
       'tags': FieldValue.arrayRemove([id]),
     });
 
-    if (mounted) Navigator.pop(context);   // fecha o sheet
+    if (mounted) Navigator.pop(context); // fecha o sheet
   }
 
   /* picker de cor */
@@ -490,7 +518,8 @@ class _NewTagSheetState extends State<NewTagSheet> {
           title: Center(
             child: Text('Cor da etiqueta'),
           ),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
           content: StatefulBuilder(
             builder: (_, setDlg) => Column(
@@ -513,7 +542,7 @@ class _NewTagSheetState extends State<NewTagSheet> {
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: ThemeData.estimateBrightnessForColor(_picked) ==
-                          Brightness.dark
+                              Brightness.dark
                           ? Colors.white
                           : Colors.black,
                     ),
@@ -581,7 +610,9 @@ class _NewTagSheetState extends State<NewTagSheet> {
       top: false,
       child: Padding(
         padding: EdgeInsets.only(
-          top: 16, left: 24, right: 24,
+          top: 16,
+          left: 24,
+          right: 24,
           bottom: MediaQuery.of(context).viewInsets.bottom,
         ),
         child: Column(
@@ -589,7 +620,9 @@ class _NewTagSheetState extends State<NewTagSheet> {
           children: [
             // puxador
             Container(
-              width: 36, height: 4, margin: const EdgeInsets.only(bottom: 12),
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
                 color: cs.outline,
                 borderRadius: BorderRadius.circular(4),
@@ -618,8 +651,8 @@ class _NewTagSheetState extends State<NewTagSheet> {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: ThemeData.estimateBrightnessForColor(_picked)
-                      == Brightness.dark
+                  color: ThemeData.estimateBrightnessForColor(_picked) ==
+                          Brightness.dark
                       ? Colors.white
                       : Colors.black,
                 ),
@@ -642,8 +675,7 @@ class _NewTagSheetState extends State<NewTagSheet> {
                       filled: true,
                       fillColor: cs.background,
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 12
-                      ),
+                          horizontal: 12, vertical: 12),
                       border: OutlineInputBorder(
                         borderSide: BorderSide.none,
                         borderRadius: BorderRadius.circular(8),
@@ -658,7 +690,8 @@ class _NewTagSheetState extends State<NewTagSheet> {
                   child: CircleAvatar(
                     radius: 22,
                     backgroundColor: _picked,
-                    child: const Icon(Icons.palette, size: 20, color: Colors.white),
+                    child: const Icon(Icons.palette,
+                        size: 20, color: Colors.white),
                   ),
                 ),
               ],
