@@ -15,6 +15,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:extended_image/extended_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_holo_date_picker/flutter_holo_date_picker.dart';
+import 'package:flutter/services.dart';
 
 class EditCompanies extends StatefulWidget {
   final String companyId;
@@ -64,6 +65,16 @@ class _EditCompaniesState extends State<EditCompanies> {
   late AddCompanyModel _model;
   bool _isLoading = false;
   double _scrollOffset = 0.0;
+
+  // WhatsApp / Z-API
+  final TextEditingController _tfWhatsPhoneController = TextEditingController();
+  final TextEditingController _tfInstanceIdController = TextEditingController(); // ZAPI_ID
+  final TextEditingController _tfZapiTokenController = TextEditingController();  // ZAPI_TOKEN
+  final TextEditingController _tfClientTokenController = TextEditingController(); // clientToken
+
+  String? _originalPhoneDocId; // para saber se trocou o docId do phone
+
+  String _onlyDigits(String s) => s.replaceAll(RegExp(r'\D'), '');
 
   // Mapa de acessos
   Map<String, bool> accessRights = {
@@ -120,6 +131,51 @@ class _EditCompaniesState extends State<EditCompanies> {
 
     // Carrega a foto da empresa do Firebase Storage
     _loadCompanyPhoto();
+
+    // Carrega telefone/Z-API (pega o 1º phone de empresas/{uid}/phones)
+    _loadPhoneConfig();
+  }
+
+  Future<void> _loadPhoneConfig() async {
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable('getCompanyPhoneConfig');
+      final res = await callable.call({'companyId': widget.companyId});
+      final Map<String, dynamic> data = Map<String, dynamic>.from(res.data ?? {});
+
+      if (data['exists'] == true) {
+        setState(() {
+          _originalPhoneDocId = data['phoneId'] as String?;
+          _tfWhatsPhoneController.text = (data['phone'] ?? '').toString();        // só dígitos
+          _tfInstanceIdController.text = (data['instanceId'] ?? '').toString();   // texto puro
+          _tfZapiTokenController.text   = (data['token'] ?? '').toString();
+          _tfClientTokenController.text = (data['clientToken'] ?? '').toString();
+        });
+      } else {
+        _originalPhoneDocId = null;
+      }
+    } catch (e) {
+      debugPrint('Erro ao carregar config de telefone: $e');
+      _originalPhoneDocId = null;
+    }
+  }
+
+  Future<void> _savePhoneConfig(String companyId) async {
+    final phoneDigits = _onlyDigits(_tfWhatsPhoneController.text);
+
+    final callable = FirebaseFunctions.instance.httpsCallable('upsertCompanyPhoneConfig');
+    await callable.call({
+      'companyId': companyId,
+      'phoneNumber': phoneDigits,
+      'instanceId': _tfInstanceIdController.text.trim(),
+      'token': _tfZapiTokenController.text.trim(),
+      'clientToken': _tfClientTokenController.text.trim(),
+      'oldPhoneId': _originalPhoneDocId, // se o número mudou, a CF apaga o doc antigo
+    });
+
+    // atualiza o id local (caso o número tenha mudado)
+    setState(() {
+      _originalPhoneDocId = phoneDigits.isEmpty ? null : phoneDigits;
+    });
   }
 
   Future<void> _loadCompanyPhoto() async {
@@ -140,6 +196,10 @@ class _EditCompaniesState extends State<EditCompanies> {
 
   @override
   void dispose() {
+    _tfWhatsPhoneController.dispose();
+    _tfInstanceIdController.dispose();
+    _tfZapiTokenController.dispose();
+    _tfClientTokenController.dispose();
     _model.dispose();
     super.dispose();
   }
@@ -161,6 +221,15 @@ class _EditCompaniesState extends State<EditCompanies> {
   //       SALVAR DADOS
   // --------------------------
   Future<void> _saveCompany() async {
+    final phoneDigits = _onlyDigits(_tfWhatsPhoneController.text);
+    if (phoneDigits.length < 10 || phoneDigits.length > 15) {
+      showErrorDialog(
+        context,
+        "Informe o número com DDI (sem +), ex: 5546991073494",
+        "Atenção",
+      );
+      return;
+    }
     if (widget.companyId.isEmpty) {
       showErrorDialog(context, "Falha ao carregar usuário", "Atenção");
       return;
@@ -173,26 +242,25 @@ class _EditCompaniesState extends State<EditCompanies> {
       String? updatedPhotoUrl = await _updateCompanyImage();
       final photoUrl = updatedPhotoUrl; // Garantindo que photoUrl seja atualizado
 
+      final rights = Map<String, bool>.from(accessRights)
+        ..['gerenciarParceiros'] = false
+        ..['criarCampanha'] = false
+        ..['criarForm'] = false;
+
       // Atualiza os dados da empresa no Firestore, incluindo o campo photoUrl
-      await FirebaseFirestore.instance.collection('empresas').doc(widget.companyId).set(
-        {
-          'NomeEmpresa': _model.tfCompanyTextController.text,
-          'contract': _model.tfContractTextController.text,
-          'countArtsValue': _model.countArtsValue,
-          'countVideosValue': _model.countVideosValue,
-          'dashboard': accessRights['dashboard'] ?? false,
-          'leads': accessRights['leads'] ?? false,
-          'gerenciarColaboradores': accessRights['gerenciarColaboradores'] ?? false,
-          'configurarDash': accessRights['configurarDash'] ?? false,
-          'criarCampanha': accessRights['criarCampanha'],
-          'criarForm': accessRights['criarForm'],
-          'copiarTelefones': accessRights['copiarTelefones'],
-          'alterarSenha': accessRights['alterarSenha'],
-          'executarAPIs': accessRights['executarAPIs'],
-          'photoUrl': photoUrl,
-        },
-        SetOptions(merge: true),
-      );
+      await FirebaseFirestore.instance
+          .collection('empresas')
+          .doc(widget.companyId)
+          .set({
+        'NomeEmpresa': _model.tfCompanyTextController.text,
+        'contract'   : _model.tfContractTextController.text,
+        // Se quiser manter os contadores sem edição (apenas persistindo o mesmo valor recebido):
+        'countArtsValue'  : _model.countArtsValue,
+        'countVideosValue': _model.countVideosValue,
+        'photoUrl'  : photoUrl,
+      }, SetOptions(merge: true));
+
+      await _savePhoneConfig(widget.companyId);
 
       Navigator.pop(context);
       showErrorDialog(context, "Parceiro atualizado com sucesso!", "Sucesso");
@@ -593,10 +661,32 @@ class _EditCompaniesState extends State<EditCompanies> {
             _buildCnpjTextField(),
             // Fundação (desabilitado)
             _buildBirthTextField(),
-            // Quantidade de conteúdo semanal
-            _buildWeeklyContent(),
-            // Acessos
-            _buildAccessRights(),
+
+            // --- WhatsApp / Z-API ---
+            Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+              child: Row(
+                children: [
+                  Padding(
+                    padding: const EdgeInsetsDirectional.fromSTEB(20, 10, 20, 10),
+                    child: Text(
+                      'WhatsApp / Z-API',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _buildWhatsPhoneTextField(),
+            _buildZapiIdTextField(),
+            _buildZapiTokenTextField(),
+            _buildClientTokenTextField(),
+
             // Botão Alterar Senha (se permitido)
             StreamBuilder<DocumentSnapshot>(
               stream: FirebaseFirestore.instance.collection('empresas').doc(uid).snapshots(),
@@ -867,142 +957,181 @@ class _EditCompaniesState extends State<EditCompanies> {
     );
   }
 
-  Widget _buildWeeklyContent() {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
-          child: Row(
-            children: [
-              Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(20, 10, 20, 10),
-                child: Text(
-                  'Quantidade de conteúdo semanal:',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(context).colorScheme.onSecondary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        // Artes
-        Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Padding(
-                padding: EdgeInsetsDirectional.fromSTEB(30, 0, 0, 0),
-                child: Text(
-                  'Artes',
-                  style: TextStyle(
+  Widget _buildWhatsPhoneTextField() {
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+              child: TextFormField(
+                controller: _tfWhatsPhoneController,
+                keyboardType: TextInputType.phone,
+                decoration: InputDecoration(
+                  hintText: 'Número do WhatsApp com DDI (sem +). Ex: 5546991073494',
+                  hintStyle: TextStyle(
                     fontFamily: 'Poppins',
                     fontWeight: FontWeight.w500,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(0, 0, 20, 0),
-                child: CustomCountController(
-                  count: _model.countArtsValue,
-                  updateCount: updateCountArts,
-                ),
-              ),
-            ],
-          ),
-        ),
-        // Vídeos
-        Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Padding(
-                padding: EdgeInsetsDirectional.fromSTEB(30, 0, 0, 0),
-                child: Text(
-                  'Vídeos',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontWeight: FontWeight.w500,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(0, 0, 20, 0),
-                child: CustomCountController(
-                  count: _model.countVideosValue,
-                  updateCount: updateCountVideos,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAccessRights() {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
-          child: Row(
-            children: [
-              Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(20, 10, 20, 10),
-                child: Text(
-                  'Marque os acessos da empresa:',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
                     color: Theme.of(context).colorScheme.onSecondary,
                   ),
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.secondary,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.phone_iphone,
+                    color: Theme.of(context).colorScheme.tertiary,
+                    size: 20,
+                  ),
                 ),
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSecondary,
+                ),
+                textAlign: TextAlign.start,
               ),
-            ],
+            ),
           ),
-        ),
-        _buildCheckboxTile("Dashboard", 'dashboard', 14),
-        _buildCheckboxTile("Leads", 'leads', 14),
-        _buildCheckboxTile("Gerenciar Colaboradores", 'gerenciarColaboradores', 14),
-        _buildCheckboxTile("Configurar Dashboard", 'configurarDash', 14),
-        _buildCheckboxTile("Criar Formulário", 'criarForm', 14),
-        _buildCheckboxTile("Criar Campanha", 'criarCampanha', 14),
-        _buildCheckboxTile("Copiar telefones dos Leads", 'copiarTelefones', 14),
-        _buildCheckboxTile("Alterar senha", 'alterarSenha', 14),
-      ],
-    );
-  }
-
-  Widget _buildCheckboxTile(String title, String keyMap, double fontSize) {
-    return CheckboxListTile(
-      title: Text(
-        title,
-        style: TextStyle(
-          fontFamily: 'Poppins',
-          fontWeight: FontWeight.w500,
-          fontSize: fontSize,
-          color: Theme.of(context).colorScheme.onSecondary,
-        ),
+        ],
       ),
-      value: accessRights[keyMap],
-      onChanged: (bool? value) {
-        setState(() {
-          accessRights[keyMap] = value ?? false;
-        });
-      },
-      controlAffinity: ListTileControlAffinity.leading,
-      activeColor: Theme.of(context).primaryColor,
-      checkColor: Theme.of(context).colorScheme.outline,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5.0)),
-      dense: true,
+    );
+  }
+
+  Widget _buildZapiIdTextField() {
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+              child: TextFormField(
+                controller: _tfInstanceIdController,
+                decoration: InputDecoration(
+                  hintText: 'ZAPI_ID (instanceId)',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w500,
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.secondary,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.memory,
+                    color: Theme.of(context).colorScheme.tertiary,
+                    size: 20,
+                  ),
+                ),
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSecondary,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildZapiTokenTextField() {
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+              child: TextFormField(
+                controller: _tfZapiTokenController,
+                decoration: InputDecoration(
+                  hintText: 'ZAPI_TOKEN (token)',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w500,
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.secondary,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.vpn_key,
+                    color: Theme.of(context).colorScheme.tertiary,
+                    size: 20,
+                  ),
+                ),
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSecondary,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClientTokenTextField() {
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(0, 10, 0, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+              child: TextFormField(
+                controller: _tfClientTokenController,
+                decoration: InputDecoration(
+                  hintText: 'Client-Token',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w500,
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.secondary,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.shield,
+                    color: Theme.of(context).colorScheme.tertiary,
+                    size: 20,
+                  ),
+                ),
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSecondary,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

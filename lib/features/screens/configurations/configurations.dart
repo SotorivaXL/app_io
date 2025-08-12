@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:app_io/auth/providers/auth_provider.dart' as appAuthProvider;
 import 'package:flutter/foundation.dart';
@@ -18,6 +20,8 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userSub;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _empresaSub;
   String? userName;
   String? userEmail;
   String? userPhotoUrl; // Nova variável para a URL da foto do usuário
@@ -40,6 +44,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadPreferences();
     _getUserData(); // Carrega os dados do usuário inicialmente
   }
+
+
 
   Future<void> _loadUserName() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -102,48 +108,56 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _listenToUserData() {
     final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
-    if (user != null) {
-      // Escuta as mudanças no documento do usuário na coleção 'users'
-      FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .snapshots()
-          .listen((userSnapshot) async {
-        if (userSnapshot.exists) {
-          final userData = userSnapshot.data();
-          setState(() {
-            userName = userData?['name'] ?? 'Nome não disponível';
-            userEmail = user.email;
-            role = userData?['role'] ?? 'Função não disponível';
-            copiarTelefones = userData?['copiarTelefones'] ?? false;
-          });
-        } else {
-          // Caso não esteja em 'users', escuta o documento na coleção 'empresas'
-          FirebaseFirestore.instance
-              .collection('empresas')
-              .doc(user.uid)
-              .snapshots()
-              .listen((empresaSnapshot) {
-            if (empresaSnapshot.exists) {
-              final empresaData = empresaSnapshot.data();
-              setState(() {
-                userName = empresaData?['NomeEmpresa'] ?? 'Nome não disponível';
-                userEmail = user.email;
-                cnpj = empresaData?['cnpj'] ?? 'CNPJ não disponível';
-                contract =
-                    empresaData?['contract'] ?? 'Contrato não disponível';
-                copiarTelefones = empresaData?['copiarTelefones'] ?? false;
-              });
-            } else {
-              setState(() {
-                copiarTelefones = false; // Revoga a permissão
-              });
-            }
-          });
-        }
-      });
-    }
+    // Cancela listener antigo, se existir
+    _userSub?.cancel();
+    _empresaSub?.cancel();
+
+    _userSub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .snapshots()
+        .listen((snap) {
+      if (!mounted) return;              // ← proteção extra
+
+      if (snap.exists) {
+        final data = snap.data();
+        setState(() {
+          userName  = data?['name'] ?? 'Nome não disponível';
+          role      = data?['role'] ?? 'Função não disponível';
+          copiarTelefones = data?['copiarTelefones'] ?? false;
+        });
+        // se já tínhamos um listener em empresas, podemos encerrá-lo
+        _empresaSub?.cancel();
+        _empresaSub = null;
+      } else {
+        // Caso não exista em 'users', escuta em 'empresas'
+        _empresaSub ??= FirebaseFirestore.instance
+            .collection('empresas')
+            .doc(user.uid)
+            .snapshots()
+            .listen((empresaSnap) {
+          if (!mounted) return;
+          if (empresaSnap.exists) {
+            final data = empresaSnap.data();
+            setState(() {
+              userName  = data?['NomeEmpresa'] ?? 'Nome não disponível';
+              cnpj      = data?['cnpj'] ?? 'CNPJ não disponível';
+              contract  = data?['contract'] ?? 'Contrato não disponível';
+              copiarTelefones = data?['copiarTelefones'] ?? false;
+            });
+          }
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _userSub?.cancel();
+    _empresaSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadPreferences() async {

@@ -37,25 +37,31 @@ class _AddCompanyState extends State<AddCompany> {
   // For generating a random background color when no image exists
   late Color _randomColor;
 
-  // Access rights map
+  // Access rights map (padrão já com permissões desejadas)
   Map<String, bool> accessRights = {
-    'dashboard': false,
-    'leads': false,
-    'gerenciarColaboradores': false,
-    'gerenciarParceiros': false,
-    'configurarDash': false,
-    'criarForm': false,
-    'criarCampanha': false,
-    'copiarTelefones': false,
-    'executarAPIs': false,
-    'alterarSenha': false,
+    'dashboard': true,
+    'leads': true,
+    'gerenciarColaboradores': true,
+    'gerenciarParceiros': false, // desligado
+    'configurarDash': true,
+    'criarForm': false,          // desligado
+    'criarCampanha': false,      // desligado
+    'copiarTelefones': true,
+    'executarAPIs': true,
+    'alterarSenha': true,
   };
 
-  // Máscara para o campo de CNPJ
+  // Máscaras
   final MaskTextInputFormatter cnpjMask = MaskTextInputFormatter(
     mask: '##.###.###/####-##',
     filter: { "#": RegExp(r'[0-9]') },
   );
+
+  // Controllers extras (WhatsApp/Z-API)
+  final TextEditingController _tfWhatsPhoneController = TextEditingController();
+  final TextEditingController _tfInstanceIdController = TextEditingController(); // ZAPI_ID
+  final TextEditingController _tfZapiTokenController = TextEditingController();  // ZAPI_TOKEN
+  final TextEditingController _tfClientTokenController = TextEditingController(); // clientToken
 
   @override
   void initState() {
@@ -66,20 +72,20 @@ class _AddCompanyState extends State<AddCompany> {
 
   @override
   void dispose() {
+    _tfWhatsPhoneController.dispose();
+    _tfInstanceIdController.dispose();
+    _tfZapiTokenController.dispose();
+    _tfClientTokenController.dispose();
     _model.dispose();
     super.dispose();
   }
 
   void updateCountArts(int newCount) {
-    setState(() {
-      _model.countArtsValue = newCount;
-    });
+    setState(() => _model.countArtsValue = newCount);
   }
 
   void updateCountVideos(int newCount) {
-    setState(() {
-      _model.countVideosValue = newCount;
-    });
+    setState(() => _model.countVideosValue = newCount);
   }
 
   // --------------------------
@@ -90,12 +96,37 @@ class _AddCompanyState extends State<AddCompany> {
       showErrorDialog(context, "As senhas são diferentes", "Atenção");
       return;
     }
-    setState(() {
-      _isLoading = true;
-    });
+
+    // Validação mínima dos campos Z-API/phone
+    final phoneDigits = _onlyDigits(_tfWhatsPhoneController.text);
+// E.164 permite de 10 a 15 dígitos (com DDI). Ex.: BR: 55 + 2 (DDD) + 9 (número) = 13.
+    if (phoneDigits.length < 10 || phoneDigits.length > 15) {
+      showErrorDialog(
+        context,
+        "Informe o número com DDI (sem +), ex: 5546991073494",
+        "Atenção",
+      );
+      return;
+    }
+    if (_tfInstanceIdController.text.trim().isEmpty ||
+        _tfZapiTokenController.text.trim().isEmpty) {
+      showErrorDialog(context, "Informe ZAPI_ID e ZAPI_TOKEN", "Atenção");
+      return;
+    }
+    // clientToken pode ser opcional, dependendo de você ter ativado na Z-API
+    // aqui não forço; mas se quiser obrigar, valide também.
+
+    setState(() => _isLoading = true);
+
     try {
-      final HttpsCallable callable =
-      FirebaseFunctions.instance.httpsCallable('createUserAndCompany');
+      final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('createUserAndCompany');
+
+      // Garante que as permissões bloqueadas fiquem false
+      final rights = Map<String, bool>.from(accessRights)
+        ..['gerenciarParceiros'] = false
+        ..['criarCampanha'] = false
+        ..['criarForm'] = false;
+
       final result = await callable.call({
         'email': _model.tfEmailTextController.text,
         'password': _model.tfPasswordTextController.text,
@@ -103,34 +134,30 @@ class _AddCompanyState extends State<AddCompany> {
         'contract': _model.tfContractTextController.text,
         'cnpj': _model.tfCnpjTextController.text,
         'founded': _model.tfBirthTextController.text,
-        'accessRights': accessRights,
+        'accessRights': rights,
         'countArtsValue': _model.countArtsValue,
         'countVideosValue': _model.countVideosValue,
+        'phoneNumber': _onlyDigits(_tfWhatsPhoneController.text),
+        'instanceId': _tfInstanceIdController.text.trim(),
+        'token': _tfZapiTokenController.text.trim(),
+        'clientToken': _tfClientTokenController.text.trim(),
       });
-      print("Cloud Function result: ${result.data}");
+
       if (result.data['success'] == true) {
-        String uid = result.data['uid'] ?? "defaultUid";
+        final String uid = result.data['uid'] ?? "defaultUid";
 
-        // Faz o upload da imagem e obtém a URL
+        // Upload da imagem (avatar)
         final photoUrl = await _uploadImage(uid);
-
-        // Usa set com merge:true para criar/atualizar o documento com photoUrl
         if (photoUrl != null) {
           await FirebaseFirestore.instance.collection('empresas').doc(uid).set(
-            {
-              'photoUrl': photoUrl,
-            },
+            {'photoUrl': photoUrl},
             SetOptions(merge: true),
           );
-          print("photoUrl salvo com sucesso: $photoUrl");
-        } else {
-          print("photoUrl é nulo");
         }
 
         Navigator.pop(context);
         showErrorDialog(context, "Parceiro adicionado com sucesso!", "Sucesso");
       } else {
-        print("Cloud Function returned failure: ${result.data}");
         showErrorDialog(context, "Falha ao adicionar parceiro", "Atenção");
       }
     } catch (e, stacktrace) {
@@ -138,11 +165,33 @@ class _AddCompanyState extends State<AddCompany> {
       print(stacktrace);
       showErrorDialog(context, "Falha ao adicionar parceiro", "Atenção");
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _isLoading = false);
     }
   }
+
+  // Salva empresas/{uid}/phones/{phoneId} com os campos exigidos
+  Future<void> _savePhoneConfig(String uid) async {
+    final phoneDigits = _onlyDigits(_tfWhatsPhoneController.text);
+    final phoneDocId = phoneDigits; // usamos o número (só dígitos) como phoneId/docId
+
+    final data = {
+      'phoneId'    : phoneDocId,                           // EXATO
+      'instanceId' : _tfInstanceIdController.text.trim(),  // EXATO (ZAPI_ID)
+      'token'      : _tfZapiTokenController.text.trim(),   // EXATO (ZAPI_TOKEN)
+      'clientToken': _tfClientTokenController.text.trim(), // EXATO
+      'phone'      : phoneDigits,                          // número normalizado (útil ter salvo)
+      'createdAt'  : FieldValue.serverTimestamp(),
+    };
+
+    await FirebaseFirestore.instance
+        .collection('empresas')
+        .doc(uid)
+        .collection('phones')
+        .doc(phoneDocId)
+        .set(data, SetOptions(merge: true));
+  }
+
+  String _onlyDigits(String s) => s.replaceAll(RegExp(r'\D'), '');
 
   // --------------------------
   //     IMAGE UPLOAD
@@ -345,7 +394,6 @@ class _AddCompanyState extends State<AddCompany> {
           content: SizedBox(
             width: 500,
             height: 500,
-            // Passe os bytes da imagem como argumento posicional
             child: ExtendedImage.memory(
               imageData,
               fit: BoxFit.contain,
@@ -384,9 +432,7 @@ class _AddCompanyState extends State<AddCompany> {
               onPressed: () async {
                 final Uint8List? croppedData = await _cropImageFromEditor();
                 if (croppedData != null) {
-                  setState(() {
-                    _croppedData = croppedData;
-                  });
+                  setState(() { _croppedData = croppedData; });
                 }
                 Navigator.of(context).pop();
               },
@@ -428,17 +474,12 @@ class _AddCompanyState extends State<AddCompany> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
-                                Icons.arrow_back_ios_new,
-                                color: Theme.of(context).colorScheme.onBackground,
-                                size: 18,
-                              ),
+                              Icon(Icons.arrow_back_ios_new,
+                                  color: Theme.of(context).colorScheme.onBackground, size: 18),
                               const SizedBox(width: 4),
-                              Text(
-                                'Voltar',
+                              Text('Voltar',
                                 style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 14,
+                                  fontFamily: 'Poppins', fontSize: 14,
                                   color: Theme.of(context).colorScheme.onSecondary,
                                 ),
                               ),
@@ -446,12 +487,9 @@ class _AddCompanyState extends State<AddCompany> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Text(
-                          'Adicionar Parceiro',
+                        Text('Adicionar Parceiro',
                           style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
+                            fontFamily: 'Poppins', fontSize: 22, fontWeight: FontWeight.w700,
                             color: Theme.of(context).colorScheme.onSecondary,
                           ),
                         ),
@@ -469,16 +507,12 @@ class _AddCompanyState extends State<AddCompany> {
             child: Container(
               constraints: const BoxConstraints(maxWidth: 1850),
               child: SafeArea(
-                child: SingleChildScrollView(
-                  child: _buildMainContent(context),
-                ),
+                child: SingleChildScrollView(child: _buildMainContent(context)),
               ),
             ),
           )
               : SafeArea(
-            child: SingleChildScrollView(
-              child: _buildMainContent(context),
-            ),
+            child: SingleChildScrollView(child: _buildMainContent(context)),
           ),
         ),
       ),
@@ -495,7 +529,7 @@ class _AddCompanyState extends State<AddCompany> {
           padding: const EdgeInsets.symmetric(vertical: 20.0),
           child: _buildImagePicker(),
         ),
-        // Individual fields
+        // Dados da empresa
         _buildCompanyTextField(),
         _buildEmailTextField(),
         _buildContractTextField(),
@@ -503,8 +537,32 @@ class _AddCompanyState extends State<AddCompany> {
         _buildBirthDateField(context),
         _buildPasswordField(),
         _buildPasswordConfirmField(),
-        _buildWeeklyContent(),
-        _buildAccessRights(),
+
+        // WhatsApp / Z-API
+        Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+          child: Row(
+            children: [
+              Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(20, 10, 20, 10),
+                child: Text(
+                  'WhatsApp / Z-API',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        _buildWhatsPhoneTextField(),
+        _buildZapiIdTextField(),
+        _buildZapiTokenTextField(),
+        _buildClientTokenTextField(),
+
         _buildAddButton(),
       ],
     );
@@ -533,22 +591,14 @@ class _AddCompanyState extends State<AddCompany> {
                     fontSize: 12,
                     color: Theme.of(context).colorScheme.onSecondary,
                   ),
-                  prefixIcon: Icon(
-                    Icons.corporate_fare,
-                    color: Theme.of(context).colorScheme.tertiary,
-                    size: 20,
-                  ),
+                  prefixIcon: Icon(Icons.corporate_fare,
+                      color: Theme.of(context).colorScheme.tertiary, size: 20),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                  filled: true,
-                  fillColor: Theme.of(context).colorScheme.secondary,
+                      borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  filled: true, fillColor: Theme.of(context).colorScheme.secondary,
                 ),
                 style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
                   color: Theme.of(context).colorScheme.onSecondary,
                 ),
                 textInputAction: TextInputAction.next,
@@ -581,26 +631,17 @@ class _AddCompanyState extends State<AddCompany> {
                     fontSize: 12,
                     color: Theme.of(context).colorScheme.onSecondary,
                   ),
-                  filled: true,
-                  fillColor: Theme.of(context).colorScheme.secondary,
+                  filled: true, fillColor: Theme.of(context).colorScheme.secondary,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                  prefixIcon: Icon(
-                    Icons.mail,
-                    color: Theme.of(context).colorScheme.tertiary,
-                    size: 20,
-                  ),
+                      borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  prefixIcon: Icon(Icons.mail,
+                      color: Theme.of(context).colorScheme.tertiary, size: 20),
                 ),
                 style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
                   color: Theme.of(context).colorScheme.onSecondary,
                 ),
-                textAlign: TextAlign.start,
-                keyboardType: TextInputType.emailAddress,
+                textAlign: TextAlign.start, keyboardType: TextInputType.emailAddress,
               ),
             ),
           ),
@@ -629,22 +670,14 @@ class _AddCompanyState extends State<AddCompany> {
                     fontSize: 12,
                     color: Theme.of(context).colorScheme.onSecondary,
                   ),
-                  filled: true,
-                  fillColor: Theme.of(context).colorScheme.secondary,
+                  filled: true, fillColor: Theme.of(context).colorScheme.secondary,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                  prefixIcon: Icon(
-                    Icons.import_contacts,
-                    color: Theme.of(context).colorScheme.tertiary,
-                    size: 20,
-                  ),
+                      borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  prefixIcon: Icon(Icons.import_contacts,
+                      color: Theme.of(context).colorScheme.tertiary, size: 20),
                 ),
                 style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
                   color: Theme.of(context).colorScheme.onSecondary,
                 ),
                 textAlign: TextAlign.start,
@@ -658,7 +691,6 @@ class _AddCompanyState extends State<AddCompany> {
     );
   }
 
-  // Campo de CNPJ com máscara aplicada para permitir apenas dígitos
   Widget _buildCnpjTextField() {
     return Padding(
       padding: const EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
@@ -679,22 +711,14 @@ class _AddCompanyState extends State<AddCompany> {
                     fontSize: 12,
                     color: Theme.of(context).colorScheme.onSecondary,
                   ),
-                  filled: true,
-                  fillColor: Theme.of(context).colorScheme.secondary,
+                  filled: true, fillColor: Theme.of(context).colorScheme.secondary,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                  prefixIcon: Icon(
-                    Icons.contact_emergency_sharp,
-                    color: Theme.of(context).colorScheme.tertiary,
-                    size: 20,
-                  ),
+                      borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  prefixIcon: Icon(Icons.contact_emergency_sharp,
+                      color: Theme.of(context).colorScheme.tertiary, size: 20),
                 ),
                 style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
                   color: Theme.of(context).colorScheme.onSecondary,
                 ),
                 textAlign: TextAlign.start,
@@ -766,11 +790,7 @@ class _AddCompanyState extends State<AddCompany> {
                                     ),
                                     dividerColor: Theme.of(context).colorScheme.onSecondary,
                                   ),
-                                  onChange: (date, _) {
-                                    setState(() {
-                                      selectedDate = date;
-                                    });
-                                  },
+                                  onChange: (date, _) => setState(() => selectedDate = date),
                                 ),
                               ),
                               Padding(
@@ -822,16 +842,11 @@ class _AddCompanyState extends State<AddCompany> {
                         borderRadius: BorderRadius.circular(10),
                         borderSide: BorderSide.none,
                       ),
-                      prefixIcon: Icon(
-                        Icons.calendar_month,
-                        color: Theme.of(context).colorScheme.tertiary,
-                        size: 20,
-                      ),
+                      prefixIcon: Icon(Icons.calendar_month,
+                          color: Theme.of(context).colorScheme.tertiary, size: 20),
                     ),
                     style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
+                      fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
                       color: Theme.of(context).colorScheme.onSecondary,
                     ),
                     readOnly: true,
@@ -872,25 +887,18 @@ class _AddCompanyState extends State<AddCompany> {
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide.none,
                   ),
-                  prefixIcon: Icon(
-                    Icons.lock,
-                    color: Theme.of(context).colorScheme.tertiary,
-                    size: 20,
-                  ),
+                  prefixIcon: Icon(Icons.lock,
+                      color: Theme.of(context).colorScheme.tertiary, size: 20),
                   suffixIcon: InkWell(
                     onTap: () => setState(() => _model.tfPasswordVisibility = !_model.tfPasswordVisibility),
                     focusNode: FocusNode(skipTraversal: true),
                     child: Icon(
-                      _model.tfPasswordVisibility ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                      color: Theme.of(context).colorScheme.tertiary,
-                      size: 20,
-                    ),
+                        _model.tfPasswordVisibility ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                        color: Theme.of(context).colorScheme.tertiary, size: 20),
                   ),
                 ),
                 style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
                   color: Theme.of(context).colorScheme.onSecondary,
                 ),
                 textInputAction: TextInputAction.next,
@@ -930,25 +938,18 @@ class _AddCompanyState extends State<AddCompany> {
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide.none,
                   ),
-                  prefixIcon: Icon(
-                    Icons.lock,
-                    color: Theme.of(context).colorScheme.tertiary,
-                    size: 20,
-                  ),
+                  prefixIcon: Icon(Icons.lock,
+                      color: Theme.of(context).colorScheme.tertiary, size: 20),
                   suffixIcon: InkWell(
                     onTap: () => setState(() => _model.tfPasswordConfirmVisibility = !_model.tfPasswordConfirmVisibility),
                     focusNode: FocusNode(skipTraversal: true),
                     child: Icon(
-                      _model.tfPasswordConfirmVisibility ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                      color: Theme.of(context).colorScheme.tertiary,
-                      size: 20,
-                    ),
+                        _model.tfPasswordConfirmVisibility ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                        color: Theme.of(context).colorScheme.tertiary, size: 20),
                   ),
                 ),
                 style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
                   color: Theme.of(context).colorScheme.onSecondary,
                 ),
                 textInputAction: TextInputAction.next,
@@ -961,145 +962,152 @@ class _AddCompanyState extends State<AddCompany> {
     );
   }
 
-  Widget _buildWeeklyContent() {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(20, 10, 20, 10),
-                child: Text(
-                  'Quantidade de conteúdo semanal:',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(context).colorScheme.onSecondary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        // Artes
-        Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Padding(
-                padding: EdgeInsetsDirectional.fromSTEB(30, 0, 0, 0),
-                child: Text(
-                  'Artes',
-                  style: TextStyle(
+  // --------- WhatsApp / Z-API fields ----------
+  Widget _buildWhatsPhoneTextField() {
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+              child: TextFormField(
+                controller: _tfWhatsPhoneController,
+                keyboardType: TextInputType.phone,
+                decoration: InputDecoration(
+                  hintText: 'Número do WhatsApp com DDI',
+                  hintStyle: TextStyle(
                     fontFamily: 'Poppins',
                     fontWeight: FontWeight.w500,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(0, 0, 20, 0),
-                child: CustomCountController(
-                  count: _model.countArtsValue,
-                  updateCount: updateCountArts,
-                ),
-              ),
-            ],
-          ),
-        ),
-        // Vídeos
-        Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Padding(
-                padding: EdgeInsetsDirectional.fromSTEB(30, 0, 0, 0),
-                child: Text(
-                  'Vídeos',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontWeight: FontWeight.w500,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(0, 0, 20, 0),
-                child: CustomCountController(
-                  count: _model.countVideosValue,
-                  updateCount: updateCountVideos,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAccessRights() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
-          child: Row(
-            children: [
-              Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(20, 10, 20, 10),
-                child: Text(
-                  'Marque os acessos da empresa:',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
                     color: Theme.of(context).colorScheme.onSecondary,
                   ),
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.secondary,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.phone_iphone,
+                    color: Theme.of(context).colorScheme.tertiary,
+                    size: 20,
+                  ),
                 ),
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSecondary,
+                ),
+                textAlign: TextAlign.start,
               ),
-            ],
+            ),
           ),
-        ),
-        _buildCheckBox("Dashboard", 'dashboard'),
-        _buildCheckBox("Leads", 'leads'),
-        _buildCheckBox("Gerenciar Colaboradores", 'gerenciarColaboradores'),
-        _buildCheckBox("Gerenciar Parceiros", 'gerenciarParceiros'),
-        _buildCheckBox("Configurar Dashboard", 'configurarDash'),
-        _buildCheckBox("Criar Formulário", 'criarForm'),
-        _buildCheckBox("Criar Campanha", 'criarCampanha'),
-        _buildCheckBox("Copiar telefones dos Leads", 'copiarTelefones'),
-        _buildCheckBox("Alterar senha", 'alterarSenha'),
-      ],
-    );
-  }
-
-  Widget _buildCheckBox(String title, String keyMap) {
-    return CheckboxListTile(
-      title: Text(
-        title,
-        style: TextStyle(
-          fontFamily: 'Poppins',
-          fontWeight: FontWeight.w500,
-          fontSize: 14,
-          color: Theme.of(context).colorScheme.onSecondary,
-        ),
+        ],
       ),
-      value: accessRights[keyMap],
-      onChanged: (bool? value) {
-        setState(() {
-          accessRights[keyMap] = value ?? false;
-        });
-      },
-      controlAffinity: ListTileControlAffinity.leading,
-      activeColor: Theme.of(context).primaryColor,
-      checkColor: Theme.of(context).colorScheme.outline,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5.0)),
-      dense: true,
+    );
+  }
+
+  Widget _buildZapiIdTextField() {
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+              child: TextFormField(
+                controller: _tfInstanceIdController,
+                decoration: InputDecoration(
+                  hintText: 'ZAPI_ID (instanceId)',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                  filled: true, fillColor: Theme.of(context).colorScheme.secondary,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  prefixIcon: Icon(Icons.memory,
+                      color: Theme.of(context).colorScheme.tertiary, size: 20),
+                ),
+                style: TextStyle(
+                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSecondary,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildZapiTokenTextField() {
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+              child: TextFormField(
+                controller: _tfZapiTokenController,
+                decoration: InputDecoration(
+                  hintText: 'ZAPI_TOKEN (token)',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                  filled: true, fillColor: Theme.of(context).colorScheme.secondary,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  prefixIcon: Icon(Icons.vpn_key,
+                      color: Theme.of(context).colorScheme.tertiary, size: 20),
+                ),
+                style: TextStyle(
+                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSecondary,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClientTokenTextField() {
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(0, 10, 0, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+              child: TextFormField(
+                controller: _tfClientTokenController,
+                decoration: InputDecoration(
+                  hintText: 'Client-Token',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                  filled: true, fillColor: Theme.of(context).colorScheme.secondary,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  prefixIcon: Icon(Icons.shield,
+                      color: Theme.of(context).colorScheme.tertiary, size: 20),
+                ),
+                style: TextStyle(
+                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSecondary,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1115,17 +1123,11 @@ class _AddCompanyState extends State<AddCompany> {
                 ? const Center(child: CircularProgressIndicator())
                 : ElevatedButton.icon(
               onPressed: _isLoading ? null : _addCompany,
-              icon: Icon(
-                Icons.save,
-                color: Theme.of(context).colorScheme.outline,
-                size: 20,
-              ),
+              icon: Icon(Icons.save, color: Theme.of(context).colorScheme.outline, size: 20),
               label: Text(
                 'ADICIONAR',
                 style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.w600,
                   color: Theme.of(context).colorScheme.outline,
                 ),
               ),
@@ -1133,13 +1135,8 @@ class _AddCompanyState extends State<AddCompany> {
                 padding: const EdgeInsetsDirectional.fromSTEB(30, 15, 30, 15),
                 backgroundColor: Theme.of(context).colorScheme.primary,
                 elevation: 3,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(25),
-                ),
-                side: const BorderSide(
-                  color: Colors.transparent,
-                  width: 1,
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                side: const BorderSide(color: Colors.transparent, width: 1),
               ),
             ),
           ),

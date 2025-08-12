@@ -32,6 +32,7 @@ class AppTheme {
       onSecondaryContainer: Color(0xFFFFFFFF),
       onPrimaryContainer: Color(0xFFf5f8fe),
       onTertiaryContainer: Color(0xFFF8F8F8),
+      surfaceBright: Color(0xFFB7B3C6),
       onTertiary: constantGreen,
     ),
     textTheme: const TextTheme(
@@ -52,6 +53,11 @@ class AppTheme {
       labelSmall: TextStyle(color: Color(0xFF000000)),
     ),
     shadowColor: constantBlack,
+    popupMenuTheme: PopupMenuThemeData(
+      textStyle: const TextStyle(color: Color(0xFF000000)), // força preto
+      color: const Color(0xFFFFFFFF),                       // fundo branco
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ),
   );
 
   static final darkTheme = ThemeData(
@@ -80,6 +86,7 @@ class AppTheme {
       onSecondaryContainer: Color(0xFF252423),
       onPrimaryContainer: Color(0xFFf5f8fe),
       onTertiaryContainer: Color(0xFF2B2B2E),
+      surfaceBright: Color(0xFFB7B3C6),
       onTertiary: constantGreen,
     ),
     textTheme: const TextTheme(
