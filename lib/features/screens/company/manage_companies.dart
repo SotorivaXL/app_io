@@ -471,14 +471,11 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                       final companies = snapshot.data!.docs;
 
                       // Filtrar as empresas com base em isDevAccount e currentUserId
-                      final filteredCompanies = companies.where((company) {
-                        final isDevAccount = company['isDevAccount'] ?? false;
-                        final companyId = company.id;
-                        if (isDevAccount == true) {
-                          return (companyId == currentUserId);
-                        } else {
-                          return true;
-                        }
+                      final filteredCompanies = companies.where((doc) {
+                        final data = doc.data() as Map<String, dynamic>?;
+                        final bool isDevAccount = data?['isDevAccount'] == true;
+                        if (isDevAccount) return doc.id == currentUserId;
+                        return true;
                       }).toList();
 
                       return ListView.builder(
@@ -486,8 +483,31 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                         itemCount: filteredCompanies.length,
                         itemBuilder: (context, index) {
                           final company = filteredCompanies[index];
-                          final nomeEmpresa = company['NomeEmpresa'];
-                          final contract = company['contract'];
+                          final data = company.data() as Map<String, dynamic>;
+
+                          bool asBool(dynamic v) => v == true;
+                          int asInt(dynamic v) => v is int ? v : (v is num ? v.toInt() : 0);
+
+                          final String nomeEmpresa = (data['NomeEmpresa'] ?? '') as String;
+                          final String contract    = (data['contract'] ?? '') as String;
+                          final String email       = (data['email'] ?? '') as String;
+                          final String cnpj        = (data['cnpj'] ?? '') as String;
+                          final String founded     = (data['founded'] ?? '').toString();
+
+                          final int countArtsValue   = asInt(data['countArtsValue']);
+                          final int countVideosValue = asInt(data['countVideosValue']);
+
+                          final bool dashboard               = asBool(data['dashboard']);
+                          final bool leads                   = asBool(data['leads']);
+                          final bool gerenciarColaboradores  = asBool(data['gerenciarColaboradores']);
+                          final bool configurarDash          = asBool(data['configurarDash']);
+                          final bool criarCampanha           = asBool(data['criarCampanha']);
+                          final bool criarForm               = asBool(data['criarForm']);
+                          final bool copiarTelefones         = asBool(data['copiarTelefones']);
+                          final bool alterarSenha            = asBool(data['alterarSenha']);
+                          final bool executarAPIs            = asBool(data['executarAPIs']);
+
+                          final String? photoUrl = data['photoUrl'] as String?;
 
                           return Card(
                             elevation: 4,
@@ -498,8 +518,9 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                               child: ListTile(
                                 contentPadding: EdgeInsets.all(8), // Aumenta o padding interno do ListTile
                                 leading: CircleAvatar(
-                                  radius: 30, // ajuste o tamanho conforme desejado
-                                  backgroundImage: NetworkImage(company['photoUrl']),
+                                  radius: 30,
+                                  backgroundImage: (photoUrl != null && photoUrl.isNotEmpty) ? NetworkImage(photoUrl) : null,
+                                  child: (photoUrl == null || photoUrl.isEmpty) ? const Icon(Icons.business) : null,
                                 ),
                                 title: Text(
                                   nomeEmpresa,
@@ -534,21 +555,21 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                                           EditCompanies(
                                             companyId: company.id,
                                             nomeEmpresa: nomeEmpresa,
-                                            email: company['email'],
+                                            email: email,
                                             contract: contract,
-                                            cnpj: company['cnpj'],
-                                            founded: company['founded'],
-                                            countArtsValue: company['countArtsValue'],
-                                            countVideosValue: company['countVideosValue'],
-                                            dashboard: company['dashboard'],
-                                            leads: company['leads'],
-                                            gerenciarColaboradores: company['gerenciarColaboradores'],
-                                            configurarDash: company['configurarDash'],
-                                            criarCampanha: company['criarCampanha'],
-                                            criarForm: company['criarForm'],
-                                            copiarTelefones: company['copiarTelefones'],
-                                            alterarSenha: company['alterarSenha'],
-                                            executarAPIs: company['executarAPIs'],
+                                            cnpj: cnpj,
+                                            founded: founded,
+                                            countArtsValue: countArtsValue,
+                                            countVideosValue: countVideosValue,
+                                            dashboard: dashboard,
+                                            leads: leads,
+                                            gerenciarColaboradores: gerenciarColaboradores,
+                                            configurarDash: configurarDash,
+                                            criarCampanha: criarCampanha,
+                                            criarForm: criarForm,
+                                            copiarTelefones: copiarTelefones,
+                                            alterarSenha: alterarSenha,
+                                            executarAPIs: executarAPIs,
                                           ),
                                         );
                                       },
@@ -562,7 +583,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                                       onPressed: () {
                                         _showDeleteConfirmationDialog(
                                           company.id,
-                                          company['email'],
+                                          email,
                                         );
                                       },
                                     ),
@@ -599,14 +620,11 @@ class _ManageCompaniesState extends State<ManageCompanies> {
 
                   final companies = snapshot.data!.docs;
 
-                  final filteredCompanies = companies.where((company) {
-                    final isDevAccount = company['isDevAccount'] ?? false;
-                    final companyId = company.id;
-                    if (isDevAccount == true) {
-                      return (companyId == currentUserId);
-                    } else {
-                      return true;
-                    }
+                  final filteredCompanies = companies.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>?;
+                    final bool isDevAccount = data?['isDevAccount'] == true;
+                    if (isDevAccount) return doc.id == currentUserId;
+                    return true;
                   }).toList();
 
                   return ListView.builder(
@@ -614,8 +632,31 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                     itemCount: filteredCompanies.length,
                     itemBuilder: (context, index) {
                       final company = filteredCompanies[index];
-                      final nomeEmpresa = company['NomeEmpresa'];
-                      final contract = company['contract'];
+                      final data = company.data() as Map<String, dynamic>;
+
+                      bool asBool(dynamic v) => v == true;
+                      int asInt(dynamic v) => v is int ? v : (v is num ? v.toInt() : 0);
+
+                      final String nomeEmpresa = (data['NomeEmpresa'] ?? '') as String;
+                      final String contract    = (data['contract'] ?? '') as String;
+                      final String email       = (data['email'] ?? '') as String;
+                      final String cnpj        = (data['cnpj'] ?? '') as String;
+                      final String founded     = (data['founded'] ?? '').toString();
+
+                      final int countArtsValue   = asInt(data['countArtsValue']);
+                      final int countVideosValue = asInt(data['countVideosValue']);
+
+                      final bool dashboard               = asBool(data['dashboard']);
+                      final bool leads                   = asBool(data['leads']);
+                      final bool gerenciarColaboradores  = asBool(data['gerenciarColaboradores']);
+                      final bool configurarDash          = asBool(data['configurarDash']);
+                      final bool criarCampanha           = asBool(data['criarCampanha']);
+                      final bool criarForm               = asBool(data['criarForm']);
+                      final bool copiarTelefones         = asBool(data['copiarTelefones']);
+                      final bool alterarSenha            = asBool(data['alterarSenha']);
+                      final bool executarAPIs            = asBool(data['executarAPIs']);
+
+                      final String? photoUrl = data['photoUrl'] as String?;
 
                       return Card(
                         elevation: 4,
@@ -626,8 +667,9 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                           child: ListTile(
                             contentPadding: EdgeInsets.all(8), // Aumenta o padding interno do ListTile
                             leading: CircleAvatar(
-                              radius: 30, // ajuste o tamanho conforme desejado
-                              backgroundImage: NetworkImage(company['photoUrl']),
+                              radius: 30,
+                              backgroundImage: (photoUrl != null && photoUrl.isNotEmpty) ? NetworkImage(photoUrl) : null,
+                              child: (photoUrl == null || photoUrl.isEmpty) ? const Icon(Icons.business) : null,
                             ),
                             title: Text(
                               nomeEmpresa,
@@ -662,21 +704,21 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                                       EditCompanies(
                                         companyId: company.id,
                                         nomeEmpresa: nomeEmpresa,
-                                        email: company['email'],
+                                        email: email,
                                         contract: contract,
-                                        cnpj: company['cnpj'],
-                                        founded: company['founded'],
-                                        countArtsValue: company['countArtsValue'],
-                                        countVideosValue: company['countVideosValue'],
-                                        dashboard: company['dashboard'],
-                                        leads: company['leads'],
-                                        gerenciarColaboradores: company['gerenciarColaboradores'],
-                                        configurarDash: company['configurarDash'],
-                                        criarCampanha: company['criarCampanha'],
-                                        criarForm: company['criarForm'],
-                                        copiarTelefones: company['copiarTelefones'],
-                                        alterarSenha: company['alterarSenha'],
-                                        executarAPIs: company['executarAPIs'],
+                                        cnpj: cnpj,
+                                        founded: founded,
+                                        countArtsValue: countArtsValue,
+                                        countVideosValue: countVideosValue,
+                                        dashboard: dashboard,
+                                        leads: leads,
+                                        gerenciarColaboradores: gerenciarColaboradores,
+                                        configurarDash: configurarDash,
+                                        criarCampanha: criarCampanha,
+                                        criarForm: criarForm,
+                                        copiarTelefones: copiarTelefones,
+                                        alterarSenha: alterarSenha,
+                                        executarAPIs: executarAPIs,
                                       ),
                                     );
                                   },
@@ -690,7 +732,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                                   onPressed: () {
                                     _showDeleteConfirmationDialog(
                                       company.id,
-                                      company['email'],
+                                      email,
                                     );
                                   },
                                 ),

@@ -37,16 +37,53 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
 
   // Inicializa o mapa para armazenar os direitos de acesso
   Map<String, bool> accessRights = {
-    'dashboard': false,
-    'leads': false,
-    'gerenciarColaboradores': false,
+    // MÓDULOS
+    'modChats': true,
+    'modIndicadores': true,
+    'modPainel': false,
+    'modConfig': true,
+    'modRelatorios': false, // opcional
+
+    // PERMISSÕES INTERNAS (Painel)
     'gerenciarParceiros': false,
+    'gerenciarColaboradores': false,
     'configurarDash': false,
     'criarForm': false,
     'criarCampanha': false,
+    'gerenciarProdutos': false,
+
+    // OUTROS (se usados em outras telas)
+    'leads': false,
     'copiarTelefones': false,
     'executarAPIs': false,
   };
+
+  void _setPerm(String key, bool value) {
+    setState(() {
+      accessRights[key] = value;
+
+      if (key == 'modPainel' && value == false) {
+        accessRights['gerenciarParceiros'] = false;
+        accessRights['gerenciarColaboradores'] = false;
+        accessRights['configurarDash'] = false;
+        accessRights['criarForm'] = false;
+        accessRights['criarCampanha'] = false;
+        accessRights['gerenciarProdutos'] = false; // <-- NOVO
+      }
+
+      const subPerms = [
+        'gerenciarParceiros',
+        'gerenciarColaboradores',
+        'configurarDash',
+        'criarForm',
+        'criarCampanha',
+        'gerenciarProdutos',
+      ];
+      if (subPerms.contains(key) && value == true) {
+        accessRights['modPainel'] = true;
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -137,6 +174,64 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
         _isLoading = false;
       });
     }
+  }
+
+  Widget _buildPermissionsList() {
+    final cs = Theme.of(context).colorScheme;
+
+    CheckboxListTile cb({
+      required String keyName,
+      required String label,
+    }) {
+      final cs = Theme.of(context).colorScheme;
+      return CheckboxListTile(
+        title: Text(label, style: TextStyle(
+          fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 14,
+          color: cs.onSecondary,
+        )),
+        value: accessRights[keyName] ?? false,
+        onChanged: (v) => _setPerm(keyName, v ?? false), // ⬅️ aqui
+        controlAffinity: ListTileControlAffinity.leading,
+        activeColor: cs.tertiary,
+        checkColor: cs.outline,
+        side: BorderSide(color: cs.tertiary, width: 2),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+        dense: true,
+      );
+    }
+
+    Widget section(String title) => Padding(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+      child: Text(title, style: TextStyle(
+        fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.w600,
+        color: cs.onSecondary,
+      )),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        section('Acesso aos módulos'),
+        cb(keyName: 'modChats',        label: 'Chats'),
+        cb(keyName: 'modIndicadores',  label: 'Indicadores'),
+        cb(keyName: 'modPainel',       label: 'Painel Adm'),
+        cb(keyName: 'modRelatorios',   label: 'Relatórios'), // se usar
+        cb(keyName: 'modConfig',       label: 'Configurações'),
+
+        section('Permissões internas (Painel)'),
+        cb(keyName: 'gerenciarParceiros',     label: 'Gerenciar Parceiros'),
+        cb(keyName: 'gerenciarColaboradores', label: 'Gerenciar Colaboradores'),
+        cb(keyName: 'configurarDash',         label: 'Configurar Dash'),
+        cb(keyName: 'criarForm',              label: 'Criar Formulário'),
+        cb(keyName: 'criarCampanha',          label: 'Criar Campanha'),
+        cb(keyName: 'gerenciarProdutos',      label: 'Gerenciar Produtos'),
+
+        section('Outros'),
+        cb(keyName: 'leads',            label: 'Leads'),
+        cb(keyName: 'copiarTelefones',  label: 'Copiar telefones dos Leads'),
+        cb(keyName: 'executarAPIs',     label: 'Executar APIs'),
+      ],
+    );
   }
 
   Future<String?> _uploadImage(String uid) async {
@@ -1135,240 +1230,8 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                                 ),
                               ),
                               Padding(
-                                padding: EdgeInsetsDirectional.fromSTEB(
-                                    10, 0, 0, 20),
-                                child: Column(
-                                  children: [
-                                    CheckboxListTile(
-                                      title: Text(
-                                        "Dashboard",
-                                        style: TextStyle(
-                                          fontFamily: 'Poppins',
-                                          fontWeight: FontWeight.w500,
-                                          fontSize: 14,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSecondary,
-                                        ),
-                                      ),
-                                      value: accessRights['dashboard'],
-                                      onChanged: (bool? value) {
-                                        setState(() {
-                                          accessRights['dashboard'] =
-                                              value ?? false;
-                                        });
-                                      },
-                                      controlAffinity:
-                                          ListTileControlAffinity.leading,
-                                      activeColor: Theme.of(context)
-                                          .colorScheme
-                                          .tertiary,
-                                      checkColor:
-                                          Theme.of(context).colorScheme.outline,
-                                      side: BorderSide(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .tertiary,
-                                        width: 2,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(5.0),
-                                      ),
-                                      dense: true,
-                                    ),
-                                    CheckboxListTile(
-                                      title: Text(
-                                        "Leads",
-                                        style: TextStyle(
-                                          fontFamily: 'Poppins',
-                                          fontWeight: FontWeight.w500,
-                                          fontSize: 14,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSecondary,
-                                        ),
-                                      ),
-                                      value: accessRights['leads'],
-                                      onChanged: (bool? value) {
-                                        setState(() {
-                                          accessRights['leads'] =
-                                              value ?? false;
-                                        });
-                                      },
-                                      controlAffinity:
-                                          ListTileControlAffinity.leading,
-                                      activeColor: Theme.of(context)
-                                          .colorScheme
-                                          .tertiary,
-                                      checkColor:
-                                          Theme.of(context).colorScheme.outline,
-                                      side: BorderSide(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .tertiary,
-                                        width: 2,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(5.0),
-                                      ),
-                                      dense: true,
-                                    ),
-                                    CheckboxListTile(
-                                      title: Text(
-                                        "Configurar Dashboard",
-                                        style: TextStyle(
-                                          fontFamily: 'Poppins',
-                                          fontWeight: FontWeight.w500,
-                                          fontSize: 14,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSecondary,
-                                        ),
-                                      ),
-                                      value: accessRights['configurarDash'],
-                                      onChanged: (bool? value) {
-                                        setState(() {
-                                          accessRights['configurarDash'] =
-                                              value ?? false;
-                                        });
-                                      },
-                                      controlAffinity:
-                                          ListTileControlAffinity.leading,
-                                      activeColor: Theme.of(context)
-                                          .colorScheme
-                                          .tertiary,
-                                      checkColor:
-                                          Theme.of(context).colorScheme.outline,
-                                      side: BorderSide(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .tertiary,
-                                        width: 2,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(5.0),
-                                      ),
-                                      dense: true,
-                                    ),
-                                    CheckboxListTile(
-                                      title: Text(
-                                        "Criar Formulário",
-                                        style: TextStyle(
-                                          fontFamily: 'Poppins',
-                                          fontWeight: FontWeight.w500,
-                                          fontSize: 14,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSecondary,
-                                        ),
-                                      ),
-                                      value: accessRights['criarForm'],
-                                      onChanged: (bool? value) {
-                                        setState(() {
-                                          accessRights['criarForm'] =
-                                              value ?? false;
-                                        });
-                                      },
-                                      controlAffinity:
-                                          ListTileControlAffinity.leading,
-                                      activeColor: Theme.of(context)
-                                          .colorScheme
-                                          .tertiary,
-                                      checkColor:
-                                          Theme.of(context).colorScheme.outline,
-                                      side: BorderSide(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .tertiary,
-                                        width: 2,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(5.0),
-                                      ),
-                                      dense: true,
-                                    ),
-                                    CheckboxListTile(
-                                      title: Text(
-                                        "Criar Campanha",
-                                        style: TextStyle(
-                                          fontFamily: 'Poppins',
-                                          fontWeight: FontWeight.w500,
-                                          fontSize: 14,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSecondary,
-                                        ),
-                                      ),
-                                      value: accessRights['criarCampanha'],
-                                      onChanged: (bool? value) {
-                                        setState(() {
-                                          accessRights['criarCampanha'] =
-                                              value ?? false;
-                                        });
-                                      },
-                                      controlAffinity:
-                                          ListTileControlAffinity.leading,
-                                      activeColor: Theme.of(context)
-                                          .colorScheme
-                                          .tertiary,
-                                      checkColor:
-                                          Theme.of(context).colorScheme.outline,
-                                      side: BorderSide(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .tertiary,
-                                        width: 2,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(5.0),
-                                      ),
-                                      dense: true,
-                                    ),
-                                    CheckboxListTile(
-                                      title: Text(
-                                        "Copiar telefones dos Leads",
-                                        style: TextStyle(
-                                          fontFamily: 'Poppins',
-                                          fontWeight: FontWeight.w500,
-                                          fontSize: 14,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSecondary,
-                                        ),
-                                      ),
-                                      value: accessRights['copiarTelefones'],
-                                      onChanged: (bool? value) {
-                                        setState(() {
-                                          accessRights['copiarTelefones'] =
-                                              value ?? false;
-                                        });
-                                      },
-                                      controlAffinity:
-                                          ListTileControlAffinity.leading,
-                                      activeColor: Theme.of(context)
-                                          .colorScheme
-                                          .tertiary,
-                                      checkColor:
-                                          Theme.of(context).colorScheme.outline,
-                                      side: BorderSide(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .tertiary,
-                                        width: 2,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(5.0),
-                                      ),
-                                      dense: true,
-                                    ),
-                                  ],
-                                ),
+                                padding: const EdgeInsetsDirectional.fromSTEB(10, 0, 0, 20),
+                                child: _buildPermissionsList(),
                               ),
                             ],
                           ),
@@ -2043,240 +1906,8 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                             ),
                           ),
                           Padding(
-                            padding: EdgeInsetsDirectional.fromSTEB(
-                                10, 0, 0, 20),
-                            child: Column(
-                              children: [
-                                CheckboxListTile(
-                                  title: Text(
-                                    "Dashboard",
-                                    style: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 14,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSecondary,
-                                    ),
-                                  ),
-                                  value: accessRights['dashboard'],
-                                  onChanged: (bool? value) {
-                                    setState(() {
-                                      accessRights['dashboard'] =
-                                          value ?? false;
-                                    });
-                                  },
-                                  controlAffinity:
-                                  ListTileControlAffinity.leading,
-                                  activeColor: Theme.of(context)
-                                      .colorScheme
-                                      .tertiary,
-                                  checkColor:
-                                  Theme.of(context).colorScheme.outline,
-                                  side: BorderSide(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .tertiary,
-                                    width: 2,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                    BorderRadius.circular(5.0),
-                                  ),
-                                  dense: true,
-                                ),
-                                CheckboxListTile(
-                                  title: Text(
-                                    "Leads",
-                                    style: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 14,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSecondary,
-                                    ),
-                                  ),
-                                  value: accessRights['leads'],
-                                  onChanged: (bool? value) {
-                                    setState(() {
-                                      accessRights['leads'] =
-                                          value ?? false;
-                                    });
-                                  },
-                                  controlAffinity:
-                                  ListTileControlAffinity.leading,
-                                  activeColor: Theme.of(context)
-                                      .colorScheme
-                                      .tertiary,
-                                  checkColor:
-                                  Theme.of(context).colorScheme.outline,
-                                  side: BorderSide(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .tertiary,
-                                    width: 2,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                    BorderRadius.circular(5.0),
-                                  ),
-                                  dense: true,
-                                ),
-                                CheckboxListTile(
-                                  title: Text(
-                                    "Configurar Dashboard",
-                                    style: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 14,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSecondary,
-                                    ),
-                                  ),
-                                  value: accessRights['configurarDash'],
-                                  onChanged: (bool? value) {
-                                    setState(() {
-                                      accessRights['configurarDash'] =
-                                          value ?? false;
-                                    });
-                                  },
-                                  controlAffinity:
-                                  ListTileControlAffinity.leading,
-                                  activeColor: Theme.of(context)
-                                      .colorScheme
-                                      .tertiary,
-                                  checkColor:
-                                  Theme.of(context).colorScheme.outline,
-                                  side: BorderSide(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .tertiary,
-                                    width: 2,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                    BorderRadius.circular(5.0),
-                                  ),
-                                  dense: true,
-                                ),
-                                CheckboxListTile(
-                                  title: Text(
-                                    "Criar Formulário",
-                                    style: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 14,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSecondary,
-                                    ),
-                                  ),
-                                  value: accessRights['criarForm'],
-                                  onChanged: (bool? value) {
-                                    setState(() {
-                                      accessRights['criarForm'] =
-                                          value ?? false;
-                                    });
-                                  },
-                                  controlAffinity:
-                                  ListTileControlAffinity.leading,
-                                  activeColor: Theme.of(context)
-                                      .colorScheme
-                                      .tertiary,
-                                  checkColor:
-                                  Theme.of(context).colorScheme.outline,
-                                  side: BorderSide(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .tertiary,
-                                    width: 2,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                    BorderRadius.circular(5.0),
-                                  ),
-                                  dense: true,
-                                ),
-                                CheckboxListTile(
-                                  title: Text(
-                                    "Criar Campanha",
-                                    style: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 14,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSecondary,
-                                    ),
-                                  ),
-                                  value: accessRights['criarCampanha'],
-                                  onChanged: (bool? value) {
-                                    setState(() {
-                                      accessRights['criarCampanha'] =
-                                          value ?? false;
-                                    });
-                                  },
-                                  controlAffinity:
-                                  ListTileControlAffinity.leading,
-                                  activeColor: Theme.of(context)
-                                      .colorScheme
-                                      .tertiary,
-                                  checkColor:
-                                  Theme.of(context).colorScheme.outline,
-                                  side: BorderSide(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .tertiary,
-                                    width: 2,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                    BorderRadius.circular(5.0),
-                                  ),
-                                  dense: true,
-                                ),
-                                CheckboxListTile(
-                                  title: Text(
-                                    "Copiar telefones dos Leads",
-                                    style: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 14,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSecondary,
-                                    ),
-                                  ),
-                                  value: accessRights['copiarTelefones'],
-                                  onChanged: (bool? value) {
-                                    setState(() {
-                                      accessRights['copiarTelefones'] =
-                                          value ?? false;
-                                    });
-                                  },
-                                  controlAffinity:
-                                  ListTileControlAffinity.leading,
-                                  activeColor: Theme.of(context)
-                                      .colorScheme
-                                      .tertiary,
-                                  checkColor:
-                                  Theme.of(context).colorScheme.outline,
-                                  side: BorderSide(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .tertiary,
-                                    width: 2,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                    BorderRadius.circular(5.0),
-                                  ),
-                                  dense: true,
-                                ),
-                              ],
-                            ),
+                            padding: const EdgeInsetsDirectional.fromSTEB(10, 0, 0, 20),
+                            child: _buildPermissionsList(),
                           ),
                         ],
                       ),

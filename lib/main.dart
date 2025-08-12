@@ -1,4 +1,5 @@
-import 'dart:io' show Platform;
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:app_io/auth/guard/auth_guard.dart';
 import 'package:app_io/auth/login/login_page.dart';
 import 'package:app_io/auth/providers/auth_provider.dart';
@@ -15,16 +16,159 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:fl_country_code_picker/fl_country_code_picker.dart' as flc;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
+import 'features/screens/crm/chat_detail.dart';
 import 'firebase_options.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:image/image.dart' as img;
+import 'package:flutter/foundation.dart' show consolidateHttpClientResponseBytes, kIsWeb;
+
+Future<Uint8List?> _roundAvatar(String url) async {
+  final data = await _downloadBytes(url);
+  if (data == null) return null;
+
+  final src = img.decodeImage(data);
+  if (src == null) return null;
+
+  final size   = src.width < src.height ? src.width : src.height;
+  final circle = img.Image(width: size, height: size);
+
+  // desenha só os pixels dentro do raio
+  final cx = size / 2, cy = size / 2, r2 = cx * cx;
+  for (var y = 0; y < size; y++) {
+    for (var x = 0; x < size; x++) {
+      final dx = x - cx, dy = y - cy;
+      if (dx * dx + dy * dy <= r2) {
+        circle.setPixel(x, y, src.getPixel(x, y));
+      } else {
+        circle.setPixelRgba(x, y, 0, 0, 0, 0); // transparente
+      }
+    }
+  }
+  return Uint8List.fromList(img.encodePng(circle));
+}
+
+Future<Uint8List?> _downloadBytes(String url) async {
+  try {
+    final req  = await HttpClient().getUrl(Uri.parse(url));
+    final resp = await req.close();
+    if (resp.statusCode == 200) {
+      // helper do Flutter que junta todos os chunks
+      return consolidateHttpClientResponseBytes(resp);
+    }
+  } catch (_) {}
+  return null;                           // erro → só devolve null
+}
+
+Future<void> _showChatNotification(RemoteMessage m) async {
+  final d        = m.data;
+  final chatId   = d['chatId'] ?? '';
+  final chatName = d['chatName'] ?? 'Contato';
+
+  // --- avatar redondo -------------------------------------------------
+  final Uint8List? avatar = (d['contactPhoto']?.isNotEmpty ?? false)
+      ? await _roundAvatar(d['contactPhoto']!)
+      : null;                           // null → usa ícone do app
+
+  // --- id único por conversa ------------------------------------------
+  // Pode ser qualquer int positivo (hashCode já serve)
+  final int notifId = chatId.hashCode & 0x7FFFFFFF;
+
+  // --- estilo “Messaging” ---------------------------------------------
+  final person = Person(
+    name : chatName,
+    key  : chatId,                      // chave estável por contato
+  );
+
+  final style = MessagingStyleInformation(
+    person,
+    conversationTitle: null,
+    groupConversation: false,
+    messages: [
+      Message(m.notification?.body ?? '', DateTime.now(), person),
+    ],
+  );
+
+  // --- detalhes Android -----------------------------------------------
+  const channelId = 'high_importance_channel';
+
+  final android = AndroidNotificationDetails(
+    channelId,
+    'msg',
+    groupKey       : 'io.connect.conversas',   // todas no mesmo grupo
+    importance     : Importance.max,
+    priority       : Priority.high,
+    styleInformation: style,
+    category       : AndroidNotificationCategory.message,
+    icon           : 'ic_stat_ioconnect',      // 24×24 branco
+    largeIcon      : avatar != null
+        ? ByteArrayAndroidBitmap(avatar)       // mostrado recolhido
+        : null,
+    colorized      : true,                     // força avatar à esquerda
+    color          : const Color(0xFF6B00E3),
+    shortcutId     : chatId,                   // Android 11+
+  );
+
+  await Firebase.initializeApp();
+  FirebaseFirestore.instance.settings =
+  const Settings(persistenceEnabled: true);
+
+  await flutterLocalNotificationsPlugin.show(
+    notifId,          // <- diferente por chat  🔑
+    null,
+    null,
+    NotificationDetails(
+      android: android,
+      iOS: const DarwinNotificationDetails(),
+    ),
+    payload: Uri(queryParameters: {
+      'openChat'    : 'true',
+      'chatId'      : chatId,
+      'chatName'    : chatName,
+      'contactPhoto': d['contactPhoto'] ?? '',
+    }).query,
+  );
+}
+
+// 1.1 – chave global para podermos navegar fora de widgets
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+// 1.2 – handler que o Android/iOS chama quando a notificação chega
+@pragma('vm:entry-point')                      // <- não remova
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  // aqui você grava logs ou analytics; **não** faça navegação
+}
+
+// 1.3 – função que vai abrir a tela certa quando o usuário tocar na notificação
+void _handleMessage(RemoteMessage message) {
+  final d = message.data;
+  if (d['openChat'] == 'true' && d['chatId'] != null) {
+    navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (_) => ChatDetail(
+          chatId: d['chatId']!,
+          chatName: d['chatName'] ?? 'Contato',
+          contactPhoto: d['contactPhoto'] ?? '',
+        ),
+      ),
+    );
+  }
+}
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
 FlutterLocalNotificationsPlugin();
+
+final List<Locale> appSupportedLocales = <Locale>{
+  const Locale('en', ''),          // Inglês
+  const Locale('pt', 'BR'),        // Português-Brasil
+  ...flc.CountryLocalizations.supportedLocales           // ← lista de Strings
+      .map(Locale.new),                               //   → Locale
+}.toList();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -62,6 +206,15 @@ Future<void> main() async {
   await FirebaseAppCheck.instance.activate(
     appleProvider: AppleProvider.appAttest,
   );
+  // 2.1 – registra o handler de background (obrigatório)
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+// 2.2 – se o app estava **fechado** e foi aberto tocando na notificação
+  final initialMsg = await FirebaseMessaging.instance.getInitialMessage();
+  if (initialMsg != null) _handleMessage(initialMsg);
+
+// 2.3 – se o app estava em background e o usuário tocou na notificação
+  FirebaseMessaging.onMessageOpenedApp.listen(_handleMessage);
 
   runApp(
     MultiProvider(
@@ -86,21 +239,37 @@ Future<void> _forceAppTrackingPermission() async {
 }
 
 Future<void> initializeLocalNotifications() async {
-  // Configuração para Android
-  const AndroidInitializationSettings androidSettings =
-  AndroidInitializationSettings('@mipmap/ic_launcher');
+  // ícone 24 × 24 branco gerado e colocado em drawable
+  const AndroidInitializationSettings initSettingsAndroid =
+  AndroidInitializationSettings('ic_stat_ioconnect');
 
-  // Configuração para iOS
-  const DarwinInitializationSettings iosSettings =
+  const DarwinInitializationSettings initSettingsIOS =
   DarwinInitializationSettings();
 
-  // Configuração geral
-  const InitializationSettings settings = InitializationSettings(
-    android: androidSettings,
-    iOS: iosSettings,
+  const InitializationSettings initSettings = InitializationSettings(
+    android: initSettingsAndroid,
+    iOS:     initSettingsIOS,
   );
 
-  await flutterLocalNotificationsPlugin.initialize(settings);
+  await flutterLocalNotificationsPlugin.initialize(
+    initSettings,
+    // callback dispara se o usuário tocar na notificação local
+    onDidReceiveNotificationResponse: (resp) {
+      // payload foi salvo como String ⇒ vira Map
+      final data = Uri.splitQueryString(resp.payload ?? '');
+      if (data['openChat'] == 'true') {
+        navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (_) => ChatDetail(
+              chatId:       data['chatId'] ?? '',
+              chatName:     data['chatName'] ?? 'Contato',
+              contactPhoto: data['contactPhoto'] ?? '',
+            ),
+          ),
+        );
+      }
+    },
+  );
 }
 
 class MyApp extends StatefulWidget {
@@ -115,6 +284,7 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     _initializeFirebaseMessaging();
+    FirebaseMessaging.onMessage.listen(_showChatNotification);
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     authProvider.listenToAuthChanges();
@@ -157,7 +327,6 @@ class _MyAppState extends State<MyApp> {
           );
         }
       });
-
       // Notificações quando o app é aberto a partir de uma notificação
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
         print('Notificação clicada: ${message.data}');
@@ -178,46 +347,41 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
-  void _showNotification(String? title, String? body, Map<String, dynamic> payload) {
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+  void _showNotification(String? title, String? body,
+      Map<String, dynamic> payload) {
+    const AndroidNotificationDetails androidDetails =
+    AndroidNotificationDetails(
       'high_importance_channel',
       'Notificações importantes',
       importance: Importance.max,
-      priority: Priority.high,
+      priority : Priority.high,
+      icon     : 'ic_stat_ioconnect',   // <- aqui
     );
 
-    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails();
-
-    const NotificationDetails platformDetails = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
+    const NotificationDetails details =
+    NotificationDetails(android: androidDetails,
+        iOS: const DarwinNotificationDetails());
 
     flutterLocalNotificationsPlugin.show(
-      0,
-      title,
-      body,
-      platformDetails,
-      payload: payload.toString(),
+      0, title, body, details,
+      payload: Uri(queryParameters: payload).query,   // mantém padrão
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'IO Connect',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
       debugShowCheckedModeBanner: false,
-      localizationsDelegates: [
+      localizationsDelegates: const [
+        flc.CountryLocalizations.delegate,          // ← picker
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: [
-        const Locale('en', ''), // Inglês
-        const Locale('pt', 'BR'), // Português Brasil
       ],
       home: SplashScreen(),
       routes: {

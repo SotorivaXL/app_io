@@ -6,6 +6,7 @@ import 'package:app_io/features/screens/campaign/manage_campaigns.dart';
 import 'package:app_io/features/screens/collaborator/manage_collaborators.dart';
 import 'package:app_io/features/screens/company/manage_companies.dart';
 import 'package:app_io/features/screens/configurations/dashboard_configurations.dart';
+import 'package:app_io/features/screens/crm/whatsapp_chats.dart';
 import 'package:app_io/features/screens/form/manage_forms.dart';
 import 'package:app_io/features/screens/requests/requests.dart';
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
@@ -14,6 +15,8 @@ import 'package:app_io/util/services/firestore_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+import '../products/manage_products.dart';
 
 class AdminPanelPage extends StatefulWidget {
   @override
@@ -29,6 +32,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   bool hasCriarFormAccess = false;
   bool hasCriarCampanhaAccess = false;
   bool isLoading = true;
+  bool hasGerenciarWhatsappAccess = false;
+  bool hasGerenciarProdutosAccess = false;
   bool _isEmpresaUser =
       false; // Será true se o documento for encontrado em "empresas"
   String? createdBy;
@@ -115,13 +120,14 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
     if (!mounted) return;
     setState(() {
       hasGerenciarParceirosAccess = userData?['gerenciarParceiros'] ?? false;
-      hasGerenciarColaboradoresAccess =
-          userData?['gerenciarColaboradores'] ?? false;
+      hasGerenciarColaboradoresAccess = userData?['gerenciarColaboradores'] ?? false;
       hasConfigurarDashAccess = userData?['configurarDash'] ?? false;
       hasCriarFormAccess = userData?['criarForm'] ?? false;
       hasCriarCampanhaAccess = userData?['criarCampanha'] ?? false;
       hasExecutarAPIs = userData?['executarAPIs'] ?? false;
       createdBy = userData?['createdBy'];
+      hasGerenciarProdutosAccess = userData?['gerenciarProdutos'] ?? false;
+      hasGerenciarWhatsappAccess = userData?['gerenciarWhatsapp'] ?? false;
       isLoading = false;
     });
 
@@ -130,7 +136,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         !hasConfigurarDashAccess &&
         !hasCriarFormAccess &&
         !hasExecutarAPIs &&
-        !hasCriarCampanhaAccess) {
+        !hasCriarCampanhaAccess &&
+        !hasGerenciarProdutosAccess) {
       if (!_hasShownPermissionRevokedDialog) {
         _hasShownPermissionRevokedDialog = true;
         WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -317,7 +324,9 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         !hasConfigurarDashAccess &&
         !hasCriarFormAccess &&
         !hasExecutarAPIs &&
-        !hasCriarCampanhaAccess) {
+        !hasCriarCampanhaAccess &&
+        !hasGerenciarWhatsappAccess &&
+        !hasGerenciarProdutosAccess) {
       return ConnectivityBanner(
         child: Scaffold(
           body: isDesktop
@@ -360,75 +369,98 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         child: Scaffold(
           body: isDesktop
               ? Container(
-                  constraints: BoxConstraints(maxWidth: 1800),
-                  padding: EdgeInsets.symmetric(horizontal: 50),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.max,
-                      children: [
-                        if (hasGerenciarParceirosAccess)
-                          _buildCardOption(
-                            context,
-                            title: 'Gerenciar Parceiros',
-                            subtitle: 'Gerenciar empresas parceiras',
-                            icon: Icons.business,
-                            onTap: () =>
-                                _navigateWithFade(context, ManageCompanies()),
-                            isDesktop: isDesktop,
-                          ),
-                        if (hasGerenciarColaboradoresAccess)
-                          _buildCardOption(
-                            context,
-                            title: 'Gerenciar Colaboradores',
-                            subtitle: 'Gerenciar colaboradores da empresa',
-                            icon: Icons.group,
-                            onTap: () => _navigateWithFade(
-                                context, ManageCollaborators()),
-                            isDesktop: isDesktop,
-                          ),
-                        if (hasCriarFormAccess)
-                          _buildCardOption(
-                            context,
-                            title: 'Gerenciar Formulários',
-                            subtitle: 'Gerenciar formulários personalizados',
-                            icon: Icons.article,
-                            onTap: () =>
-                                _navigateWithFade(context, ManageForms()),
-                            isDesktop: isDesktop,
-                          ),
-                        if (hasCriarCampanhaAccess)
-                          _buildCardOption(
-                            context,
-                            title: 'Gerenciar Campanhas',
-                            subtitle: 'Gerenciar campanhas da empresa',
-                            icon: Icons.campaign,
-                            onTap: () =>
-                                _navigateWithFade(context, ManageCampaigns()),
-                            isDesktop: isDesktop,
-                          ),
-                        if (hasExecutarAPIs)
-                          _buildCardOption(
-                            context,
-                            title: 'Gerenciar APIs',
-                            subtitle:
-                                'Gerenciar, criar, editar e executar APIs',
-                            icon: Icons.api_rounded,
-                            onTap: () =>
-                                _navigateWithFade(context, ManageApis()),
-                            isDesktop: isDesktop,
-                          ),
-                        if (hasConfigurarDashAccess)
-                          _buildCardOption(
-                            context,
-                            title: 'Configurações de Dashboard',
-                            subtitle:
-                                'Configurações de BMs, anúncios e campanhas',
-                            icon: Icons.dashboard_customize,
-                            onTap: () => _navigateWithFade(
-                                context, DashboardConfigurations()),
-                            isDesktop: isDesktop,
-                          ),
-                        // Exibe o card de Solicitações somente se o documento do usuário foi encontrado na coleção "empresas"
+            constraints: const BoxConstraints(maxWidth: 1800),
+            padding: const EdgeInsets.symmetric(horizontal: 50),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.max,
+                children: [
+                  if (hasGerenciarParceirosAccess)
+                    _buildCardOption(
+                      context,
+                      title: 'Gerenciar Parceiros',
+                      subtitle: 'Gerenciar empresas parceiras',
+                      icon: Icons.business,
+                      onTap: () => _navigateWithFade(context, ManageCompanies()),
+                      isDesktop: true,
+                    ),
+                  if (hasGerenciarColaboradoresAccess)
+                    _buildCardOption(
+                      context,
+                      title: 'Gerenciar Colaboradores',
+                      subtitle: 'Gerenciar colaboradores da empresa',
+                      icon: Icons.group,
+                      onTap: () =>
+                          _navigateWithFade(context, ManageCollaborators()),
+                      isDesktop: true,
+                    ),
+                  if (hasCriarFormAccess)
+                    _buildCardOption(
+                      context,
+                      title: 'Gerenciar Formulários',
+                      subtitle: 'Gerenciar formulários personalizados',
+                      icon: Icons.article,
+                      onTap: () => _navigateWithFade(context, ManageForms()),
+                      isDesktop: true,
+                    ),
+                  if (hasCriarCampanhaAccess)
+                    _buildCardOption(
+                      context,
+                      title: 'Gerenciar Campanhas',
+                      subtitle: 'Gerenciar campanhas da empresa',
+                      icon: Icons.campaign,
+                      onTap: () =>
+                          _navigateWithFade(context, ManageCampaigns()),
+                      isDesktop: true,
+                    ),
+                  if (hasExecutarAPIs)
+                    _buildCardOption(
+                      context,
+                      title: 'Gerenciar APIs',
+                      subtitle: 'Gerenciar, criar, editar e executar APIs',
+                      icon: Icons.api_rounded,
+                      onTap: () => _navigateWithFade(context, ManageApis()),
+                      isDesktop: true,
+                    ),
+                  if (hasConfigurarDashAccess)
+                    _buildCardOption(
+                      context,
+                      title: 'Configurações de Dashboard',
+                      subtitle: 'Configurações de BMs, anúncios e campanhas',
+                      icon: Icons.dashboard_customize,
+                      onTap: () => _navigateWithFade(
+                          context, DashboardConfigurations()),
+                      isDesktop: true,
+                    ),
+                  if (_isEmpresaUser)
+                    _buildCardOption(
+                      context,
+                      title: 'Solicitações de Reunião',
+                      subtitle: 'Solicitações de Reuniões abertas',
+                      icon: Icons.comment,
+                      onTap: () =>
+                          _navigateWithFade(context, MeetingRequests()),
+                      isDesktop: true,
+                    ),
+                  if (hasGerenciarWhatsappAccess)
+                    _buildCardOption(
+                      context,
+                      title: 'Gerenciar WhatsApp',
+                      subtitle: 'Gerenciar mensagens',
+                      icon: Icons.message,
+                      onTap: () => _navigateWithFade(context, WhatsAppChats()),
+                      isDesktop: true,
+                    ),
+                  if (hasGerenciarProdutosAccess)
+                    _buildCardOption(
+                      context,
+                      title   : 'Gerenciar Produtos',
+                      subtitle: 'Criar, editar e excluir produtos',
+                      icon    : Icons.inventory_2_outlined,
+                      onTap   : () => _navigateWithFade(context, const ManageProducts()),
+                      isDesktop: isDesktop,
+                    ),
+                  // Exibe o card de Solicitações somente se o documento do usuário foi encontrado na coleção "empresas"
                         if (_isEmpresaUser)
                           _buildCardOption(
                             context,
@@ -438,76 +470,110 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                             onTap: () =>
                                 _navigateWithFade(context, Requests()),
                             isDesktop: isDesktop,
+                  if (!hasGerenciarParceirosAccess &&
+                      !hasGerenciarColaboradoresAccess &&
+                      !hasConfigurarDashAccess &&
+                      !hasCriarFormAccess &&
+                      !hasExecutarAPIs &&
+                      !hasCriarCampanhaAccess &&
+                      !hasGerenciarProdutosAccess)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 40),
+                      child: Column(
+                        children: [
+                          Icon(Icons.lock,
+                              size: 120,
+                              color: Theme.of(context).colorScheme.primary),
+                          const SizedBox(height: 30),
+                          Text(
+                            'Você não tem nenhuma permissão nesta tela.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 22,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.onSecondary,
+                            ),
                           ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                )
+                ],
+              ),
+            ),
+          )
               : SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    children: [
-                      if (hasGerenciarParceirosAccess)
-                        _buildCardOption(
-                          context,
-                          title: 'Gerenciar Parceiros',
-                          subtitle: 'Gerenciar empresas parceiras',
-                          icon: Icons.business,
-                          onTap: () =>
-                              _navigateWithFade(context, ManageCompanies()),
-                          isDesktop: isDesktop,
-                        ),
-                      if (hasGerenciarColaboradoresAccess)
-                        _buildCardOption(
-                          context,
-                          title: 'Gerenciar Colaboradores',
-                          subtitle: 'Gerenciar colaboradores da empresa',
-                          icon: Icons.group,
-                          onTap: () =>
-                              _navigateWithFade(context, ManageCollaborators()),
-                          isDesktop: isDesktop,
-                        ),
-                      if (hasCriarFormAccess)
-                        _buildCardOption(
-                          context,
-                          title: 'Gerenciar Formulários',
-                          subtitle: 'Gerenciar formulários personalizados',
-                          icon: Icons.article,
-                          onTap: () =>
-                              _navigateWithFade(context, ManageForms()),
-                          isDesktop: isDesktop,
-                        ),
-                      if (hasCriarCampanhaAccess)
-                        _buildCardOption(
-                          context,
-                          title: 'Gerenciar Campanhas',
-                          subtitle: 'Gerenciar campanhas da empresa',
-                          icon: Icons.campaign,
-                          onTap: () =>
-                              _navigateWithFade(context, ManageCampaigns()),
-                          isDesktop: isDesktop,
-                        ),
-                      if (hasExecutarAPIs)
-                        _buildCardOption(
-                          context,
-                          title: 'Gerenciar APIs',
-                          subtitle: 'Gerenciar, criar, editar e executar APIs',
-                          icon: Icons.api_rounded,
-                          onTap: () => _navigateWithFade(context, ManageApis()),
-                          isDesktop: isDesktop,
-                        ),
-                      if (hasConfigurarDashAccess)
-                        _buildCardOption(
-                          context,
-                          title: 'Configurações de Dashboard',
-                          subtitle:
-                              'Configurações de BMs, anúncios e campanhas',
-                          icon: Icons.dashboard_customize,
-                          onTap: () => _navigateWithFade(
-                              context, DashboardConfigurations()),
-                          isDesktop: isDesktop,
-                        ),
-                      if (_isEmpresaUser)
+            child: Column(
+              mainAxisSize: MainAxisSize.max,
+              children: [
+                if (hasGerenciarParceirosAccess)
+                  _buildCardOption(
+                    context,
+                    title: 'Gerenciar Parceiros',
+                    subtitle: 'Gerenciar empresas parceiras',
+                    icon: Icons.business,
+                    onTap: () => _navigateWithFade(context, ManageCompanies()),
+                    isDesktop: false,
+                  ),
+                if (hasGerenciarColaboradoresAccess)
+                  _buildCardOption(
+                    context,
+                    title: 'Gerenciar Colaboradores',
+                    subtitle: 'Gerenciar colaboradores da empresa',
+                    icon: Icons.group,
+                    onTap: () =>
+                        _navigateWithFade(context, ManageCollaborators()),
+                    isDesktop: false,
+                  ),
+                if (hasCriarFormAccess)
+                  _buildCardOption(
+                    context,
+                    title: 'Gerenciar Formulários',
+                    subtitle: 'Gerenciar formulários personalizados',
+                    icon: Icons.article,
+                    onTap: () => _navigateWithFade(context, ManageForms()),
+                    isDesktop: false,
+                  ),
+                if (hasCriarCampanhaAccess)
+                  _buildCardOption(
+                    context,
+                    title: 'Gerenciar Campanhas',
+                    subtitle: 'Gerenciar campanhas da empresa',
+                    icon: Icons.campaign,
+                    onTap: () =>
+                        _navigateWithFade(context, ManageCampaigns()),
+                    isDesktop: false,
+                  ),
+                if (hasExecutarAPIs)
+                  _buildCardOption(
+                    context,
+                    title: 'Gerenciar APIs',
+                    subtitle: 'Gerenciar, criar, editar e executar APIs',
+                    icon: Icons.api_rounded,
+                    onTap: () => _navigateWithFade(context, ManageApis()),
+                    isDesktop: false,
+                  ),
+                if (hasConfigurarDashAccess)
+                  _buildCardOption(
+                    context,
+                    title: 'Configurações de Dashboard',
+                    subtitle: 'Configurações de BMs, anúncios e campanhas',
+                    icon: Icons.dashboard_customize,
+                    onTap: () => _navigateWithFade(
+                        context, DashboardConfigurations()),
+                    isDesktop: false,
+                  ),
+                if (_isEmpresaUser)
+                  _buildCardOption(
+                    context,
+                    title: 'Solicitações de Reunião',
+                    subtitle: 'Solicitações de Reuniões abertas',
+                    icon: Icons.comment,
+                    onTap: () =>
+                        _navigateWithFade(context, MeetingRequests()),
+                    isDesktop: false,
+                  ),
+                if (_isEmpresaUser)
                         _buildCardOption(
                           context,
                           title: 'Solicitações',
@@ -527,44 +593,47 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                               _navigateWithFade(context, Calender()),
                           isDesktop: isDesktop,
                         ),
-                      if (!hasGerenciarParceirosAccess &&
-                          !hasGerenciarColaboradoresAccess &&
-                          !hasConfigurarDashAccess &&
-                          !hasCriarFormAccess &&
-                          !hasExecutarAPIs &&
-                          !hasCriarCampanhaAccess)
-                        Align(
-                          alignment: Alignment.topCenter,
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 20.0),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.lock,
-                                  size: isDesktop ? 120 : 100,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                SizedBox(height: isDesktop ? 30 : 20),
-                                Text(
-                                  'Você não tem nenhuma permissão nesta tela.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: isDesktop ? 22 : 18,
-                                    fontWeight: FontWeight.w600,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
+                if (hasGerenciarProdutosAccess)
+                  _buildCardOption(
+                    context,
+                    title   : 'Gerenciar Produtos',
+                    subtitle: 'Criar, editar e excluir produtos',
+                    icon    : Icons.inventory_2_outlined,
+                    onTap   : () => _navigateWithFade(context, const ManageProducts()),
+                    isDesktop: isDesktop,
+                  ),
+                if (!hasGerenciarParceirosAccess &&
+                    !hasGerenciarColaboradoresAccess &&
+                    !hasConfigurarDashAccess &&
+                    !hasCriarFormAccess &&
+                    !hasExecutarAPIs &&
+                    !hasCriarCampanhaAccess &&
+                    !hasGerenciarProdutosAccess &&
+                    !hasGerenciarWhatsappAccess)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 40),
+                    child: Column(
+                      children: [
+                        Icon(Icons.lock,
+                            size: 100,
+                            color: Theme.of(context).colorScheme.primary),
+                        const SizedBox(height: 20),
+                        Text(
+                          'Você não tem nenhuma permissão nesta tela.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onSecondary,
                           ),
                         ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
+              ],
+            ),
+          )
         ),
       );
     }

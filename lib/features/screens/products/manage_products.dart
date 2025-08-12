@@ -1,0 +1,424 @@
+import 'dart:async';
+import 'package:app_io/auth/providers/auth_provider.dart';
+import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
+import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';
+import 'package:app_io/util/utils.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'add_product.dart';
+import 'edit_product.dart';
+
+class ManageProducts extends StatefulWidget {
+  const ManageProducts({Key? key}) : super(key: key);
+
+  @override
+  State<ManageProducts> createState() => _ManageProductsState();
+}
+
+class _ManageProductsState extends State<ManageProducts> {
+  /* ───────- permissões dinâmicas ─────── */
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _sub;
+  bool hasGerenciarProdutos = false;
+  bool _hasDialog = false;
+  bool _loading = true;
+  bool _loadingPerm   = true;   // aguardando stream de permissão
+  bool _loadingCompId = true;   // aguardando resolver companyId
+  String? _companyId;
+
+  /* ───────- scroll p/ app-bar colapsável ─────── */
+  final _controller = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _listenPermission();
+    _resolveCompanyId();
+  }
+
+  void _listenPermission() {
+    final uid = context.read<AuthProvider>().user?.uid;
+    if (uid == null) return;
+
+    _sub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .listen((snap) {
+      final ok = snap.data()?['gerenciarProdutos'] ?? false;
+      if (!mounted) return;
+      setState(() {
+        hasGerenciarProdutos = ok;
+        _loadingPerm = false;             // ✅ permissão resolvida
+      });
+
+      if (!ok && !_hasDialog) {
+        _hasDialog = true;
+        _showRevokedDialog();
+      }
+    });
+  }
+
+  Future<void> _resolveCompanyId() async {
+    final uid = context.read<AuthProvider>().user?.uid;
+    if (uid == null) return;
+
+    // 1. se UID é ele mesmo uma empresa
+    final emp = await FirebaseFirestore.instance
+        .collection('empresas').doc(uid).get();
+
+    if (emp.exists) {
+      _companyId = uid;
+    } else {
+      // 2. pega "createdBy" no doc do usuário
+      final usr  = await FirebaseFirestore.instance
+          .collection('users').doc(uid).get();
+      final data = usr.data() ?? {};
+      _companyId = (data['createdBy'] as String?)?.isNotEmpty == true
+          ? data['createdBy'] as String
+          : uid;
+    }
+
+    if (mounted) setState(() => _loadingCompId = false); // ✅ id resolvido
+  }
+
+  /* ───────- diálogo permissão removida ─────── */
+  void _showRevokedDialog() async {
+    await showModalBottomSheet(
+      context: context,
+      shape: RoundedRectangleBorder(
+        side : BorderSide(color: Theme.of(context).primaryColor),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _SimpleBottom(
+        title : 'Permissão Revogada',
+        text  : 'Você não tem mais permissão para acessar esta tela.',
+      ),
+    );
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => CustomTabBarPage()),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /* ───────- excluir produto ─────── */
+  void _askDelete(String productId) {
+    showModalBottomSheet(
+      context: context,
+      shape: RoundedRectangleBorder(
+        side : BorderSide(color: Theme.of(context).primaryColor),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _ConfirmBottom(
+        onDelete: () async {
+          Navigator.pop(context);
+          try {
+            await FirebaseFirestore.instance
+                .collection('empresas')
+                .doc(_companyId)
+                .collection('produtos')
+                .doc(productId)
+                .delete();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Produto excluído com sucesso!'),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          } catch (e) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Erro ao excluir produto!'),
+                behavior: SnackBarBehavior.floating,   // igual ao padrão que você já usa
+              ),
+            );
+          }
+        },
+      ),
+    );
+  }
+
+  /* ───────- animação push - bottom→top ─────── */
+  void _pushSlide(Widget page) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 300),
+        pageBuilder: (_, __, ___) => page,
+        transitionsBuilder: (_, anim, __, child) =>
+            SlideTransition(
+              position: Tween(
+                begin: const Offset(0, 1), end: Offset.zero,
+              ).animate(CurvedAnimation(parent: anim, curve: Curves.ease)),
+              child: child,
+            ),
+      ),
+    );
+  }
+
+  /* ───────- build ─────── */
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final desktop = MediaQuery.of(context).size.width > 1024;
+
+    if (_loadingPerm || _loadingCompId) {
+      return ConnectivityBanner(
+        child: const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+    if (!hasGerenciarProdutos) {
+      return ConnectivityBanner(child: const Scaffold());
+    }
+
+    return ConnectivityBanner(
+      child: Scaffold(
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(100),
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (_, __) {
+              final double h = (100 - (_controller.hasClients ? _controller.offset / 2 : 0))
+                  .clamp(56.0, 100.0)
+                  .toDouble();
+              return AppBar(
+                toolbarHeight: h,
+                automaticallyImplyLeading: false,
+                backgroundColor: cs.secondary,
+                surfaceTintColor: Colors.transparent,
+                flexibleSpace: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal:16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // ← voltar + título
+                        Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children:[
+                            InkWell(
+                              onTap: () => Navigator.pop(context),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.arrow_back_ios_new,size:18,color:cs.onBackground),
+                                  const SizedBox(width:4),
+                                  Text('Voltar',style: TextStyle(color:cs.onSecondary,fontSize:14)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height:8),
+                            Text('Produtos',style: TextStyle(
+                                fontSize:22,fontWeight:FontWeight.w700,color:cs.onSecondary)),
+                          ],
+                        ),
+                        // botão “+”
+                        IconButton(
+                          icon: Icon(Icons.add_box_outlined,color:cs.onBackground,size:30),
+                          onPressed: () => _pushSlide(const AddProduct()),
+                        )
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+
+        body: StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('empresas')
+              .doc(_companyId!)
+              .collection('produtos')
+              .snapshots(),
+          builder: (_, snap) {
+            if (!snap.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final docs = snap.data!.docs;
+            if (docs.isEmpty) {
+              return const Center(child: Text('Nenhum produto cadastrado'));
+            }
+
+            return ListView.builder(
+              controller: _controller,
+              padding: const EdgeInsets.only(top: 20, left: 10, right: 10),
+              itemCount: docs.length,
+              itemBuilder: (_, i) {
+                final d           = docs[i];
+                final nome        = d['nome']        ?? '—';
+                final descricao   = d['descricao']   ?? '';
+                final url         = d['foto']        ?? '';     // ← já vem do Firestore
+                final tipo        = d['tipo']        ?? '—';    // se quiser exibir depois
+
+                return Card(
+                  color: cs.secondary,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  elevation: 4,
+                  child: ListTile(
+                    /* ----------  IMAGEM  ---------- */
+                    leading: CircleAvatar(
+                      radius: desktop ? 30 : 25,
+                      backgroundColor: cs.tertiary.withOpacity(.2),
+                      backgroundImage:
+                      url.isNotEmpty ? NetworkImage(url) : null,
+                      child: url.isEmpty
+                          ? Icon(Icons.image_not_supported,
+                          color: cs.tertiary, size: desktop ? 30 : 24)
+                          : null,
+                    ),
+
+                    /* ----------  TÍTULO  ---------- */
+                    title: Text(
+                      nome,
+                      style: TextStyle(
+                        fontSize: desktop ? 18 : 16,
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSecondary,
+                      ),
+                    ),
+
+                    /* ----------  DESCRIÇÃO  ---------- */
+                    subtitle: descricao.isNotEmpty
+                        ? Text(
+                      descricao,
+                      maxLines: 1,                       // ← só 1 linha
+                      overflow: TextOverflow.ellipsis,   // ← … se passar
+                      style: TextStyle(
+                        fontSize: desktop ? 14 : 12,
+                        color: cs.onSecondary.withOpacity(.8),
+                      ),
+                    )
+                        : null,
+
+                    /* ----------  AÇÕES  ---------- */
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.edit,
+                              color: cs.onSecondary, size: desktop ? 30 : 24),
+                          onPressed: () => _pushSlide(
+                            EditProduct(
+                              prodId: d.id,
+                              data: d.data() as Map<String, dynamic>,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _askDelete(d.id),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/*──────────────── helpers (diálogos simples) ────────────────*/
+class _SimpleBottom extends StatelessWidget {
+  final String title, text;
+  const _SimpleBottom({required this.title, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.background,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(title,style: TextStyle(fontSize:18,fontWeight:FontWeight.bold,color:cs.onSecondary)),
+          const SizedBox(height:16),
+          Text(text,textAlign:TextAlign.center,
+              style: TextStyle(fontSize:16,color:cs.onSecondary)),
+          const SizedBox(height:24),
+          ElevatedButton(
+            onPressed: ()=>Navigator.pop(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: cs.primary,
+              padding: const EdgeInsets.symmetric(horizontal:32,vertical:12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            ),
+            child: Text('Ok',style: TextStyle(color:cs.outline)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConfirmBottom extends StatelessWidget {
+  final VoidCallback onDelete;
+  const _ConfirmBottom({required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.background,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Excluir Produto',
+              style: TextStyle(fontSize:18,fontWeight:FontWeight.bold,color:cs.onSecondary)),
+          const SizedBox(height:16),
+          Text('Tem certeza? ESTA AÇÃO NÃO PODE SER DESFEITA!',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize:16,color:cs.onSecondary)),
+          const SizedBox(height:24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              ElevatedButton(
+                onPressed: ()=>Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: cs.primary,
+                  padding: const EdgeInsets.symmetric(horizontal:32,vertical:12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                ),
+                child: Text('Cancelar',style: TextStyle(color:cs.outline)),
+              ),
+              ElevatedButton(
+                onPressed: onDelete,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  padding: const EdgeInsets.symmetric(horizontal:32,vertical:12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                ),
+                child: const Text('Excluir',style: TextStyle(color:Colors.white)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
