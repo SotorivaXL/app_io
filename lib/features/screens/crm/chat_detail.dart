@@ -165,6 +165,10 @@ class _ChatDetailState extends State<ChatDetail> {
   String? _companyId;
   String? _phoneId;
   String _myAvatarUrl = '';
+  Timer? _recTimer;
+  Duration _recElapsed = Duration.zero;
+  bool _recordCanceled = false;
+  bool _recPaused = false; // NOVO
 
   /* ------------- controle de mensagens ------------- */
   final _messageController = TextEditingController();
@@ -256,59 +260,72 @@ class _ChatDetailState extends State<ChatDetail> {
   }
 
   Future<void> _loadIds() async {
-    /* 1. lê o doc do usuário ------------------------------------------ */
     final uid = FirebaseAuth.instance.currentUser!.uid;
-    final snap =
-        await FirebaseFirestore.instance.collection('users').doc(uid).get();
 
-    final data = snap.data() as Map<String, dynamic>? ?? {};
+    final usersRef = FirebaseFirestore.instance.collection('users').doc(uid);
+    final empRef   = FirebaseFirestore.instance.collection('empresas').doc(uid);
 
-    _companyId = (data['createdBy'] as String?)?.isNotEmpty == true
-        ? data['createdBy'] as String
-        : uid;
+    // Lê users/{uid} só para saber se É colaborador
+    final userSnap = await usersRef.get();
+    final Map<String, dynamic> userData =
+        (userSnap.data() as Map<String, dynamic>?) ?? {};
+    final String? createdBy = (userData['createdBy'] as String?)?.trim();
 
-    _phoneId = data['defaultPhoneId'] as String?;
+    // ✔️ colaborador somente se tem createdBy não-vazio
+    final bool isCollaborator = createdBy != null && createdBy.isNotEmpty;
 
-    /* 2. se faltou phoneId → pegar o 1º da coleção --------------------- */
+    // companyId: colaborador herda createdBy; dono usa o próprio uid
+    _companyId = isCollaborator ? createdBy : uid;
+
+    // tenta ler defaultPhoneId do local certo (sem criar nada)
+    if (isCollaborator) {
+      _phoneId = userData['defaultPhoneId'] as String?;
+    } else {
+      final empSnap = await empRef.get();
+      _phoneId = (empSnap.data()?['defaultPhoneId'] as String?);
+    }
+
+    // se não houver phoneId, pega o 1º da empresa (e persiste com update seguro)
     if (_phoneId == null) {
-      final phones = await FirebaseFirestore.instance
-          .collection('empresas')
-          .doc(_companyId)
-          .collection('phones')
-          .limit(1)
-          .get();
+      final phonesCol = FirebaseFirestore.instance
+          .collection('empresas').doc(_companyId).collection('phones');
 
-      if (phones.docs.isNotEmpty) {
-        _phoneId = phones.docs.first.id;
+      final q = await phonesCol.limit(1).get();
+      if (q.docs.isNotEmpty) {
+        _phoneId = q.docs.first.id;
 
-        // (opcional) grava para não repetir a busca:
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .set({'defaultPhoneId': _phoneId}, SetOptions(merge: true));
+        try {
+          if (isCollaborator) {
+            // só atualiza se o doc de users já existir – não cria!
+            if (userSnap.exists) {
+              await usersRef.update({'defaultPhoneId': _phoneId});
+            }
+          } else {
+            // dono: persiste em empresas/{uid} (update não cria)
+            await empRef.update({'defaultPhoneId': _phoneId});
+          }
+        } catch (_) {
+          // ignora not-found/permission – não criar nada aqui
+        }
       }
     }
 
-    /* 3. se ainda não existe número, avisa e aborta -------------------- */
     if (_phoneId == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Nenhum número encontrado.\n'
-                'Cadastre um telefone em Configurações.'),
+            content: Text('Nenhum número encontrado.\nCadastre um telefone em Configurações.'),
           ),
         );
       }
       return;
     }
 
-    /* 4. agora que temos ambos os IDs, continuamos --------------------- */
     if (!mounted) return;
+    setState(() {});          // libera UI
 
-    setState(() {}); // força rebuild (usado para mostrar loader → conteúdo)
-
-    _initTags(); // depende de _companyId
-    _markIncomingAsRead(); // depende de _companyId e _phoneId
+    _initTags();              // usa _companyId
+    _markIncomingAsRead();    // usa _companyId/_phoneId
     _fetchMyAvatar();
   }
 
@@ -405,16 +422,7 @@ class _ChatDetailState extends State<ChatDetail> {
   }
 
   Future<void> _initTags() async {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-    final userSnap =
-        await FirebaseFirestore.instance.collection('users').doc(uid).get();
-
-    final companyId =
-        (userSnap.exists && (userSnap['createdBy'] ?? '').toString().isNotEmpty)
-            ? userSnap['createdBy'] as String
-            : uid;
-
-    // 1. Ouve TODAS as tags da empresa
+    // 1) ouvir TODAS as tags da empresa
     final tagCol = FirebaseFirestore.instance
         .collection('empresas')
         .doc(_companyId)
@@ -422,11 +430,11 @@ class _ChatDetailState extends State<ChatDetail> {
 
     void _refreshChatTags() {
       final ids = _chatTags.map((t) => t.id);
-      _chatTags =
-          ids.where(_tagMap.containsKey).map((id) => _tagMap[id]!).toList();
+      _chatTags = ids.where(_tagMap.containsKey).map((id) => _tagMap[id]!).toList();
     }
 
     _tagSub = tagCol.orderBy('name').snapshots().listen((qs) {
+      if (!mounted) return;
       setState(() {
         _tagMap
           ..clear()
@@ -435,27 +443,18 @@ class _ChatDetailState extends State<ChatDetail> {
       });
     });
 
-    // 2. Ouve o próprio chat para saber a lista de ids atribuídos
+    // 2) ouvir o próprio chat para saber ids atribuídos
     _chatSub = FirebaseFirestore.instance
-        .collection('empresas')
-        .doc(_companyId)
-        .collection('phones')
-        .doc(_phoneId)
-        .collection('whatsappChats')
-        .doc(widget.chatId)
+        .collection('empresas').doc(_companyId)
+        .collection('phones').doc(_phoneId)
+        .collection('whatsappChats').doc(widget.chatId)
         .snapshots()
         .listen((snap) {
-      if (!snap.exists) return;
-
-      // ❶ obtém o map de dados – pode vir null
+      if (!snap.exists || !mounted) return;
       final data = snap.data() as Map<String, dynamic>? ?? {};
-
-      // ❷ converte com segurança
-      final ids = List<String>.from(data['tags'] ?? const []);
-
+      final ids  = List<String>.from(data['tags'] ?? const []);
       setState(() {
-        _chatTags =
-            ids.where(_tagMap.containsKey).map((id) => _tagMap[id]!).toList();
+        _chatTags = ids.where(_tagMap.containsKey).map((id) => _tagMap[id]!).toList();
       });
     });
   }
@@ -479,10 +478,10 @@ class _ChatDetailState extends State<ChatDetail> {
 
   // INÍCIO DE GRAVAÇÃO DE ÁUDIO
   Future<void> _startRecording() async {
-    if (!await _ensureMicPermission()) return;          //  ❗️
+    if (!await _ensureMicPermission()) return;
+
     final dir = await getTemporaryDirectory();
-    _recordPath = p.join(dir.path,
-        'rec_${DateTime.now().millisecondsSinceEpoch}.m4a');
+    _recordPath = p.join(dir.path, 'rec_${DateTime.now().millisecondsSinceEpoch}.m4a');
 
     await _recorder.start(
       const rec.RecordConfig(
@@ -490,18 +489,40 @@ class _ChatDetailState extends State<ChatDetail> {
         bitRate: 128000,
         sampleRate: 44100,
       ),
-      path: _recordPath,   // ← só named
+      path: _recordPath,
     );
+
+    _recordCanceled = false;
+    _recElapsed = Duration.zero;
+    _recTimer?.cancel();
+    _recTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _recElapsed += const Duration(seconds: 1));
+    });
+    _recPaused = false; // NOVO
     setState(() => _isRecording = true);
+  }
+
+  Future<void> _cancelRecording() async {
+    if (!_isRecording) return;
+    _recordCanceled = true;
+    final path = await _recorder.stop();
+    _recTimer?.cancel();
+    _recPaused = false; // NOVO
+    setState(() => _isRecording = false);
+
+    if (path != null) { try { await File(path).delete(); } catch (_) {} }
   }
 
   // TÉRMINO DE GRAVAÇÃO E ENVIO
   Future<void> _stopRecordingAndSend() async {
     if (!_isRecording) return;
+
     final path = await _recorder.stop();
+    _recTimer?.cancel();
+    _recPaused = false; // NOVO
     setState(() => _isRecording = false);
 
-    if (path == null) return;              // não gravou
+    if (_recordCanceled || path == null) return; // não envia
 
     final bytes = await File(path).readAsBytes();
     final base64Audio = base64Encode(bytes);
@@ -522,11 +543,29 @@ class _ChatDetailState extends State<ChatDetail> {
     if (r.statusCode == 200) {
       await _markChatAsAttended();
     } else {
-      debugPrint('Erro ${r.statusCode}: ${r.body}');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Falha ao enviar áudio')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Falha ao enviar áudio')),
+        );
+      }
     }
+  }
+
+  Future<void> _togglePauseResume() async {           // NOVO
+    if (!_isRecording) return;
+    if (!_recPaused) {
+      await _recorder.pause();
+      _recPaused = true;
+      _recTimer?.cancel();
+    } else {
+      await _recorder.resume();
+      _recPaused = false;
+      _recTimer?.cancel();
+      _recTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() => _recElapsed += const Duration(seconds: 1));
+      });
+    }
+    if (mounted) setState(() {});
   }
 
   // Escolhe imagem (da galeria ou câmera)
@@ -1482,7 +1521,13 @@ class _ChatDetailState extends State<ChatDetail> {
       final videoPreview = GestureDetector(
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => VideoPlayerPage(videoUrl: content)),
+          MaterialPageRoute(
+            builder: (_) => VideoPlayerPage(
+              videoUrl: content,
+              sender: fromMe ? 'Você' : widget.chatName,
+              sentAt: (timestamp is Timestamp) ? timestamp.toDate() : null,
+            ),
+          ),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
@@ -1707,14 +1752,17 @@ class _ChatDetailState extends State<ChatDetail> {
                     MessageInputBar(
                       messageController: _messageController,
                       showEmojiPicker: _showEmojiPicker,
-                      onToggleEmoji: () =>
-                          setState(() => _showEmojiPicker = !_showEmojiPicker),
+                      onToggleEmoji: () => setState(() => _showEmojiPicker = !_showEmojiPicker),
                       onAttachOptions: _openAttachOptions,
                       onPickImage: _pickImage,
                       onSendText: _sendTextMessage,
                       onStartRecording: _startRecording,
                       onStopRecording: _stopRecordingAndSend,
-                      isRecording      : _isRecording,
+                      isRecording: _isRecording,
+                      recElapsed: _recElapsed,
+                      onCancelRecording: _cancelRecording,
+                      recPaused: _recPaused,
+                      onTogglePause: _togglePauseResume,
                     ),
                     if (_showEmojiPicker)
                       SizedBox(
@@ -1736,8 +1784,13 @@ class _ChatDetailState extends State<ChatDetail> {
   }
 }
 
-/// Widget para a barra de entrada de mensagens.
+/// Barra de entrada com botão redondo separado (mic/enviar)
 class MessageInputBar extends StatelessWidget {
+  final bool recPaused;
+  final VoidCallback onTogglePause;
+  final Duration recElapsed;
+  final VoidCallback onCancelRecording;
+
   final TextEditingController messageController;
   final bool showEmojiPicker;
   final VoidCallback onToggleEmoji;
@@ -1750,6 +1803,8 @@ class MessageInputBar extends StatelessWidget {
 
   const MessageInputBar({
     Key? key,
+    required this.recElapsed,
+    required this.onCancelRecording,
     required this.messageController,
     required this.showEmojiPicker,
     required this.onToggleEmoji,
@@ -1759,63 +1814,106 @@ class MessageInputBar extends StatelessWidget {
     required this.onStartRecording,
     required this.onStopRecording,
     required this.isRecording,
+    required this.recPaused,
+    required this.onTogglePause,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return ValueListenableBuilder<TextEditingValue>(
       valueListenable: messageController,
       builder: (context, value, child) {
+        // HUD de gravação (igual você já tem)
+        if (isRecording) {
+          return _RecordingBar(
+            elapsed: recElapsed,
+            paused: recPaused,
+            onTogglePause: onTogglePause,
+            onCancel: onCancelRecording,
+            onSend: onStopRecording,
+          );
+        }
+
         final hasText = value.text.trim().isNotEmpty;
+
         return Container(
-          color: Theme.of(context).colorScheme.surface,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          color: cs.surface,
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
           child: Row(
             children: [
-              IconButton(
-                icon: Icon(Icons.emoji_emotions_outlined),
-                onPressed: onToggleEmoji,
-                color: Theme.of(context).colorScheme.onSecondary,
-              ),
+              // --- Pílula do campo (emoji, texto, clipe, câmera) ---
               Expanded(
-                child: TextField(
-                  controller: messageController,
-                  onTap: () {
-                    if (showEmojiPicker) onToggleEmoji();
-                  },
-                  decoration: InputDecoration(
-                    hintText: 'Mensagem',
-                    hintStyle: TextStyle(                     // ← cor do hint
-                      color: cs.onSecondary.withOpacity(.6),    // ajuste a opacidade se quiser
-                    ),
-                    border: InputBorder.none,
+                child: Container(
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? cs.secondary
+                        : cs.secondary.withOpacity(.95),
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.emoji_emotions_outlined),
+                        onPressed: onToggleEmoji,
+                        color: cs.onSecondary,
+                        splashRadius: 22,
+                      ),
+                      Expanded(
+                        child: TextField(
+                          controller: messageController,
+                          onTap: () {
+                            if (showEmojiPicker) onToggleEmoji();
+                          },
+                          decoration: InputDecoration(
+                            hintText: 'Mensagem',
+                            hintStyle: TextStyle(
+                              color: cs.onSecondary.withOpacity(.6),
+                            ),
+                            border: InputBorder.none,
+                            isCollapsed: true,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.attach_file),
+                        onPressed: onAttachOptions,
+                        color: cs.onSecondary,
+                        splashRadius: 22,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.camera_alt_outlined),
+                        onPressed: () => onPickImage(fromCamera: true),
+                        color: cs.onSecondary,
+                        splashRadius: 22,
+                      ),
+                    ],
                   ),
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.attach_file),
-                onPressed: onAttachOptions,
-                color: Theme.of(context).colorScheme.onSecondary,
-              ),
-              IconButton(
-                icon: const Icon(Icons.camera_alt),
-                onPressed: () => onPickImage(fromCamera: true),
-                color: Theme.of(context).colorScheme.onSecondary,
-              ),
+
+              const SizedBox(width: 8),
+
+              // --- Botão redondo separado (mic OU enviar) ---
               hasText
-                  ? IconButton(
-                      icon: const Icon(Icons.send),
-                      onPressed: onSendText,
-                      color: Theme.of(context).colorScheme.onSecondary,
-                    )
-                  : GestureDetector(
+                  ? _RoundActionButton(
+                icon: Icons.send_rounded,
+                onTap: onSendText,
+              )
+                  : _RoundActionButton(
+                icon: Icons.mic_rounded,
+                // Whats: segurar para gravar
                 onLongPressStart: (_) => onStartRecording(),
-                onLongPressEnd:   (_) => onStopRecording(),
-                child: Icon(
-                  isRecording ? Icons.mic : Icons.mic_none,
-                  color: cs.onSecondary,
-                ),
+                onLongPressEnd: (_) => onStopRecording(),
+                onLongPressMoveUpdate: (d) {
+                  if (d.offsetFromOrigin.dx < -120) {
+                    onCancelRecording();
+                  }
+                },
               ),
             ],
           ),
@@ -2141,3 +2239,169 @@ class CachedAudio {
 final _audioCache = <String, CachedAudio>{}; // msgId → CachedAudio
 
 StreamSubscription? _preloadSub;
+
+class _RecordingBar extends StatefulWidget {
+  final Duration elapsed;
+  final bool paused;                 // NOVO
+  final VoidCallback onTogglePause;  // NOVO
+  final VoidCallback onCancel;
+  final VoidCallback onSend;
+
+  const _RecordingBar({
+    Key? key,
+    required this.elapsed,
+    required this.paused,            // NOVO
+    required this.onTogglePause,     // NOVO
+    required this.onCancel,
+    required this.onSend,
+  }) : super(key: key);
+
+  @override
+  State<_RecordingBar> createState() => _RecordingBarState();
+}
+
+class _RecordingBarState extends State<_RecordingBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _eq =
+  AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
+    ..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _eq.dispose();
+    super.dispose();
+  }
+
+  String _fmt(Duration d) =>
+      '${d.inMinutes.remainder(60).toString().padLeft(1, '0')}:'
+          '${d.inSeconds.remainder(60).toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Container(
+      color: cs.surface,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: [
+          // Lixeira (cancelar)
+          IconButton(
+            tooltip: 'Cancelar',
+            onPressed: widget.onCancel,
+            icon: const Icon(Icons.delete_outline),
+            color: cs.onSecondary,
+          ),
+
+          // Timer
+          Text(
+            _fmt(widget.elapsed),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: cs.onSecondary,
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // “Equalizer” central (leve animação)
+          Expanded(
+            child: AnimatedBuilder(
+              animation: _eq,
+              builder: (_, __) {
+                // 7 barrinhas em fase defasada
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(7, (i) {
+                    // altura oscila entre 6 e 16
+                    final t = ( (_eq.value + i * 0.12) % 1.0 );
+                    final h = 6 + (10 * Curves.easeInOut.transform(
+                      t < 0.5 ? t * 2 : (1 - t) * 2,
+                    ));
+                    return Container(
+                      width: 3,
+                      height: h,
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      decoration: BoxDecoration(
+                        color: cs.onSecondary.withOpacity(.75),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    );
+                  }),
+                );
+              },
+            ),
+          ),
+
+          // Pausar/Retomar (|| / ▶)
+          IconButton(
+            tooltip: widget.paused ? 'Retomar' : 'Pausar',
+            onPressed: widget.onTogglePause,
+            icon: Icon(widget.paused ? Icons.play_arrow_rounded : Icons.pause_rounded),
+            color: Theme.of(context).colorScheme.error, // vermelhinho como no print
+          ),
+          const SizedBox(width: 8),
+
+          // Botão redondo de ENVIAR (grande)
+          GestureDetector(
+            onTap: widget.onSend,
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: const BoxDecoration(
+                color: Colors.white,         // círculo branco (como no print)
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: const Icon(Icons.send_rounded, color: Colors.black),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoundActionButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  final GestureLongPressStartCallback? onLongPressStart;
+  final GestureLongPressEndCallback? onLongPressEnd;
+  final GestureLongPressMoveUpdateCallback? onLongPressMoveUpdate;
+
+  const _RoundActionButton({
+    Key? key,
+    required this.icon,
+    this.onTap,
+    this.onLongPressStart,
+    this.onLongPressEnd,
+    this.onLongPressMoveUpdate,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      onLongPressStart: onLongPressStart,
+      onLongPressEnd: onLongPressEnd,
+      onLongPressMoveUpdate: onLongPressMoveUpdate,
+      child: Container(
+        width: 54,   // maior, destacando como no WhatsApp
+        height: 54,
+        decoration: BoxDecoration(
+          color: Colors.white, // círculo branco como no print
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(.20),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        alignment: Alignment.center,
+        child: const Icon(Icons.mic_rounded, color: Colors.black),
+      ),
+    );
+  }
+}

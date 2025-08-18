@@ -28,8 +28,23 @@ class TagItem {
 
   TagItem(this.id, this.name, this.color);
 
-  factory TagItem.fromDoc(DocumentSnapshot d) =>
-      TagItem(d.id, d['name'] ?? '', Color(d['color'] ?? 0xFF9E9E9E));
+  /// Aceita color como int (0xFF...) ou String ("#RRGGBB" / "RRGGBB")
+  static Color _parseColor(dynamic raw, {int fallback = 0xFF9E9E9E}) {
+    if (raw is int) return Color(raw);
+    if (raw is String && raw.isNotEmpty) {
+      final hex = raw.startsWith('#') ? raw.substring(1) : raw;
+      // garante alpha cheio
+      return Color(int.parse('0xFF$hex'));
+    }
+    return Color(fallback);
+  }
+
+  factory TagItem.fromDoc(DocumentSnapshot d) {
+    final m = (d.data() as Map<String, dynamic>?) ?? const {};
+    final name = (m['name'] as String?) ?? '';
+    final color = _parseColor(m['color']);
+    return TagItem(d.id, name, color);
+  }
 }
 
 /* ─────────────────────── LISTA / SELEÇÃO ─────────────────────── */
@@ -66,47 +81,92 @@ class _TagManagerSheetState extends State<TagManagerSheet> {
     _discoverCompanyAndListen();
   }
 
+  Future<(String companyId, String? phoneId)> _resolvePhoneCtx() async {
+    final fs  = FirebaseFirestore.instance;
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    String companyId = uid;
+    String? phoneId;
+
+    // 1) tenta users/{uid}
+    final uSnap = await fs.collection('users').doc(uid).get();
+    if (uSnap.exists) {
+      final u = uSnap.data() ?? {};
+      companyId = (u['createdBy'] as String?)?.isNotEmpty == true
+          ? u['createdBy'] as String
+          : uid;
+      phoneId = u['defaultPhoneId'] as String?;
+    }
+
+    // 2) tenta empresas/{companyId}.defaultPhoneId
+    if (phoneId == null) {
+      final eSnap = await fs.collection('empresas').doc(companyId).get();
+      if (eSnap.exists) {
+        phoneId = eSnap.data()?['defaultPhoneId'] as String?;
+      }
+    }
+
+    // 3) se ainda null, pega o 1º phone e persiste como default
+    if (phoneId == null) {
+      final ph = await fs
+          .collection('empresas').doc(companyId)
+          .collection('phones')
+          .limit(1)
+          .get();
+
+      if (ph.docs.isNotEmpty) {
+        phoneId = ph.docs.first.id;
+
+        if (uSnap.exists) {
+          await fs.collection('users').doc(uid)
+              .set({'defaultPhoneId': phoneId}, SetOptions(merge: true));
+        } else {
+          await fs.collection('empresas').doc(companyId)
+              .set({'defaultPhoneId': phoneId}, SetOptions(merge: true));
+        }
+      }
+    }
+
+    return (companyId, phoneId);
+  }
+
   /* ── quem é a empresa? ───────────────────────────────────────── */
   Future<void> _discoverCompanyAndListen() async {
-    // 1) usuário logado
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-    final userSnap =
-        await FirebaseFirestore.instance.collection('users').doc(uid).get();
-    final userData = userSnap.data() ?? {};
+    final fs = FirebaseFirestore.instance;
 
-    // 2) quem é a empresa dona deste operador?
-    final companyId = (userData['createdBy'] as String?)?.isNotEmpty == true
-        ? userData['createdBy'] as String // colaborador
-        : uid; // conta-empresa
+    final (companyId, phoneId) = await _resolvePhoneCtx();
+    if (phoneId == null) {
+      if (mounted) {
+        setState(() => _refsReady = false);
+        // opcional: você pode exibir um SnackBar orientando a configurar um número
+      }
+      return;
+    }
 
-    // 3) telefone padrão que o operador escolheu
-    final phoneId = userData['defaultPhoneId'] as String?;
-    if (phoneId == null) return; // não há telefone cadastrado → aborta
-
-    _chatDoc = FirebaseFirestore.instance
-        .collection('empresas')
-        .doc(companyId)
-        .collection('phones')
-        .doc(phoneId)
+    _chatDoc = fs
+        .collection('empresas').doc(companyId)
+        .collection('phones').doc(phoneId)
         .collection('whatsappChats')
         .doc(widget.chatId);
 
-    _tagCol = FirebaseFirestore.instance
-        .collection('empresas')
-        .doc(companyId)
+    _tagCol = fs
+        .collection('empresas').doc(companyId)
         .collection('tags');
 
-    // 5) listeners
-    _subs.add(_tagCol.orderBy('name').snapshots().listen((qs) =>
-        setState(() => _allTags = qs.docs.map(TagItem.fromDoc).toList())));
-
-    _subs.add(_chatDoc.snapshots().listen((snap) {
-      if (!snap.exists) return;
-      final ids = List<String>.from(snap['tags'] ?? const []);
-      setState(() => _selected = ids.toSet());
+    // Tags (ordem por nome)
+    _subs.add(_tagCol.orderBy('name').snapshots().listen((qs) {
+      final list = qs.docs.map(TagItem.fromDoc).toList();
+      if (mounted) setState(() => _allTags = list);
     }));
 
-    // 6) avisa que já podemos usar as refs
+    // Tags selecionadas no chat (garante lista de strings)
+    _subs.add(_chatDoc.snapshots().listen((snap) {
+      if (!snap.exists) return;
+      final raw = snap.data()?['tags'];
+      final ids = (raw is List ? raw.map((e) => e.toString()).toList() : <String>[]);
+      if (mounted) setState(() => _selected = ids.toSet());
+    }));
+
     if (mounted) setState(() => _refsReady = true);
   }
 
@@ -671,6 +731,9 @@ class _NewTagSheetState extends State<NewTagSheet> {
                     onChanged: (_) => setState(() {}),
                     decoration: InputDecoration(
                       hintText: 'Nome da etiqueta',
+                      hintStyle: TextStyle(
+                        color: cs.onBackground,
+                      ),
                       isDense: true,
                       filled: true,
                       fillColor: cs.background,

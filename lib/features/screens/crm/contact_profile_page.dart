@@ -53,43 +53,95 @@ class _ContactProfilePageState extends State<ContactProfilePage> {
     }
   }
 
+  Future<(String companyId, String? phoneId)> _resolvePhoneCtx() async {
+    final fs  = FirebaseFirestore.instance;
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    String companyId = uid;
+    String? phoneId;
+
+    // 1) tenta users/{uid}
+    final uSnap = await fs.collection('users').doc(uid).get();
+    if (uSnap.exists) {
+      final u = uSnap.data() ?? {};
+      companyId = (u['createdBy'] as String?)?.isNotEmpty == true
+          ? u['createdBy'] as String
+          : uid;
+      phoneId = u['defaultPhoneId'] as String?;
+    }
+
+    // 2) tenta empresas/{companyId}.defaultPhoneId
+    if (phoneId == null) {
+      final eSnap = await fs.collection('empresas').doc(companyId).get();
+      if (eSnap.exists) {
+        phoneId = eSnap.data()?['defaultPhoneId'] as String?;
+      }
+    }
+
+    // 3) se ainda null, pega o 1º phones/ e persiste como default
+    if (phoneId == null) {
+      final ph = await fs
+          .collection('empresas').doc(companyId)
+          .collection('phones')
+          .limit(1)
+          .get();
+
+      if (ph.docs.isNotEmpty) {
+        phoneId = ph.docs.first.id;
+
+        if (uSnap.exists) {
+          await fs.collection('users').doc(uid)
+              .set({'defaultPhoneId': phoneId}, SetOptions(merge: true));
+        } else {
+          await fs.collection('empresas').doc(companyId)
+              .set({'defaultPhoneId': phoneId}, SetOptions(merge: true));
+        }
+      }
+    }
+
+    return (companyId, phoneId);
+  }
+
   Future<void> _initRefsAndListeners() async {
-    /* 1) quem é o usuário? */
-    final uid      = FirebaseAuth.instance.currentUser!.uid;
-    final userSnap = await FirebaseFirestore.instance
-        .collection('users').doc(uid).get();
-    final user     = userSnap.data() ?? {};
+    try {
+      final (companyId, phoneId) = await _resolvePhoneCtx();
 
-    /* 2) empresa dona do operador */
-    final companyId = (user['createdBy'] as String?)?.isNotEmpty == true
-        ? user['createdBy'] as String
-        : uid;
+      if (phoneId == null) {
+        if (!mounted) return;
+        setState(() => _refsReady = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nenhum número configurado para esta empresa.')),
+        );
+        return;
+      }
 
-    /* 3) telefone padrão escolhido no login */
-    final phoneId = user['defaultPhoneId'] as String?;
-    if (phoneId == null) return;               // sem número ⇒ nada a fazer
+      _chatDoc = FirebaseFirestore.instance
+          .collection('empresas').doc(companyId)
+          .collection('phones').doc(phoneId)
+          .collection('whatsappChats').doc(widget.chatId);
 
-    /* 4) monta refs */
-    _chatDoc = FirebaseFirestore.instance
-        .collection('empresas').doc(companyId)
-        .collection('phones').doc(phoneId)
-        .collection('whatsappChats').doc(widget.chatId);
+      _tagCol  = FirebaseFirestore.instance
+          .collection('empresas').doc(companyId)
+          .collection('tags');
 
-    _tagCol  = FirebaseFirestore.instance
-        .collection('empresas').doc(companyId)
-        .collection('tags');
-
-    /* 5) listener de TODAS as tags da empresa */
-    _tagCol.orderBy('name').snapshots().listen((qs) {
-      setState(() {
-        _tagMap
-          ..clear()
-          ..addEntries(qs.docs.map((d) => MapEntry(d.id, TagItem.fromDoc(d))));
+      // listener das tags
+      _tagCol.orderBy('name').snapshots().listen((qs) {
+        if (!mounted) return;
+        setState(() {
+          _tagMap
+            ..clear()
+            ..addEntries(qs.docs.map((d) => MapEntry(d.id, TagItem.fromDoc(d))));
+        });
       });
-    });
 
-    /* 6) pronto! */
-    if (mounted) setState(() => _refsReady = true);
+      if (mounted) setState(() => _refsReady = true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _refsReady = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao carregar dados do contato: $e')),
+      );
+    }
   }
 
   void _openTagManager() {
@@ -175,14 +227,6 @@ class _ContactProfilePageState extends State<ContactProfilePage> {
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.pop(context),
         ),
-        actions: const [
-          Icon(Icons.block, size: 22),
-          SizedBox(width: 16),
-          Icon(Icons.delete_outline, size: 22),
-          SizedBox(width: 16),
-          Icon(Icons.mode_edit_outlined, size: 22),
-          SizedBox(width: 8),
-        ],
       ),
 
       /*────────────────── corpo ──────────────────*/

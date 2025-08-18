@@ -16,6 +16,58 @@ import 'package:image_picker/image_picker.dart';
 import 'package:extended_image/extended_image.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 
+const List<String> _kPermKeys = [
+  'dashboard',
+  'leads',
+  'gerenciarColaboradores',
+  'gerenciarParceiros',
+  'configurarDash',
+  'criarForm',
+  'criarCampanha',
+  'copiarTelefones',
+  'executarAPIs',
+  'alterarSenha',
+  'gerenciarProdutos',
+  // módulos
+  'modChats',
+  'modConfig',
+  'modIndicadores',
+  'modPainel',
+  'modRelatorios',
+];
+
+// Defaults usados quando a chave não estiver presente
+const Map<String, bool> _kPermDefaults = {
+  'dashboard'             : true,
+  'leads'                 : true,
+  'gerenciarColaboradores': true,
+  'gerenciarParceiros'    : false,
+  'configurarDash'        : false,
+  'criarForm'             : false,
+  'criarCampanha'         : false,
+  'copiarTelefones'       : false,
+  'executarAPIs'          : false,
+  'alterarSenha'          : true,
+  'gerenciarProdutos'     : true,
+  // módulos (imagem)
+  'modChats'       : true,
+  'modConfig'      : true,
+  'modIndicadores' : true,
+  'modPainel'      : true,
+  'modRelatorios'  : false,
+};
+
+// Garante que todas as chaves existam como bool (sem arrays/map aninhado)
+Map<String, bool> _normalizeRights(Map<String, bool> raw) {
+  final out = <String, bool>{};
+  for (final k in _kPermKeys) {
+    out[k] = (raw[k] == true);
+  }
+  // completa com defaults para chaves ausentes
+  _kPermDefaults.forEach((k, v) => out.putIfAbsent(k, () => v));
+  return out;
+}
+
 class AddCompany extends StatefulWidget {
   @override
   _AddCompanyState createState() => _AddCompanyState();
@@ -38,17 +90,25 @@ class _AddCompanyState extends State<AddCompany> {
   late Color _randomColor;
 
   // Access rights map (padrão já com permissões desejadas)
+// Access rights padrão
   Map<String, bool> accessRights = {
     'dashboard': true,
     'leads': true,
     'gerenciarColaboradores': true,
-    'gerenciarParceiros': false, // desligado
-    'configurarDash': true,
-    'criarForm': false,          // desligado
-    'criarCampanha': false,      // desligado
-    'copiarTelefones': true,
-    'executarAPIs': true,
+    'gerenciarParceiros': false,
+    'configurarDash': false,
+    'criarForm': false,
+    'criarCampanha': false,
+    'copiarTelefones': false,
+    'executarAPIs': false,
     'alterarSenha': true,
+    'gerenciarProdutos': true,
+    // módulos novos
+    'modChats': true,
+    'modConfig': true,
+    'modIndicadores': true,
+    'modPainel': true,
+    'modRelatorios': false,
   };
 
   // Máscaras
@@ -125,7 +185,8 @@ class _AddCompanyState extends State<AddCompany> {
       final rights = Map<String, bool>.from(accessRights)
         ..['gerenciarParceiros'] = false
         ..['criarCampanha'] = false
-        ..['criarForm'] = false;
+        ..['criarForm'] = false
+        ..['gerenciarProdutos'] = true;
 
       final result = await callable.call({
         'email': _model.tfEmailTextController.text,
@@ -146,14 +207,27 @@ class _AddCompanyState extends State<AddCompany> {
       if (result.data['success'] == true) {
         final String uid = result.data['uid'] ?? "defaultUid";
 
-        // Upload da imagem (avatar)
+        // 2.1) Permissões "flat" na raiz (com defaults e garantindo gerenciarParceiros=false)
+        final flatRights = _normalizeRights({
+          ...accessRights,
+          'gerenciarParceiros': false,
+        });
+        await FirebaseFirestore.instance
+            .collection('empresas')
+            .doc(uid)
+            .set(flatRights, SetOptions(merge: true));
+
+        // 2.2) Upload da imagem (avatar)
         final photoUrl = await _uploadImage(uid);
         if (photoUrl != null) {
-          await FirebaseFirestore.instance.collection('empresas').doc(uid).set(
-            {'photoUrl': photoUrl},
-            SetOptions(merge: true),
-          );
+          await FirebaseFirestore.instance
+              .collection('empresas')
+              .doc(uid)
+              .set({'photoUrl': photoUrl}, SetOptions(merge: true));
         }
+
+        // (opcional) salvar o phone config no subcollection se você já usa isso na criação
+        await _savePhoneConfig(uid);
 
         Navigator.pop(context);
         showErrorDialog(context, "Parceiro adicionado com sucesso!", "Sucesso");

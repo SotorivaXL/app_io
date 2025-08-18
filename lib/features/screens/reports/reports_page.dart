@@ -29,6 +29,52 @@ class ActiveFilter {
 final List<ActiveFilter> _activeFilters = [];
 
 class _ReportsPageState extends State<ReportsPage> {
+
+  String _norm(String s) => s
+      .toLowerCase()
+      .replaceAll(RegExp('[áàâãä]'), 'a')
+      .replaceAll(RegExp('[éèêë]'), 'e')
+      .replaceAll(RegExp('[íìîï]'), 'i')
+      .replaceAll(RegExp('[óòôõö]'), 'o')
+      .replaceAll(RegExp('[úùûü]'), 'u')
+      .replaceAll(RegExp('[ç]'), 'c')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+
+  String _digits(String s) => s.replaceAll(RegExp(r'\D'), '');
+
+  bool _docMatchesSearch(Map<String, dynamic> m, String query) {
+    if (query.isEmpty) return true;
+
+    final qText   = _norm(query);
+    final qDigits = _digits(query);
+
+    final name   = _norm((m['name'] ?? m['contactName'] ?? '').toString());
+    final user   = _norm((m['updatedByName'] ?? '').toString());
+    final status = _norm((m['status'] ?? '').toString());
+    final last   = _norm((m['lastMsg'] ?? m['lastMessage'] ?? '').toString());
+
+    // ---------- TELEFONE (variações) ----------
+    final rawId  = (m['chatId'] ?? '').toString(); // pode vir "551199...@c.us"
+    final full   = _digits(rawId);                  // 5511991234567
+    final noCC   = full.startsWith('55') ? full.substring(2) : full; // remove +55
+    final noDDD  = noCC.length > 2 ? noCC.substring(2) : noCC;       // remove DDD
+    final last8  = full.length >= 8 ? full.substring(full.length - 8) : full;
+    final last9  = full.length >= 9 ? full.substring(full.length - 9) : full;
+
+    final variants = {full, noCC, noDDD, last8, last9}
+        .where((v) => v.isNotEmpty)
+        .toList();
+
+    final phoneHit = qDigits.isNotEmpty && variants.any((v) => v.contains(qDigits));
+
+    // ---------- texto ----------
+    final tokens   = qText.split(' ').where((t) => t.isNotEmpty).toList();
+    final textHit  = tokens.every((t) =>
+    name.contains(t) || user.contains(t) || status.contains(t) || last.contains(t));
+
+    return textHit || phoneHit;
+  }
 /*────────────────────────  filtros / estado  ───────────────────────*/
 
   String _search = '';
@@ -60,8 +106,60 @@ class _ReportsPageState extends State<ReportsPage> {
     _initIds();
   }
 
+  Future<(String companyId, String? phoneId)> _resolvePhoneCtx() async {
+    final fs  = FirebaseFirestore.instance;
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    String companyId = uid;
+    String? phoneId;
+
+    // 1) tenta users/{uid}
+    final uSnap = await fs.collection('users').doc(uid).get();
+    if (uSnap.exists) {
+      final u = uSnap.data() ?? {};
+      companyId = (u['createdBy'] as String?)?.isNotEmpty == true
+          ? u['createdBy'] as String
+          : uid;
+      phoneId = u['defaultPhoneId'] as String?;
+    }
+
+    // 2) tenta empresas/{companyId}.defaultPhoneId
+    if (phoneId == null) {
+      final eSnap = await fs.collection('empresas').doc(companyId).get();
+      if (eSnap.exists) {
+        phoneId = eSnap.data()?['defaultPhoneId'] as String?;
+      }
+    }
+
+    // 3) se ainda null, pega o 1º phones/ e persiste como default
+    if (phoneId == null) {
+      final ph = await fs
+          .collection('empresas').doc(companyId)
+          .collection('phones')
+          .limit(1)
+          .get();
+
+      if (ph.docs.isNotEmpty) {
+        phoneId = ph.docs.first.id;
+
+        if (uSnap.exists) {
+          await fs.collection('users').doc(uid)
+              .set({'defaultPhoneId': phoneId}, SetOptions(merge: true));
+        } else {
+          await fs.collection('empresas').doc(companyId)
+              .set({'defaultPhoneId': phoneId}, SetOptions(merge: true));
+        }
+      }
+    }
+
+    return (companyId, phoneId);
+  }
+
   /*────────────────────  EXPORTAR EM PDF  ────────────────────*/
   Future<void> _exportLeadsPdf() async {
+    if (_attendants.isEmpty) {
+      await _loadAttendants(); // garante empresa + usuários no mapa
+    }
     /* ── 0. Nome da empresa ─────────────────────────────────────────── */
     final companySnap = await FirebaseFirestore.instance
         .collection('empresas')
@@ -78,8 +176,12 @@ class _ReportsPageState extends State<ReportsPage> {
         .doc(_phoneId)
         .collection('whatsappChats');
 
+    final snap = await q.get();
+    var docs = snap.docs;
+
+    // aplica a mesma busca local
     if (_search.isNotEmpty) {
-      q = q.where('keywords', arrayContains: _search.toLowerCase());
+      docs = docs.where((d) => _docMatchesSearch(d.data(), _search)).toList();
     }
     for (final f in _activeFilters) {
       if (f.field == 'tags') {
@@ -97,7 +199,6 @@ class _ReportsPageState extends State<ReportsPage> {
       }
     }
 
-    final snap = await q.get();
     if (snap.docs.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -460,22 +561,15 @@ class _ReportsPageState extends State<ReportsPage> {
   }
 
   Future<void> _initIds() async {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-    final usnap =
-        await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final (companyId, phoneId) = await _resolvePhoneCtx();
 
-    final data = usnap.data() as Map<String, dynamic>? ?? {};
-
-    _companyId = (data['createdBy'] as String?)?.isNotEmpty == true
-        ? data['createdBy'] as String
-        : uid;
-
-    _phoneId = data['defaultPhoneId'] as String? ?? '';
+    _companyId = companyId;
+    _phoneId   = phoneId ?? '';
 
     setState(() => _ready = _phoneId.isNotEmpty);
 
     if (_ready) {
-      await _loadAttendants();
+      await _loadAttendants(); // já inclui a empresa no filtro
       await _loadTags();
     }
   }
@@ -531,16 +625,45 @@ class _ReportsPageState extends State<ReportsPage> {
   }
 
   Future<void> _loadAttendants() async {
-    final snap = await FirebaseFirestore.instance
+    final fs = FirebaseFirestore.instance;
+
+    // colaboradores (users criados pela empresa)
+    final qs = await fs
         .collection('users')
         .where('createdBy', isEqualTo: _companyId)
         .get();
 
+    final list = qs.docs.map((d) {
+      final m = d.data() as Map<String, dynamic>;
+      final name = (m['name'] ?? m['displayName'] ?? m['email'] ?? 'Sem nome') as String;
+      return {'id': d.id, 'name': name};
+    }).toList();
+
+    // empresa como "atendente" para filtro
+    String companyLabel = 'Empresa';
+    final eSnap = await fs.collection('empresas').doc(_companyId).get();
+    if (eSnap.exists) {
+      final e = eSnap.data() as Map<String, dynamic>? ?? {};
+      companyLabel = (e['NomeEmpresa'] ??
+          e['nomeFantasia'] ??
+          e['razaoSocial'] ??
+          e['name'] ??
+          e['displayName'] ??
+          'Empresa') as String;
+    }
+
+    // coloca a empresa no topo (sem duplicar se já houver usuário com mesmo id)
+    final already = list.any((u) => u['id'] == _companyId);
+    if (!already) {
+      list.insert(0, {'id': _companyId, 'name': companyLabel});
+    } else {
+      // se existir user com id==companyId, padroniza o nome para o NomeEmpresa
+      final idx = list.indexWhere((u) => u['id'] == _companyId);
+      list[idx] = {'id': _companyId, 'name': companyLabel};
+    }
+
     setState(() {
-      _attendants = snap.docs
-          .map((d) =>
-              {'id': d.id, 'name': (d.data()['name'] as String?) ?? 'Sem nome'})
-          .toList();
+      _attendants = list;
     });
   }
 
@@ -566,28 +689,20 @@ class _ReportsPageState extends State<ReportsPage> {
     if (!_ready) return const Stream.empty();
 
     Query<Map<String, dynamic>> q = FirebaseFirestore.instance
-        .collection('empresas')
-        .doc(_companyId)
-        .collection('phones')
-        .doc(_phoneId)
+        .collection('empresas').doc(_companyId)
+        .collection('phones').doc(_phoneId)
         .collection('whatsappChats');
 
-    // filtro de texto
-    if (_search.isNotEmpty) {
-      q = q.where('keywords', arrayContains: _search.toLowerCase());
-    }
+    // (removido) if (_search.isNotEmpty) { q = q.where('keywords', arrayContains: ...); }
 
     for (var f in _activeFilters) {
       if (f.field == 'tags') {
-        q = q.where(f.field, arrayContains: f.value);
+        q = q.where('tags', arrayContains: f.value);
       } else if (f.field == 'arrivalAt') {
         final range = f.value as DateTimeRange;
-        final startTs = Timestamp.fromDate(range.start);
-        final endTs =
-            Timestamp.fromDate(range.end.add(const Duration(days: 1)));
         q = q
-            .where('arrivalAt', isGreaterThanOrEqualTo: startTs)
-            .where('arrivalAt', isLessThan: endTs);
+            .where('arrivalAt', isGreaterThanOrEqualTo: Timestamp.fromDate(range.start))
+            .where('arrivalAt', isLessThan: Timestamp.fromDate(range.end.add(const Duration(days: 1))));
       } else {
         q = q.where(f.field, isEqualTo: f.value);
       }
@@ -739,7 +854,15 @@ class _ReportsPageState extends State<ReportsPage> {
     if (hasDateChip) filterOpts.remove('Data de criação');
 
     if (!_ready) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        body: Center(
+          child: Text(
+            'Nenhum número configurado para esta empresa.\n'
+                'Adicione um telefone em Configurações > Números.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
     }
 
     return Scaffold(
@@ -1007,18 +1130,16 @@ class _ReportsPageState extends State<ReportsPage> {
                         return const Center(child: CircularProgressIndicator());
                       }
 
-                      final docs = snap.data!.docs.toList()
+                      final docs = (snap.data!.docs.toList()
                         ..sort((a, b) {
-                          final mapA = a.data();
-                          final mapB = b.data();
-                          final aa = (mapA['updatedAt'] as Timestamp?) ??
-                              (mapA['createdAt'] as Timestamp?) ??
-                              Timestamp(0, 0);
-                          final bb = (mapB['updatedAt'] as Timestamp?) ??
-                              (mapB['createdAt'] as Timestamp?) ??
-                              Timestamp(0, 0);
+                          final ma = a.data(), mb = b.data();
+                          final aa = (ma['updatedAt'] as Timestamp?) ?? (ma['createdAt'] as Timestamp?) ?? Timestamp(0,0);
+                          final bb = (mb['updatedAt'] as Timestamp?) ?? (mb['createdAt'] as Timestamp?) ?? Timestamp(0,0);
                           return bb.compareTo(aa);
-                        });
+                        }))
+                      // <<< AQUI: filtro de busca local
+                          .where((d) => _docMatchesSearch(d.data(), _search))
+                          .toList();
 
                       if (docs.isEmpty) {
                         return const Center(
@@ -1150,8 +1271,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                 ),
                               ),
                               child: ExpansionTile(
-                                tilePadding: const EdgeInsets.symmetric(
-                                    horizontal: 15, vertical: 0),
+                                tilePadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 0),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -1160,68 +1280,50 @@ class _ReportsPageState extends State<ReportsPage> {
                                   contact,
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
-                                    color: cs.onBackground.withOpacity(
-                                        0.9), // <— aqui você define a cor do título
+                                    color: cs.onBackground.withOpacity(0.9),
                                   ),
                                 ),
-                                childrenPadding:
-                                    const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                                 children: [
-                                  _kv(
-                                      'Telefone',
-                                      formattedPhone.isNotEmpty
-                                          ? formattedPhone
-                                          : 'Não informado'),
+                                  _kv('Telefone', formattedPhone.isNotEmpty ? formattedPhone : 'Não informado'),
                                   _kv('Status', status),
+
                                   if (tagWidgets.isEmpty)
                                     _kv('Etiquetas', 'Sem etiquetas')
                                   else
                                     Padding(
                                       padding: const EdgeInsets.only(bottom: 4),
                                       child: Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          const Text('Etiquetas: ',
-                                              style: TextStyle(
-                                                  fontWeight: FontWeight.w600,
-                                                  fontSize: 13)),
-                                          Expanded(
-                                              child:
-                                                  Wrap(children: tagWidgets)),
+                                          const Text(
+                                            'Etiquetas: ',
+                                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                          ),
+                                          Expanded(child: Wrap(children: tagWidgets)),
                                         ],
                                       ),
                                     ),
-                                  if (updatedById == null)
-                                    _kv('Atendente', 'Atendimento não iniciado')
-                                  else
-                                    FutureBuilder<
-                                        DocumentSnapshot<Map<String, dynamic>>>(
-                                      future: FirebaseFirestore.instance
-                                          .collection('users')
-                                          .doc(updatedById)
-                                          .get(),
-                                      builder: (context, userSnap) {
-                                        if (userSnap.connectionState !=
-                                            ConnectionState.done) {
-                                          return _kv(
-                                              'Atendente', 'Carregando...');
-                                        }
-                                        if (userSnap.hasError ||
-                                            !userSnap.data!.exists) {
-                                          return _kv(
-                                              'Atendente', 'Desconhecido');
-                                        }
-                                        final data = userSnap.data!.data();
-                                        final nome = data?['name'] as String? ??
-                                            'Desconhecido';
-                                        return _kv('Atendente', nome);
-                                      },
-                                    ),
-                                  if (startedAt != null)
-                                    _kv('Início', _fmt.format(startedAt)),
-                                  if (finishedAt != null)
-                                    _kv('Conclusão', _fmt.format(finishedAt)),
+
+                                  // ---- ATENDENTE (sem FutureBuilder) ----
+                                  Builder(
+                                    builder: (_) {
+                                      // monta um map id->nome a partir dos atendentes (users + empresa)
+                                      final attendantsMap = {
+                                        for (final a in _attendants) a['id']!: a['name']!,
+                                      };
+
+                                      final attendantLabel = updatedById == null
+                                          ? 'Atendimento não iniciado'
+                                          : (attendantsMap[updatedById] ??
+                                          (userName is String && userName.isNotEmpty ? userName : 'Desconhecido'));
+
+                                      return _kv('Atendente', attendantLabel);
+                                    },
+                                  ),
+
+                                  if (startedAt != null) _kv('Início', _fmt.format(startedAt)),
+                                  if (finishedAt != null) _kv('Conclusão', _fmt.format(finishedAt)),
                                   _kv('Primeira resposta', firstReplyText),
                                 ],
                               ),
