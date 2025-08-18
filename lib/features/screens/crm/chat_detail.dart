@@ -2386,10 +2386,10 @@ class _RoundActionButton extends StatelessWidget {
       onLongPressEnd: onLongPressEnd,
       onLongPressMoveUpdate: onLongPressMoveUpdate,
       child: Container(
-        width: 54,   // maior, destacando como no WhatsApp
+        width: 54,
         height: 54,
         decoration: BoxDecoration(
-          color: Colors.white, // círculo branco como no print
+          color: Colors.white,               // círculo branco (estilo Whats)
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
@@ -2400,7 +2400,8 @@ class _RoundActionButton extends StatelessWidget {
           ],
         ),
         alignment: Alignment.center,
-        child: const Icon(Icons.mic_rounded, color: Colors.black),
+        // 👇 AQUI o ícone passa a respeitar o parâmetro recebido
+        child: Icon(icon, color: Colors.black),
       ),
     );
   }

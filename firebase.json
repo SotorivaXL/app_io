@@ -11,9 +11,6 @@
           "deleteMessage": {
             "allowUnauthenticated": true,
             "environmentVariables": {
-              "ZAPI_ID": "VALOR_A",
-              "ZAPI_TOKEN": "VALOR_B",
-              "ZAPI_CLIENT_TOKEN": "VALOR_C"
             }
           }
         }
