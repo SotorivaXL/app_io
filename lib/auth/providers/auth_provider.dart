@@ -70,33 +70,38 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> signIn(String email, String password) async {
     try {
-      // Autenticação no Firebase
-      UserCredential userCredential = await _authRepository.signInWithEmail(email, password);
-      _user = userCredential.user;
+      // 1) Autentica
+      final cred = await _authRepository.signInWithEmail(email, password);
+      _user = cred.user;
 
-      // Referência ao documento do usuário na coleção 'users'
-      DocumentReference userRef = FirebaseFirestore.instance.collection('users').doc(_user!.uid);
-      DocumentSnapshot userDoc = await userRef.get();
-
-      if (userDoc.exists) {
-        Map<String, dynamic> userData = userDoc.data() as Map<String, dynamic>;
-
-        // Verifica se já existe um sessionId
-        if (userData['sessionId'] != null) {
-          // Se o sessionId já existir, bloqueie o login
-          throw Exception('Outra sessão já está ativa nesta conta.');
-        } else {
-          // Caso contrário, continue com o login e salve o sessionId e o FCM Token
-          await _saveSessionIdAndFcmToken();
-          _sessionId = await getSessionId(); // Atualiza o _sessionId
-          await _fetchPermissions(); // Carrega as permissões após o login
-        }
-      } else {
-        // Caso o documento não exista na coleção 'users', realiza as operações necessárias
-        await _saveSessionIdAndFcmToken();
-        _sessionId = await getSessionId(); // Atualiza o _sessionId
-        await _fetchPermissions(); // Carrega as permissões após o login
+      if (_user == null) {
+        throw FirebaseAuthException(code: 'user-null', message: 'Falha ao autenticar');
       }
+
+      // 2) Verifica sessão existente (em users OU empresas)
+      final uid = _user!.uid;
+      final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+      final empRef  = FirebaseFirestore.instance.collection('empresas').doc(uid);
+      final userDoc = await userRef.get();
+      final empDoc  = await empRef.get();
+
+      final sessionAlready =
+          (userDoc.exists ? (userDoc.data()?['sessionId']) : null) ??
+              (empDoc.exists  ? (empDoc.data()?['sessionId'])  : null);
+
+      if (sessionAlready != null) {
+        // opcional: desloga para não deixar authState inconsistido
+        await FirebaseAuth.instance.signOut();
+        _user = null;
+        throw Exception('Outra sessão já está ativa nesta conta.');
+      }
+
+      // 3) Salva sessionId + FCM corretamente (sem criar doc fantasma)
+      await _saveSessionIdAndFcmToken();
+
+      // 4) Atualiza cache local e permissões
+      _sessionId = await getSessionId();
+      await _fetchPermissions();
     } catch (e) {
       print('Erro durante o login: $e');
       rethrow;
@@ -206,59 +211,39 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> _saveSessionIdAndFcmToken() async {
-    if (_user != null) {
-      String sessionId = DateTime.now().millisecondsSinceEpoch.toString();
-      String? fcmToken = await FirebaseMessaging.instance.getToken();
-
-      if (fcmToken == null) {
-        print('Erro: FCM Token está nulo.');
-        return;
-      }
-
-      // Referência ao documento do usuário na coleção 'users'
-      DocumentReference userRef = FirebaseFirestore.instance.collection('users').doc(_user!.uid);
-      DocumentSnapshot userDoc = await userRef.get();
-
-      if (userDoc.exists) {
-        // Se o documento existir na coleção 'users', salva o sessionId e o fcmToken
-        await userRef.update({
-          'sessionId': sessionId,
-          'fcmToken': fcmToken,
-        }).then((_) {
-          print('SessionId e FCM Token salvos com sucesso na coleção users.');
-        }).catchError((error) {
-          print('Erro ao salvar sessionId e FCM Token na coleção users: $error');
-        });
-      } else {
-        // Se o documento não existir na coleção 'users', verifica na coleção 'empresas'
-        DocumentReference empresaRef = FirebaseFirestore.instance.collection('empresas').doc(_user!.uid);
-        DocumentSnapshot empresaDoc = await empresaRef.get();
-
-        if (empresaDoc.exists) {
-          // Se o documento existir na coleção 'empresas', salva o sessionId e o fcmToken
-          await empresaRef.update({
-            'sessionId': sessionId,
-            'fcmToken': fcmToken,
-          }).then((_) {
-            print('SessionId e FCM Token salvos com sucesso na coleção empresas.');
-          }).catchError((error) {
-            print('Erro ao salvar sessionId e FCM Token na coleção empresas: $error');
-          });
-        } else {
-          // Se não existir em nenhuma das coleções, cria o documento na coleção 'users' e salva os dados lá
-          await userRef.set({
-            'sessionId': sessionId,
-            'fcmToken': fcmToken,
-          }).then((_) {
-            print('Documento criado e sessionId e FCM Token salvos com sucesso na coleção users.');
-          }).catchError((error) {
-            print('Erro ao criar e salvar sessionId e FCM Token na coleção users: $error');
-          });
-        }
-      }
-    } else {
+    if (_user == null) {
       print('Erro: Usuário está nulo.');
+      return;
     }
+
+    final uid = _user!.uid;
+    final sessionId = DateTime.now().millisecondsSinceEpoch.toString();
+    final fcmToken = await FirebaseMessaging.instance.getToken();
+    if (fcmToken == null) {
+      print('FCM Token nulo; não vou gravar nada para evitar criar doc errado.');
+      return;
+    }
+
+    final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+    final empRef  = FirebaseFirestore.instance.collection('empresas').doc(uid);
+    final userSnap = await userRef.get();
+    final empSnap  = await empRef.get();
+
+    if (empSnap.exists) {
+      await empRef.set({'sessionId': sessionId, 'fcmToken': fcmToken}, SetOptions(merge: true));
+      if (userSnap.exists) { // limpeza de ghost
+        await userRef.delete().catchError((_) {});
+      }
+      return;
+    }
+
+    if (userSnap.exists) {
+      await userRef.set({'sessionId': sessionId, 'fcmToken': fcmToken}, SetOptions(merge: true));
+      return;
+    }
+
+    // NENHUM doc existe: não criar nada aqui!
+    print('Nenhum doc em users/empresas para $uid. Ignorando criação para evitar doc fantasma.');
   }
 
   Future<String?> getSessionId() async {

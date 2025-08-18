@@ -9,6 +9,7 @@ import 'package:app_io/features/screens/leads/leads_page.dart';
 import 'package:app_io/features/screens/panel/painel_adm.dart';
 import 'package:app_io/features/screens/splash/splash_screen.dart';
 import 'package:app_io/util/CustomWidgets/CustomTabBar/custom_tabBar.dart';
+import 'package:app_io/util/notifications/push_service.dart';
 import 'package:app_io/util/services/connectivity_service.dart';
 import 'package:app_io/util/themes/app_theme.dart';
 import 'package:app_tracking_transparency/app_tracking_transparency.dart';
@@ -62,76 +63,6 @@ Future<Uint8List?> _downloadBytes(String url) async {
     }
   } catch (_) {}
   return null;                           // erro → só devolve null
-}
-
-Future<void> _showChatNotification(RemoteMessage m) async {
-  final d        = m.data;
-  final chatId   = d['chatId'] ?? '';
-  final chatName = d['chatName'] ?? 'Contato';
-
-  // --- avatar redondo -------------------------------------------------
-  final Uint8List? avatar = (d['contactPhoto']?.isNotEmpty ?? false)
-      ? await _roundAvatar(d['contactPhoto']!)
-      : null;                           // null → usa ícone do app
-
-  // --- id único por conversa ------------------------------------------
-  // Pode ser qualquer int positivo (hashCode já serve)
-  final int notifId = chatId.hashCode & 0x7FFFFFFF;
-
-  // --- estilo “Messaging” ---------------------------------------------
-  final person = Person(
-    name : chatName,
-    key  : chatId,                      // chave estável por contato
-  );
-
-  final style = MessagingStyleInformation(
-    person,
-    conversationTitle: null,
-    groupConversation: false,
-    messages: [
-      Message(m.notification?.body ?? '', DateTime.now(), person),
-    ],
-  );
-
-  // --- detalhes Android -----------------------------------------------
-  const channelId = 'high_importance_channel';
-
-  final android = AndroidNotificationDetails(
-    channelId,
-    'msg',
-    groupKey       : 'io.connect.conversas',   // todas no mesmo grupo
-    importance     : Importance.max,
-    priority       : Priority.high,
-    styleInformation: style,
-    category       : AndroidNotificationCategory.message,
-    icon           : 'ic_stat_ioconnect',      // 24×24 branco
-    largeIcon      : avatar != null
-        ? ByteArrayAndroidBitmap(avatar)       // mostrado recolhido
-        : null,
-    colorized      : true,                     // força avatar à esquerda
-    color          : const Color(0xFF6B00E3),
-    shortcutId     : chatId,                   // Android 11+
-  );
-
-  await Firebase.initializeApp();
-  FirebaseFirestore.instance.settings =
-  const Settings(persistenceEnabled: true);
-
-  await flutterLocalNotificationsPlugin.show(
-    notifId,          // <- diferente por chat  🔑
-    null,
-    null,
-    NotificationDetails(
-      android: android,
-      iOS: const DarwinNotificationDetails(),
-    ),
-    payload: Uri(queryParameters: {
-      'openChat'    : 'true',
-      'chatId'      : chatId,
-      'chatName'    : chatName,
-      'contactPhoto': d['contactPhoto'] ?? '',
-    }).query,
-  );
 }
 
 // 1.1 – chave global para podermos navegar fora de widgets
@@ -201,6 +132,19 @@ Future<void> main() async {
 
   // Inicializa as notificações locais
   await initializeLocalNotifications();
+
+  if (!kIsWeb && Platform.isAndroid) {
+    final androidImpl = flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    if (androidImpl != null) {
+      final enabled = await androidImpl.areNotificationsEnabled();
+      if (enabled == false) {
+        try { await (androidImpl as dynamic).requestPermission(); } catch (_) {
+          try { await (androidImpl as dynamic).requestNotificationsPermission(); } catch (_) {}
+        }
+      }
+    }
+  }
 
   // Ativa o Firebase App Check usando o provedor App Attest para iOS
   await FirebaseAppCheck.instance.activate(
@@ -284,7 +228,6 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     _initializeFirebaseMessaging();
-    FirebaseMessaging.onMessage.listen(_showChatNotification);
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     authProvider.listenToAuthChanges();
@@ -337,14 +280,31 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
-  void _saveTokenToFirestore(String token) async {
+  Future<void> _saveTokenToFirestore(String token) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.user;
-    if (user != null) {
-      final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
-      await userDoc.update({'fcmToken': token});
-      print('Token atualizado no Firestore: $token');
+    if (user == null) return;
+
+    final usersRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+    final usersSnap = await usersRef.get();
+
+    // Se já existe doc em /users E tem createdBy => é colaborador
+    if (usersSnap.exists) {
+      final createdBy = (usersSnap.data()?['createdBy'] ?? '').toString().trim();
+      if (createdBy.isNotEmpty) {
+        await usersRef.set({
+          'fcmToken': token,
+          'lastActivity': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        return; // não grava em /empresas nesse caso
+      }
     }
+
+    // Dono/empresa (sem createdBy): grava APENAS em /empresas/{uid}
+    await FirebaseFirestore.instance.collection('empresas').doc(user.uid).set({
+      'fcmToken': token,
+      'lastActivity': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   void _showNotification(String? title, String? body,

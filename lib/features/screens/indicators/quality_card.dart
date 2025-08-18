@@ -56,6 +56,25 @@ extension on _Unit {
 /// ----------- ESTADO --------------------------------------------------------
 class _QualityCardState extends State<QualityCard> {
   DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
+  double _tickInterval(_Unit u) => u == _Unit.sec ? 15 : 1; // 15s ou 1 unidade
+
+  // arredonda X para o múltiplo de M imediatamente acima (ex.: 23 → 25)
+  double _ceilToMultiple(double x, double m) =>
+      (x <= 0) ? m : (x / m).ceil() * m;
+
+// escolhe um passo "bonito" (1, 2, 5, 10, 20, 50, 100...)
+// mirando ~5 divisões no eixo
+  double _niceInterval(double maxY) {
+    if (maxY <= 0) return 1;
+    double raw = maxY / 5;     // alvo ≈ 5 linhas
+    double step = 1;
+    while (raw > step) {
+      if (raw <= step * 2) return step * 2;
+      if (raw <= step * 5) return step * 5;
+      step *= 10;
+    }
+    return step;
+  }
 
   late List<DateTime> _days;
   late Map<DateTime, List<double>> _wait, _total;
@@ -89,20 +108,46 @@ class _QualityCardState extends State<QualityCard> {
     setState(() {});
   }
 
-  // --------------------- helpers de Firestore ------------------------------
-  Future<(String, String)> _getIds() async {
+  Future<(String companyId, String? phoneId)> _resolvePhoneCtx() async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
+    final fs = FirebaseFirestore.instance;
 
-    final snap =
-    await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    String companyId = uid;
+    String? phoneId;
 
-    final data = snap.data() as Map<String, dynamic>? ?? {};
+    final uSnap = await fs.collection('users').doc(uid).get();
+    if (uSnap.exists) {
+      final u = uSnap.data() ?? {};
+      companyId =
+      (u['createdBy'] as String?)?.isNotEmpty == true ? u['createdBy'] as String : uid;
+      phoneId = u['defaultPhoneId'] as String?;
+    }
 
-    final String companyId = (data['createdBy'] as String?)?.isNotEmpty == true
-        ? data['createdBy'] as String
-        : uid;
+    if (phoneId == null) {
+      final eSnap = await fs.collection('empresas').doc(companyId).get();
+      if (eSnap.exists) {
+        phoneId = eSnap.data()?['defaultPhoneId'] as String?;
+      }
+    }
 
-    final String phoneId = data['defaultPhoneId'] as String;
+    if (phoneId == null) {
+      final ph = await fs
+          .collection('empresas').doc(companyId)
+          .collection('phones')
+          .limit(1)
+          .get();
+
+      if (ph.docs.isNotEmpty) {
+        phoneId = ph.docs.first.id;
+        if (uSnap.exists) {
+          await fs.collection('users').doc(uid)
+              .set({'defaultPhoneId': phoneId}, SetOptions(merge: true));
+        } else {
+          await fs.collection('empresas').doc(companyId)
+              .set({'defaultPhoneId': phoneId}, SetOptions(merge: true));
+        }
+      }
+    }
 
     return (companyId, phoneId);
   }
@@ -135,24 +180,26 @@ class _QualityCardState extends State<QualityCard> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    return FutureBuilder(
-      future: _getIds(),
+    return FutureBuilder<(String, String?)>(
+      future: _resolvePhoneCtx(),
       builder: (_, idsSnap) {
         if (!idsSnap.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
         final (companyId, phoneId) = idsSnap.data!;
+        if (phoneId == null) {
+          return Center(
+            child: Text('Nenhum número configurado.', style: TextStyle(color: cs.onBackground)),
+          );
+        }
 
         return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
-              .collection('empresas')
-              .doc(companyId)
-              .collection('phones')
-              .doc(phoneId)
+              .collection('empresas').doc(companyId)
+              .collection('phones').doc(phoneId)
               .collection('whatsappChats')
               .where('arrivalAt', isGreaterThanOrEqualTo: widget.from)
-              .where('arrivalAt',
-              isLessThanOrEqualTo: widget.to.add(const Duration(days: 1)))
+              .where('arrivalAt', isLessThanOrEqualTo: widget.to.add(const Duration(days: 1)))
               .snapshots(),
           builder: (_, snap) {
             if (!snap.hasData) {
@@ -176,24 +223,16 @@ class _QualityCardState extends State<QualityCard> {
               _accum(day, waitSec, totalSec);
             }
 
-            // máximos
-            final maxWaitSec = _days
-                .map((d) => _avg(_wait[d]!))
-                .fold<double>(0, math.max);
-            final maxTotalSec = _days
-                .map((d) => _avg(_total[d]!))
-                .fold<double>(0, math.max);
+            final maxWaitSec  = _days.map((d) => _avg(_wait[d]!)).fold<double>(0, math.max);
+            final maxTotalSec = _days.map((d) => _avg(_total[d]!)).fold<double>(0, math.max);
 
-            final unitWait = _pickUnit(maxWaitSec);
-            final unitTotal = _pickUnit(maxTotalSec);
+            final unit = _pickUnit(math.max(maxWaitSec, maxTotalSec));
 
-            // valores já convertidos para a unidade escolhida
-            final waitVals = _days
-                .map((d) => _avg(_wait[d]!) / unitWait.factor)
-                .toList();
-            final totalVals = _days
-                .map((d) => _avg(_total[d]!) / unitTotal.factor)
-                .toList();
+            final waitVals  = _days.map((d) => (_avg(_wait[d]!)  / unit.factor).roundToDouble()).toList();
+            final totalVals = _days.map((d) => (_avg(_total[d]!) / unit.factor).roundToDouble()).toList();
+            final maxSerie = [...waitVals, ...totalVals].fold<double>(0, math.max);
+            final interval = _niceInterval(maxSerie);
+            final maxY = _ceilToMultiple(maxSerie, interval); // dá um respiro no topo
 
             // métricas rápidas
             final periodWaitSec = _avg(_days
@@ -250,7 +289,7 @@ class _QualityCardState extends State<QualityCard> {
                           child: RotatedBox(
                             quarterTurns: 3,
                             child: Text(
-                              'Tempo médio de espera (${unitWait.labelShort})',
+                              'Tempo médio de espera (${unit.labelShort})',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: cs.onBackground.withOpacity(.7),
@@ -265,29 +304,63 @@ class _QualityCardState extends State<QualityCard> {
                           child: LineChart(
                             LineChartData(
                               clipData: FlClipData.all(),
+                              minX: 0,
+                              maxX: (_days.length - 1).toDouble(),
                               minY: 0,
-                              maxY: [...waitVals, ...totalVals]
-                                  .fold<double>(0, math.max) +
-                                  2,
+                              maxY: maxY,
+
                               lineBarsData: [
                                 _line(waitVals, Colors.purple),
                                 _line(totalVals, Colors.amber),
                               ],
+
+                              // grade horizontal com o MESMO intervalo do eixo (fica limpo)
                               gridData: FlGridData(
                                 show: true,
-                                horizontalInterval: unitWait == _Unit.sec
-                                    ? 30
-                                    : unitWait == _Unit.min
-                                    ? 1
-                                    : 2,
+                                horizontalInterval: interval,
                                 drawVerticalLine: false,
-                                getDrawingHorizontalLine: (v) => FlLine(
-                                    color: Colors.grey.withOpacity(.2),
-                                    strokeWidth: 1),
+                                getDrawingHorizontalLine: (v) =>
+                                    FlLine(color: Colors.grey.withOpacity(.18), strokeWidth: 1),
                               ),
-                              titlesData:
-                              _buildTitles(cs, unitWait, unitTotal),
+
+                              titlesData: _buildTitles(cs, unit, interval), // ← nova assinatura
                               borderData: FlBorderData(show: false),
+
+                              // ===== Tooltip bonito e claro =====
+                              lineTouchData: LineTouchData(
+                                handleBuiltInTouches: true,
+                                touchTooltipData: LineTouchTooltipData(
+                                  tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  fitInsideHorizontally: true,
+                                  fitInsideVertically: true,
+                                  getTooltipItems: (spots) => spots.map((s) {
+                                    final label = s.barIndex == 0 ? 'Espera' : 'Atend.';
+                                    final val   = s.y.toInt(); // sem casas decimais
+                                    return LineTooltipItem(
+                                      '$label: $val ${unit.labelShort}',
+                                      TextStyle(
+                                        color: cs.onSurface,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                                getTouchedSpotIndicator: (barData, indexes) => indexes.map((i) {
+                                  final c = barData.color ?? Colors.black;
+                                  return TouchedSpotIndicatorData(
+                                    FlLine(color: c.withOpacity(.30), strokeWidth: 1.5),
+                                    FlDotData(
+                                      show: true,
+                                      getDotPainter: (spot, _, __, ___) => FlDotCirclePainter(
+                                        radius: 4,
+                                        color: Colors.white,
+                                        strokeWidth: 3,
+                                        strokeColor: c,
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
                             ),
                           ),
                         ),
@@ -299,7 +372,7 @@ class _QualityCardState extends State<QualityCard> {
                           child: RotatedBox(
                             quarterTurns: 1,
                             child: Text(
-                              'Tempo médio de atendimento (${unitTotal.labelShort})',
+                              'Tempo médio de atendimento (${unit.labelShort})',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: cs.onBackground.withOpacity(.7),
@@ -314,12 +387,23 @@ class _QualityCardState extends State<QualityCard> {
                   const SizedBox(height: 12),
 
                   // legenda
+                  // ⬇️ Substitua a seção da legenda
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      _legend(cs, Colors.purple, 'Tempo médio de espera'),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,          // encolhe se faltar espaço
+                          child: _legend(cs, Colors.purple, 'Tempo médio de espera'),
+                        ),
+                      ),
                       const SizedBox(width: 12),
-                      _legend(cs, Colors.amber, 'Tempo médio de atendimento'),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: _legend(cs, Colors.amber, 'Tempo médio de atendimento'),
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -333,14 +417,14 @@ class _QualityCardState extends State<QualityCard> {
 
   /// ----------- helpers visuais -------------------------------------------
   Widget _legend(ColorScheme cs, Color c, String txt) => Row(
+    mainAxisSize: MainAxisSize.min,       // não ocupa mais do que precisa
     children: [
       Container(
-          width: 12,
-          height: 12,
-          decoration:
-          BoxDecoration(color: c, borderRadius: BorderRadius.circular(3))),
+        width: 12, height: 12,
+        decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(3)),
+      ),
       const SizedBox(width: 4),
-      Text(txt, style: const TextStyle(fontSize: 12)),
+      Text(txt, style: const TextStyle(fontSize: 12), softWrap: false),
     ],
   );
 
@@ -359,72 +443,39 @@ class _QualityCardState extends State<QualityCard> {
   }
 
   /// --- títulos de eixos / rótulos ---------------------------------
-  FlTitlesData _buildTitles(
-      ColorScheme cs,
-      _Unit unitWait,
-      _Unit unitTotal,
-      ) {
-    // intervalo em SEGUNDOS que queremos marcar no gráfico
-    double _secPerTick(_Unit u) {
-      switch (u) {
-        case _Unit.sec:  return 15;          // 0, 15, 30, 45…
-        case _Unit.min:  return 60;          // 0, 1, 2, 3 min…
-        case _Unit.hour: return 3600;        // 0, 1, 2, 3 h…
-        case _Unit.day:  return 86400;       // 0, 1, 2, 3 dias…
-      }
-    }
-
-    /// Converte `v` (que chega em segundos) para a unidade escolhida,
-    /// arredonda e devolve como string sem casas decimais.
-    String _fmt(double v, _Unit u) => (v / u.factor).round().toString();
+  FlTitlesData _buildTitles(ColorScheme cs, _Unit unit, double interval) {
+    String _fmt(double v) => v.round().toString(); // sempre inteiro
 
     return FlTitlesData(
-      /* ---------- EIXO ESQUERDO ---------- */
       leftTitles: AxisTitles(
         sideTitles: SideTitles(
           showTitles: true,
-          reservedSize: 36,
-          interval: _secPerTick(unitWait),
-          getTitlesWidget: (v, _) {
-            if (v < 0) return const SizedBox.shrink();
-            return Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: Text(
-                _fmt(v, unitWait),            // ← sempre inteiro
-                style: TextStyle(
-                  fontSize: 11,
-                  color: cs.onBackground.withOpacity(.7),
-                ),
-              ),
-            );
-          },
+          reservedSize: 44,                 // mais espaço
+          interval: interval,               // menos rótulos
+          getTitlesWidget: (v, _) => Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Text(
+              _fmt(v),
+              style: TextStyle(fontSize: 11, color: cs.onBackground.withOpacity(.7)),
+            ),
+          ),
         ),
       ),
-
-      /* ---------- EIXO DIREITO ---------- */
       rightTitles: AxisTitles(
         sideTitles: SideTitles(
           showTitles: true,
-          reservedSize: 38,
-          interval: _secPerTick(unitTotal),
-          getTitlesWidget: (v, _) {
-            if (v < 0) return const SizedBox.shrink();
-            return Padding(
-              padding: const EdgeInsets.only(left: 4),
-              child: Text(
-                _fmt(v, unitTotal),           // ← sempre inteiro
-                textAlign: TextAlign.right,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: cs.onBackground.withOpacity(.7),
-                ),
-              ),
-            );
-          },
+          reservedSize: 48,                 // mais espaço
+          interval: interval,
+          getTitlesWidget: (v, _) => Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: Text(
+              _fmt(v),
+              textAlign: TextAlign.right,
+              style: TextStyle(fontSize: 11, color: cs.onBackground.withOpacity(.7)),
+            ),
+          ),
         ),
       ),
-
-      /* ---------- EIXO INFERIOR ---------- */
       bottomTitles: AxisTitles(
         sideTitles: SideTitles(
           showTitles: true,
@@ -435,16 +486,12 @@ class _QualityCardState extends State<QualityCard> {
             if (_days.length > 14 && i.isOdd) return const SizedBox.shrink();
             return Text(
               DateFormat('d/M').format(_days[i]),
-              style: TextStyle(
-                fontSize: 11,
-                color: cs.onBackground.withOpacity(.7),
-              ),
+              style: TextStyle(fontSize: 11, color: cs.onBackground.withOpacity(.7)),
             );
           },
         ),
       ),
-
-      topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
     );
   }
 

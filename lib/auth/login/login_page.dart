@@ -71,109 +71,62 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _login() async {
     FocusScope.of(context).unfocus();
-    final authProvider =
-        Provider.of<app_io_auth.AuthProvider>(context, listen: false);
+    final authProvider = Provider.of<app_io_auth.AuthProvider>(context, listen: false);
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
     try {
-      // Verifica o sessionId antes de autenticar
-      final usersCollection = FirebaseFirestore.instance.collection('users');
-      final companiesCollection =
-          FirebaseFirestore.instance.collection('empresas');
-
-      QuerySnapshot userQuerySnapshot =
-          await usersCollection.where('email', isEqualTo: email).get();
-
-      if (userQuerySnapshot.docs.isEmpty) {
-        userQuerySnapshot =
-            await companiesCollection.where('email', isEqualTo: email).get();
-      }
-
-      if (userQuerySnapshot.docs.isNotEmpty) {
-        final userDoc = userQuerySnapshot.docs.first;
-        final userData = userDoc.data() as Map<String, dynamic>?;
-        final currentSessionId = userData?['sessionId'];
-        final newSessionId = authProvider.sessionId;
-
-        if (currentSessionId != null && currentSessionId != newSessionId) {
-          _showErrorDialog(context,
-              'Esta conta já está ativa em outro dispositivo. Por favor, desconecte-se de lá antes de continuar.');
-          return;
-        }
-      }
-
-      // Faça login do usuário
       await authProvider.signIn(email, password);
 
-      if (authProvider.isAuthenticated) {
-        final user = FirebaseAuth.instance.currentUser;
-
-        if (user != null) {
-          final token = await user.getIdToken();
-
-          if (token == null) {
-            _showErrorDialog(context, 'Ocorreu um erro ao obter o token.');
-            return;
-          }
-
-          final userDocRef = usersCollection.doc(user.uid);
-          final companyDocRef = companiesCollection.doc(user.uid);
-
-          final userDocExists = (await userDocRef.get()).exists;
-          final companyDocExists = (await companyDocRef.get()).exists;
-
-          if (!userDocExists && companyDocExists) {
-            await companyDocRef.update({'sessionId': authProvider.sessionId});
-          } else if (!userDocExists && !companyDocExists) {
-            await userDocRef
-                .set({'sessionId': authProvider.sessionId, 'email': email});
-          } else if (userDocExists) {
-            await userDocRef.update({'sessionId': authProvider.sessionId});
-          }
-
-          await _updateFcmToken();
-
-          _saveCredentials(email, password);
-
-          Navigator.of(context).pushReplacement(
-            PageRouteBuilder(
-              transitionDuration: Duration(milliseconds: 500),
-              transitionsBuilder:
-                  (context, animation, secondaryAnimation, child) {
-                return FadeTransition(opacity: animation, child: child);
-              },
-              pageBuilder: (context, animation, secondaryAnimation) =>
-                  CustomTabBarPage(),
-            ),
-          );
-        }
+      if (!authProvider.isAuthenticated) {
+        _showErrorDialog(context, 'Falha ao autenticar. Tente novamente.');
+        return;
       }
+
+      // opcional: provider já salvou o FCM; manter não faz mal
+      await _updateFcmToken();
+
+      _saveCredentials(email, password);
+
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          transitionDuration: const Duration(milliseconds: 500),
+          transitionsBuilder: (context, animation, _, child) =>
+              FadeTransition(opacity: animation, child: child),
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              CustomTabBarPage(),
+        ),
+      );
+    } on FirebaseAuthException catch (e) {
+      _showErrorDialogFirebase(context, e);
     } catch (e) {
-      if (e is FirebaseException) {
-        _showErrorDialogFirebase(context, e);
-      } else {
-        _showErrorDialog(context, 'Ocorreu um erro inesperado.');
-      }
+      _showErrorDialog(context, e.toString());
     }
   }
 
   Future<void> _updateFcmToken() async {
-    String? token = await FirebaseMessaging.instance.getToken();
-    if (token != null && FirebaseAuth.instance.currentUser != null) {
-      try {
-        // Atualiza o token na coleção 'users'
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(FirebaseAuth.instance.currentUser!.uid)
-            .update({
-          'fcmToken': token,
-        });
-        print(
-            'FCM Token atualizado com sucesso para o usuário ${FirebaseAuth.instance.currentUser!.uid}.');
-      } catch (error) {
-        print('Erro ao atualizar o FCM Token: $error');
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final token = await FirebaseMessaging.instance.getToken();
+    if (token == null) return;
+
+    final usersRef = FirebaseFirestore.instance.collection('users').doc(uid);
+    final empRef   = FirebaseFirestore.instance.collection('empresas').doc(uid);
+    final empSnap = await empRef.get();
+    final userSnap = await usersRef.get();
+
+    try {
+      if (empSnap.exists) {
+        await empRef.update({'fcmToken': token});
+      } else if (userSnap.exists) {
+        await usersRef.update({'fcmToken': token});
+      } else {
+        debugPrint('Sem doc para salvar fcmToken; evitando criar doc fantasma.');
       }
+    } catch (e) {
+      print('Erro ao atualizar o FCM Token: $e');
     }
   }
 

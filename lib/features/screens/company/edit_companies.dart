@@ -10,12 +10,63 @@ import 'package:flutter/material.dart';
 import 'package:app_io/data/models/RegisterCompanyModel/add_company_model.dart';
 import 'package:app_io/util/CustomWidgets/CustomCountController/custom_count_controller.dart';
 import 'package:app_io/util/services/firestore_service.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:extended_image/extended_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_holo_date_picker/flutter_holo_date_picker.dart';
 import 'package:flutter/services.dart';
+
+const List<String> _kPermKeys = [
+  'dashboard',
+  'leads',
+  'gerenciarColaboradores',
+  'gerenciarParceiros',
+  'configurarDash',
+  'criarForm',
+  'criarCampanha',
+  'copiarTelefones',
+  'executarAPIs',
+  'alterarSenha',
+  'gerenciarProdutos',
+  // módulos
+  'modChats',
+  'modConfig',
+  'modIndicadores',
+  'modPainel',
+  'modRelatorios',
+];
+
+// Defaults usados quando a chave não estiver presente
+const Map<String, bool> _kPermDefaults = {
+  'dashboard'             : true,
+  'leads'                 : true,
+  'gerenciarColaboradores': true,
+  'gerenciarParceiros'    : false,
+  'configurarDash'        : false,
+  'criarForm'             : false,
+  'criarCampanha'         : false,
+  'copiarTelefones'       : false,
+  'executarAPIs'          : false,
+  'alterarSenha'          : true,
+  'gerenciarProdutos'     : true,
+  // módulos (imagem)
+  'modChats'       : true,
+  'modConfig'      : true,
+  'modIndicadores' : true,
+  'modPainel'      : true,
+  'modRelatorios'  : true,
+};
+
+// Garante que todas as chaves existam como bool (sem arrays/map aninhado)
+Map<String, bool> _normalizeRights(Map<String, bool> raw) {
+  final out = <String, bool>{};
+  for (final k in _kPermKeys) {
+    out[k] = (raw[k] == true);
+  }
+  // completa com defaults para chaves ausentes
+  _kPermDefaults.forEach((k, v) => out.putIfAbsent(k, () => v));
+  return out;
+}
 
 class EditCompanies extends StatefulWidget {
   final String companyId;
@@ -35,6 +86,7 @@ class EditCompanies extends StatefulWidget {
   final bool copiarTelefones;
   final bool alterarSenha;
   final bool executarAPIs;
+  final bool gerenciarProdutos;
 
   EditCompanies({
     required this.companyId,
@@ -54,6 +106,7 @@ class EditCompanies extends StatefulWidget {
     required this.copiarTelefones,
     required this.alterarSenha,
     required this.executarAPIs,
+    required this.gerenciarProdutos,
   });
 
   @override
@@ -76,7 +129,6 @@ class _EditCompaniesState extends State<EditCompanies> {
 
   String _onlyDigits(String s) => s.replaceAll(RegExp(r'\D'), '');
 
-  // Mapa de acessos
   Map<String, bool> accessRights = {
     'dashboard': false,
     'leads': false,
@@ -87,6 +139,13 @@ class _EditCompaniesState extends State<EditCompanies> {
     'copiarTelefones': false,
     'alterarSenha': false,
     'executarAPIs': false,
+    'gerenciarProdutos': true,
+    // módulos novos (se não vierem do Firestore, defaults serão aplicados no normalize)
+    'modChats': true,
+    'modConfig': true,
+    'modIndicadores': true,
+    'modPainel': true,
+    'modRelatorios': false,
   };
 
   bool _isChangingPassword = false;
@@ -125,6 +184,7 @@ class _EditCompaniesState extends State<EditCompanies> {
     accessRights['copiarTelefones'] = widget.copiarTelefones;
     accessRights['alterarSenha'] = widget.alterarSenha;
     accessRights['executarAPIs'] = widget.executarAPIs;
+    accessRights['gerenciarProdutos'] = widget.gerenciarProdutos;
 
     // Gera uma cor aleatória para o fundo do avatar, caso não haja foto
     _randomColor = Colors.primaries[Random().nextInt(Colors.primaries.length)];
@@ -136,45 +196,81 @@ class _EditCompaniesState extends State<EditCompanies> {
     _loadPhoneConfig();
   }
 
+  Future<void> _savePermissionsFlat() async {
+    final flatRights = _normalizeRights({
+      ...accessRights,
+      // reforços que você quiser travar
+      'gerenciarParceiros': false,
+    });
+
+    await FirebaseFirestore.instance
+        .collection('empresas')
+        .doc(widget.companyId)
+        .set(flatRights, SetOptions(merge: true));
+  }
+
   Future<void> _loadPhoneConfig() async {
     try {
-      final callable = FirebaseFunctions.instance.httpsCallable('getCompanyPhoneConfig');
-      final res = await callable.call({'companyId': widget.companyId});
-      final Map<String, dynamic> data = Map<String, dynamic>.from(res.data ?? {});
+      final phonesCol = FirebaseFirestore.instance
+          .collection('empresas')
+          .doc(widget.companyId)
+          .collection('phones');
 
-      if (data['exists'] == true) {
+      // pega o primeiro phone cadastrado (ou adapte para escolher um específico)
+      final qs = await phonesCol.limit(1).get();
+      if (qs.docs.isNotEmpty) {
+        final d = qs.docs.first;
+        final m = d.data();
         setState(() {
-          _originalPhoneDocId = data['phoneId'] as String?;
-          _tfWhatsPhoneController.text = (data['phone'] ?? '').toString();        // só dígitos
-          _tfInstanceIdController.text = (data['instanceId'] ?? '').toString();   // texto puro
-          _tfZapiTokenController.text   = (data['token'] ?? '').toString();
-          _tfClientTokenController.text = (data['clientToken'] ?? '').toString();
+          _originalPhoneDocId    = d.id;
+          _tfWhatsPhoneController.text = (m['phone'] ?? d.id).toString();
+          _tfInstanceIdController.text = (m['instanceId'] ?? '').toString();
+          _tfZapiTokenController.text  = (m['token'] ?? '').toString();
+          _tfClientTokenController.text= (m['clientToken'] ?? '').toString();
         });
       } else {
-        _originalPhoneDocId = null;
+        setState(() => _originalPhoneDocId = null);
       }
     } catch (e) {
       debugPrint('Erro ao carregar config de telefone: $e');
-      _originalPhoneDocId = null;
+      setState(() => _originalPhoneDocId = null);
     }
   }
 
   Future<void> _savePhoneConfig(String companyId) async {
     final phoneDigits = _onlyDigits(_tfWhatsPhoneController.text);
+    final newDocId    = phoneDigits; // use o número como docId
 
-    final callable = FirebaseFunctions.instance.httpsCallable('upsertCompanyPhoneConfig');
-    await callable.call({
-      'companyId': companyId,
-      'phoneNumber': phoneDigits,
-      'instanceId': _tfInstanceIdController.text.trim(),
-      'token': _tfZapiTokenController.text.trim(),
+    final phonesCol = FirebaseFirestore.instance
+        .collection('empresas')
+        .doc(companyId)
+        .collection('phones');
+
+    final data = {
+      'phoneId'    : newDocId,
+      'instanceId' : _tfInstanceIdController.text.trim(),
+      'token'      : _tfZapiTokenController.text.trim(),
       'clientToken': _tfClientTokenController.text.trim(),
-      'oldPhoneId': _originalPhoneDocId, // se o número mudou, a CF apaga o doc antigo
-    });
+      'phone'      : phoneDigits,
+      'updatedAt'  : FieldValue.serverTimestamp(),
+    };
 
-    // atualiza o id local (caso o número tenha mudado)
+    final batch = FirebaseFirestore.instance.batch();
+
+    // se o número (docId) mudou, apaga o antigo
+    if (_originalPhoneDocId != null &&
+        _originalPhoneDocId!.isNotEmpty &&
+        _originalPhoneDocId != newDocId) {
+      batch.delete(phonesCol.doc(_originalPhoneDocId));
+    }
+
+    // faz o upsert do doc novo/atual
+    batch.set(phonesCol.doc(newDocId), data, SetOptions(merge: true));
+
+    await batch.commit();
+
     setState(() {
-      _originalPhoneDocId = phoneDigits.isEmpty ? null : phoneDigits;
+      _originalPhoneDocId = newDocId.isEmpty ? null : newDocId;
     });
   }
 
@@ -252,18 +348,21 @@ class _EditCompaniesState extends State<EditCompanies> {
           .collection('empresas')
           .doc(widget.companyId)
           .set({
-        'NomeEmpresa': _model.tfCompanyTextController.text,
-        'contract'   : _model.tfContractTextController.text,
-        // Se quiser manter os contadores sem edição (apenas persistindo o mesmo valor recebido):
+        'NomeEmpresa'     : _model.tfCompanyTextController.text,
+        'contract'        : _model.tfContractTextController.text,
         'countArtsValue'  : _model.countArtsValue,
         'countVideosValue': _model.countVideosValue,
-        'photoUrl'  : photoUrl,
+        'photoUrl'        : photoUrl,
       }, SetOptions(merge: true));
 
       await _savePhoneConfig(widget.companyId);
 
+// 🔒 Apenas campos flat na raiz (inclui mod*); nada de "accessRights" aninhado, nada em "users"
+      await _savePermissionsFlat();
+
       Navigator.pop(context);
       showErrorDialog(context, "Parceiro atualizado com sucesso!", "Sucesso");
+
     } catch (e) {
       print("Erro ao atualizar parceiro: $e");
       showErrorDialog(context, "Erro ao atualizar parceiro", "Erro");

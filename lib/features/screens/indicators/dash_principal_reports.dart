@@ -14,6 +14,65 @@ class IndicatorsPage extends StatefulWidget {
   State<IndicatorsPage> createState() => _ReportsPageState();
 }
 
+/// Contexto resolvido para a tela: companyId + phoneId
+class _PhoneCtx {
+  final String companyId;
+  final String? phoneId; // pode ser null se não houver nenhum telefone
+  _PhoneCtx({required this.companyId, required this.phoneId});
+}
+
+/// Resolve companyId/phoneId para user **ou** empresa
+Future<_PhoneCtx> _resolvePhoneCtx() async {
+  final uid = FirebaseAuth.instance.currentUser!.uid;
+  final fs = FirebaseFirestore.instance;
+
+  String companyId = uid;
+  String? phoneId;
+
+  // 1) Tenta users/{uid}
+  final userSnap = await fs.collection('users').doc(uid).get();
+  if (userSnap.exists) {
+    final u = userSnap.data() ?? {};
+    companyId = (u['createdBy'] as String?)?.isNotEmpty == true ? u['createdBy'] as String : uid;
+    phoneId = u['defaultPhoneId'] as String?;
+  } else {
+    // conta empresa: users/{uid} normalmente não existe
+    companyId = uid;
+  }
+
+  // 2) Se ainda não há phoneId, tenta empresas/{companyId}.defaultPhoneId
+  if (phoneId == null) {
+    final empSnap = await fs.collection('empresas').doc(companyId).get();
+    if (empSnap.exists) {
+      final e = empSnap.data() ?? {};
+      phoneId = e['defaultPhoneId'] as String?;
+    }
+  }
+
+  // 3) Se ainda não há phoneId, pega o primeiro de empresas/{companyId}/phones
+  if (phoneId == null) {
+    final phonesSnap = await fs
+        .collection('empresas').doc(companyId)
+        .collection('phones')
+        .limit(1)
+        .get();
+
+    if (phonesSnap.docs.isNotEmpty) {
+      phoneId = phonesSnap.docs.first.id;
+
+      // (opcional) Persistir como default para não precisar resolver toda vez.
+      // Se existir users/{uid}, grava lá; senão grava em empresas/{companyId}.
+      if (userSnap.exists) {
+        await fs.collection('users').doc(uid).set({'defaultPhoneId': phoneId}, SetOptions(merge: true));
+      } else {
+        await fs.collection('empresas').doc(companyId).set({'defaultPhoneId': phoneId}, SetOptions(merge: true));
+      }
+    }
+  }
+
+  return _PhoneCtx(companyId: companyId, phoneId: phoneId);
+}
+
 class _ReportsPageState extends State<IndicatorsPage> {
   /// período exibido no seletor
   late DateTime _from;
@@ -155,27 +214,16 @@ class _ReportsPageState extends State<IndicatorsPage> {
         final bool wide   = constraints.maxWidth > 600;
         final int columns = wide ? 4 : 2;
 
-        final uid = FirebaseAuth.instance.currentUser!.uid;
-
-        /* ───────── 1 º passo ─────────────────────────────────────────────
-       *  Lê o documento do usuário para descobrir companyId e phoneId   */
-        return FutureBuilder<DocumentSnapshot>(
-          future: FirebaseFirestore.instance
-              .collection('users')
-              .doc(uid)
-              .get(),
-          builder: (ctx, userSnap) {
-            if (!userSnap.hasData) {
+        return FutureBuilder<_PhoneCtx>(
+          future: _resolvePhoneCtx(),
+          builder: (ctx, snap) {
+            if (!snap.hasData) {
               return const Center(child: CircularProgressIndicator());
             }
 
-            final data = userSnap.data!.data() as Map<String, dynamic>? ?? {};
-            final companyId = (data['createdBy'] as String?)?.isNotEmpty == true
-                ? data['createdBy'] as String
-                : uid;
-            final phoneId = data['defaultPhoneId'] as String?;
-
-            if (phoneId == null) {
+            final ctxv = snap.data!;
+            if (ctxv.phoneId == null) {
+              // Aqui realmente não há nenhum telefone cadastrado para essa empresa
               return Center(
                 child: Text(
                   'Nenhum número configurado.',
@@ -184,22 +232,20 @@ class _ReportsPageState extends State<IndicatorsPage> {
               );
             }
 
-            /* ───────── 2 º passo ─────────────────────────────────────────
-           *  Escuta em tempo-real todos os chats desse telefone         */
+            // 2) Escuta os chats do telefone resolvido
             return StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
-                  .collection('empresas').doc(companyId)
-                  .collection('phones').doc(phoneId)
+                  .collection('empresas').doc(ctxv.companyId)
+                  .collection('phones').doc(ctxv.phoneId)
                   .collection('whatsappChats')
                   .snapshots(),
-              builder: (ctx, snap) {
-                if (!snap.hasData) {
+              builder: (ctx, snap2) {
+                if (!snap2.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final docs = snap.data!.docs;
+                final docs = snap2.data!.docs;
 
-                // ───── métricas dinâmicas ─────
                 final fila      = docs.where((d) => d['status'] == 'novo').length;
                 final atendendo = docs.where((d) => d['status'] == 'atendendo').length;
                 final conclu30  = docs.where((d) {
@@ -207,17 +253,14 @@ class _ReportsPageState extends State<IndicatorsPage> {
                   if (st != 'concluido_com_venda' && st != 'recusado') return false;
                   final ts = (d['timestamp'] as Timestamp?)?.toDate();
                   if (ts == null) return false;
-                  return ts.isAfter(DateTime.now()
-                      .subtract(const Duration(days: 30)));
+                  return ts.isAfter(DateTime.now().subtract(const Duration(days: 30)));
                 }).length;
                 final total = docs.length;
 
-                /* ───────── UI ─────────────────────────────────────────── */
                 return SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      // ---- GRID de métricas ---------------------------------
                       GridView.count(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
@@ -227,43 +270,42 @@ class _ReportsPageState extends State<IndicatorsPage> {
                         childAspectRatio: wide ? 1.25 : 1.15,
                         children: [
                           _metricCard(
-                            title1   : 'Fila',
-                            title    : 'Atendimentos',
-                            value    : fila.toString(),
-                            subtitle : 'agora',
+                            title1    : 'Fila',
+                            title     : 'Atendimentos',
+                            value     : fila.toString(),
+                            subtitle  : 'agora',
                             valueColor: Colors.red.shade600,
-                            cs: cs,
+                            cs        : cs,
                           ),
                           _metricCard(
-                            title1   : 'Em atendimento',
-                            title    : 'Atendimentos',
-                            value    : atendendo.toString(),
-                            subtitle : 'agora',
+                            title1    : 'Em atendimento',
+                            title     : 'Atendimentos',
+                            value     : atendendo.toString(),
+                            subtitle  : 'agora',
                             valueColor: Colors.amber.shade800,
-                            cs: cs,
+                            cs        : cs,
                           ),
                           _metricCard(
-                            title1   : 'Concluídos',
-                            title    : 'Atendimentos',
-                            value    : conclu30.toString(),
-                            subtitle : 'Últimos 30 dias',
+                            title1    : 'Concluídos',
+                            title     : 'Atendimentos',
+                            value     : conclu30.toString(),
+                            subtitle  : 'Últimos 30 dias',
                             valueColor: Colors.green.shade700,
-                            cs: cs,
+                            cs        : cs,
                           ),
                           _metricCard(
-                            title1   : 'Total',
-                            title    : 'Atendimentos',
-                            value    : total.toString(),
-                            subtitle : 'Pendentes + concluídos',
+                            title1    : 'Total',
+                            title     : 'Atendimentos',
+                            value     : total.toString(),
+                            subtitle  : 'Pendentes + concluídos',
                             valueColor: Colors.blue.shade700,
-                            cs: cs,
+                            cs        : cs,
                           ),
                         ],
                       ),
 
                       const SizedBox(height: 40),
 
-                      // ---- seletor de período -------------------------------
                       GestureDetector(
                         onTap: _pickRange,
                         child: Container(

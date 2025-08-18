@@ -50,6 +50,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
   Set<String> _filterTags = {};
   bool _showUnreadOnly = false;
   bool _noPhone = false;
+  bool _showArchived = false;
 
   CollectionReference<Map<String,dynamic>> chatsCol() =>
       FirebaseFirestore.instance
@@ -94,32 +95,139 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
     filter: {'#': RegExp(r'[0-9]')},
   );
 
-  static const _mediaMatchers = {
-    // extensão        → (rótulo,   ícone)
-    'jpg'  : ('Imagem',  Icons.photo),
-    'jpeg' : ('Imagem',  Icons.photo),
-    'png'  : ('Imagem',  Icons.photo),
-    'gif'  : ('Imagem',  Icons.photo),
-    'webp' : ('Figurinha', Icons.emoji_emotions),
-    'mp4'  : ('Vídeo',   Icons.videocam),
-    'mov'  : ('Vídeo',   Icons.videocam),
-    'mkv'  : ('Vídeo',   Icons.videocam),
-    'mp3'  : ('Áudio',   Icons.audiotrack),
-    'aac'  : ('Áudio',   Icons.audiotrack),
-    'm4a'  : ('Áudio',   Icons.audiotrack),
-    'ogg'  : ('Áudio',   Icons.audiotrack),
-    'opus' : ('Áudio',   Icons.audiotrack),
+  static const Map<String, (String, IconData)> _extMatchers = {
+    // extensão        → (rótulo,     ícone)
+    'jpg'  : ('Imagem',     Icons.photo),
+    'jpeg' : ('Imagem',     Icons.photo),
+    'png'  : ('Imagem',     Icons.photo),
+    'gif'  : ('Imagem',     Icons.photo),
+    'webp' : ('Figurinha',  Icons.emoji_emotions),
+    'mp4'  : ('Vídeo',      Icons.videocam),
+    'mov'  : ('Vídeo',      Icons.videocam),
+    'mkv'  : ('Vídeo',      Icons.videocam),
+    'mp3'  : ('Áudio',      Icons.audiotrack),
+    'aac'  : ('Áudio',      Icons.audiotrack),
+    'm4a'  : ('Áudio',      Icons.audiotrack),
+    'ogg'  : ('Áudio',      Icons.audiotrack),
+    'opus' : ('Áudio',      Icons.audiotrack),
   };
 
-  ( String, IconData )? _classifyMediaMessage(String msg) {
-    if (!msg.startsWith('http')) return null;          // não é URL
-    final uri = Uri.tryParse(msg);
-    if (uri == null) return null;
+  // substitua o método inteiro por este:
+  ( String, IconData )? _classifyMediaMessage(String raw) {
+    if (raw.isEmpty) return null;
+    final msg = raw.trim();
 
-    final path = uri.path.toLowerCase();
-    final ext  = path.split('.').last;                 // pega extensão
+    // 1) data URI
+    if (msg.startsWith('data:')) {
+      final semi = msg.indexOf(';');
+      if (semi > 5) {
+        final mime = msg.substring(5, semi).toLowerCase();
+        if (mime.startsWith('image/webp')) return ('Figurinha', Icons.emoji_emotions);
+        if (mime.startsWith('image/'))      return ('Imagem', Icons.photo);
+        if (mime.startsWith('video/'))      return ('Vídeo',  Icons.videocam);
+        if (mime.startsWith('audio/'))      return ('Áudio',  Icons.audiotrack);
+      }
+    }
 
-    return _mediaMatchers[ext];
+    // 2) URL (extensão ou contentType/mimeType na query)
+    if (msg.startsWith('http')) {
+      final uri = Uri.tryParse(msg);
+      if (uri != null) {
+        final path  = uri.path.toLowerCase();
+        final parts = path.split('.');
+        final String? ext = parts.length > 1 ? parts.last : null; // evita .lastOrNull
+        if (ext != null && _extMatchers.containsKey(ext)) {
+          return _extMatchers[ext];
+        }
+        final qp = uri.queryParametersAll.map(
+              (k, v) => MapEntry(k.toLowerCase(), v.map((x) => Uri.decodeComponent(x).toLowerCase()).toList()),
+        );
+        final mimeParam = (qp['contenttype'] ?? qp['mimetype'] ?? qp['mime'] ?? const [])
+            .cast<String?>()
+            .firstWhere((e) => e != null && e!.contains('/'), orElse: () => null);
+        if (mimeParam != null) {
+          final mime = mimeParam!;
+          if (mime.startsWith('image/webp')) return ('Figurinha', Icons.emoji_emotions);
+          if (mime.startsWith('image/'))      return ('Imagem', Icons.photo);
+          if (mime.startsWith('video/'))      return ('Vídeo',  Icons.videocam);
+          if (mime.startsWith('audio/'))      return ('Áudio',  Icons.audiotrack);
+        }
+      }
+    }
+
+    // 3) Base64 “cru”
+    bool _looksLikeBase64(String s) {
+      final cleaned = s.replaceAll(RegExp(r'\s'), '');
+      if (cleaned.length < 32) return false;
+      return RegExp(r'^[A-Za-z0-9+/=]+$').hasMatch(cleaned);
+    }
+
+    List<int>? _decodeHead(String s, {int take = 512}) {
+      try {
+        var cleaned = s.replaceAll(RegExp(r'\s'), '');
+        cleaned = cleaned.substring(0, cleaned.length.clamp(0, take * 2));
+        final mod = cleaned.length % 4;
+        if (mod != 0) cleaned = cleaned.padRight(cleaned.length + (4 - mod), '=');
+        return base64Decode(cleaned);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    if (_looksLikeBase64(msg)) {
+      final head = _decodeHead(msg);
+      if (head != null && head.isNotEmpty) {
+        bool startsWithSig(List<int> sig) {
+          if (head.length < sig.length) return false;
+          for (var i = 0; i < sig.length; i++) {
+            if (head[i] != sig[i]) return false;
+          }
+          return true;
+        }
+
+        // Imagens
+        if (startsWithSig([0x89, 0x50, 0x4E, 0x47])) return ('Imagem', Icons.photo); // PNG
+        if (startsWithSig([0xFF, 0xD8, 0xFF]))       return ('Imagem', Icons.photo); // JPEG
+        if (String.fromCharCodes(head).startsWith('GIF8')) return ('Imagem', Icons.photo); // GIF
+        final ascii = String.fromCharCodes(head);
+        if (ascii.startsWith('RIFF') && ascii.contains('WEBP')) return ('Figurinha', Icons.emoji_emotions);
+
+        // Áudio: OGG/OPUS, MP3
+        if (ascii.startsWith('OggS')) return ('Áudio', Icons.audiotrack);
+        if (ascii.startsWith('ID3'))  return ('Áudio', Icons.audiotrack);
+
+        // Contêiner ISO-BMFF (mp4/mov/m4a) – tem 'ftyp'
+        final ftypAt = ascii.indexOf('ftyp');
+        if (ftypAt >= 0 && head.length >= ftypAt + 8) {
+          // major_brand são os 4 bytes após 'ftyp'
+          final mbStart = ftypAt + 4;
+          final mbEnd   = mbStart + 4;
+          final majorBrand = String.fromCharCodes(head.sublist(mbStart, mbEnd));
+
+          // Heurísticas:
+          //  - Marcas de áudio puro
+          if (majorBrand.startsWith('M4A') || majorBrand.startsWith('M4B')) {
+            return ('Áudio', Icons.audiotrack);
+          }
+
+          //  - Codecs encontrados no cabeçalho
+          final lower = ascii.toLowerCase();
+          const audioHints = ['mp4a', 'alac', 'ac-3', 'ec-3'];
+          const videoHints = ['avc1', 'hvc1', 'hev1', 'vp09', 'av01', 'mp4v', 'encv'];
+
+          final hasAudioHint = audioHints.any(lower.contains);
+          final hasVideoHint = videoHints.any(lower.contains);
+
+          if (hasAudioHint && !hasVideoHint) return ('Áudio', Icons.audiotrack);
+          if (hasVideoHint && !hasAudioHint) return ('Vídeo', Icons.videocam);
+
+          // Sem pista clara → assume ÁUDIO para evitar falso “Vídeo”
+          return ('Áudio', Icons.audiotrack);
+        }
+      }
+    }
+
+    return null;
   }
 
   Future<void> _refreshPhotosSilently() async {
@@ -141,77 +249,75 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
   }
 
   Future<void> _loadIds() async {
-    /* ----------------------------------------------------------------- */
-    /* 1. Lê o doc do usuário em segurança                                */
-    /* ----------------------------------------------------------------- */
-    final uid  = FirebaseAuth.instance.currentUser!.uid;
-    final snap = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .get();
+    final uid = FirebaseAuth.instance.currentUser!.uid;
 
-    final data = snap.data() as Map<String, dynamic>? ?? {};
+    final usersRef = FirebaseFirestore.instance.collection('users').doc(uid);
+    final empresasRef = FirebaseFirestore.instance.collection('empresas').doc(uid);
 
-    _companyId = (data['createdBy'] as String?)?.isNotEmpty == true
-        ? data['createdBy'] as String          // colaborador ⇒ herda empresa
-        : uid;                                 // owner ⇒ sua própria empresa
+    // Lê doc de users/{uid} apenas para saber se É colaborador (createdBy)
+    final userSnap = await usersRef.get();
+    final Map<String, dynamic> userData =
+        (userSnap.data() as Map<String, dynamic>?) ?? {};
+    final String? createdBy = (userData['createdBy'] as String?)?.trim();
 
-    _phoneId   = data['defaultPhoneId'] as String?;
+    // ✔️ Colaborador SÓ se tem createdBy não-vazio
+    final bool isCollaborator = createdBy != null && createdBy.isNotEmpty;
 
-    /* ----------------------------------------------------------------- */
-    /* 2. Se o usuário ainda não definiu um número, pegar o 1º da empresa */
-    /* ----------------------------------------------------------------- */
+    // companyId: colaborador herda createdBy; dono usa o próprio uid
+    _companyId = isCollaborator ? createdBy : uid;
+
+    // Tenta carregar o defaultPhoneId do lugar correto (sem escrever nada)
+    if (isCollaborator) {
+      _phoneId = userData['defaultPhoneId'] as String?;
+    } else {
+      final empSnap = await empresasRef.get();
+      _phoneId = (empSnap.data()?['defaultPhoneId'] as String?);
+    }
+
+    // Se não tiver defaultPhoneId, pega o primeiro phone da empresa (APENAS EM MEMÓRIA)
     if (_phoneId == null) {
       final phonesCol = FirebaseFirestore.instance
-          .collection('empresas')
-          .doc(_companyId)
-          .collection('phones');
+          .collection('empresas').doc(_companyId).collection('phones');
 
       final q = await phonesCol.limit(1).get();
       if (q.docs.isNotEmpty) {
         _phoneId = q.docs.first.id;
-
-        // 🚩 opcional – grave o phoneId no usuário para não repetir a busca
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .set({'defaultPhoneId': _phoneId}, SetOptions(merge: true));
+        // ⚠️ Não persiste nada aqui. Esta tela é estritamente read-only.
       }
     }
+
+    // ❌ Não delete users/{uid} aqui. Se alguma Function “repõe” esse doc,
+    //    deletar pode ser justamente o gatilho de recriação.
+    // if (!isCollaborator && userSnap.exists) { await usersRef.delete(); }  ← REMOVIDO
 
     if (_phoneId == null) {
       if (mounted) setState(() => _noPhone = true);
       return;
     }
 
+    // Dispara refresh e listeners (também não escrevem em users/)
     if (_companyId != null && _phoneId != null) {
-      _refreshPhotosSilently();     // ← dispara já na 1ª abertura
+      _refreshPhotosSilently();
     }
 
     _tagSub?.cancel();
     _tagSub = FirebaseFirestore.instance
         .collection('empresas').doc(_companyId)
-        .collection('tags')
-        .orderBy('name')
+        .collection('tags').orderBy('name')
         .snapshots()
         .listen((qs) {
       if (!mounted) return;
-
-      // 1º: atualiza o mapa (isso sim dentro do setState)
       setState(() {
         _tagMap
           ..clear()
           ..addEntries(qs.docs.map((d) => MapEntry(
-            d.id,
-            TagItem(d['name'] ?? '', Color(d['color'] ?? 0xFF9E9E9E)),
+            d.id, TagItem(d['name'] ?? '', Color(d['color'] ?? 0xFF9E9E9E)),
           )));
       });
-
-      // 2º: dispara refresh fora do setState
       _refreshPhotosSilently();
     });
 
-    if (mounted) setState(() {});     // força rebuild inicial
+    if (mounted) setState(() {});
   }
 
   // 3) construir o número limpo
@@ -272,6 +378,27 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
     );
   }
 
+  Widget _actionIcon({
+    required IconData icon,
+    required VoidCallback onPressed,
+    Color? color,
+    String? tooltip,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    return IconButton(
+      icon: Icon(icon, color: color ?? cs.onSecondary),
+      tooltip: tooltip,
+      splashRadius: 22,
+      visualDensity: VisualDensity.compact,      // <<< compacto
+      padding: EdgeInsets.zero,                  // <<< sem folga extra
+      constraints: const BoxConstraints(         // <<< reduz a largura padrão (48)
+        minWidth: 40,
+        minHeight: 40,
+      ),
+      onPressed: onPressed,
+    );
+  }
+
   Widget _avatar(String contactPhoto, String name, ColorScheme cs) {
     final avatarKey = ValueKey(contactPhoto);
 
@@ -305,10 +432,6 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
     );
   }
 
-
-  // ---------------------------------------------------------------------------
-  // ITEM DE LISTA
-  // ---------------------------------------------------------------------------
   // ===================== ITEM DA LISTA DE CHATS =====================
   Widget _buildChatItem(
       BuildContext context, {
@@ -327,18 +450,21 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
     late final Widget lastLine;
     if (mediaInfo != null) {
       final (label, icon) = mediaInfo;
+      // onde você monta o `lastLine` quando é mídia:
       lastLine = Row(
         children: [
-          Icon(icon,
-              size: 14,
-              color: theme.colorScheme.onSecondary.withOpacity(.7)),
+          Icon(icon, size: 14, color: theme.colorScheme.onSecondary.withOpacity(.7)),
           const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: theme.colorScheme.onSecondary.withOpacity(.7),
+          Flexible( // <<< impede overflow
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.onSecondary.withOpacity(.7),
+              ),
             ),
           ),
         ],
@@ -740,18 +866,18 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
         child: Column(
           children: [
             // ------------ LINHA DE ABAS ------------
+            // ------------ LINHA DE ABAS ------------
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: StreamBuilder<QuerySnapshot>(
-                // agora sem filtro – recebemos todos
                 stream: FirebaseFirestore.instance
-                    .collection('empresas').doc(_companyId).collection('phones').doc(_phoneId).collection('whatsappChats')
+                    .collection('empresas').doc(_companyId)
+                    .collection('phones').doc(_phoneId)
+                    .collection('whatsappChats')
                     .snapshots(),
                 builder: (context, snap) {
                   int novosCount = 0;
-
                   if (snap.hasData) {
-                    // conta chats cujo 'opened' NÃO é true (false ou inexistente)
                     novosCount = snap.data!.docs.where((d) {
                       final map = d.data() as Map<String, dynamic>;
                       return (map['opened'] as bool?) != true;
@@ -760,14 +886,51 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
 
                   return Row(
                     children: [
-                      _buildTab('Novos', ChatTab.novos, badge: novosCount),
+                      // Abas – rolam se faltar espaço
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          physics: const BouncingScrollPhysics(),
+                          child: Row(
+                            children: [
+                              _buildTab('Novos', ChatTab.novos, badge: novosCount),
+                              const SizedBox(width: 8),
+                              _buildTab('Atendendo', ChatTab.atendendo),
+                            ],
+                          ),
+                        ),
+                      ),
                       const SizedBox(width: 8),
-                      _buildTab('Atendendo', ChatTab.atendendo),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.archive_outlined),
-                        color: Theme.of(context).colorScheme.onSecondary,
-                        onPressed: () {},
+
+                      // Ações – botões compactos
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _actionIcon(
+                            icon: _showArchived ? Icons.archive : Icons.archive_outlined,
+                            color: _showArchived
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.onSecondary,
+                            tooltip: _showArchived ? 'Mostrar em andamento' : 'Mostrar concluídos',
+                            onPressed: () => setState(() => _showArchived = !_showArchived),
+                          ),
+                          _actionIcon(
+                            icon: _filterTags.isEmpty ? Icons.filter_alt_outlined : Icons.filter_alt,
+                            onPressed: _openFilterSheet,
+                          ),
+                          _actionIcon(
+                            icon: Icons.swap_vert,
+                            onPressed: _openSortSheet,
+                          ),
+                          _actionIcon(
+                            icon: _showUnreadOnly ? Icons.filter_list : Icons.filter_list_outlined,
+                            color: _showUnreadOnly
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.onSecondary,
+                            tooltip: 'Somente não lidas',
+                            onPressed: () => setState(() => _showUnreadOnly = !_showUnreadOnly),
+                          ),
+                        ],
                       ),
                     ],
                   );
@@ -798,7 +961,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                             child: TextField(
                               onChanged: (v) =>
                                   setState(() => _searchTerm = v.trim().toLowerCase()),
-                              textAlign: TextAlign.center,
+                              textAlign: TextAlign.start,
                               decoration: InputDecoration(
                                 hintText: 'Buscar atendimento',
                                 hintStyle: TextStyle(
@@ -815,34 +978,6 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                         ],
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: Icon(
-                      _filterTags.isEmpty
-                          ? Icons.filter_alt_outlined
-                          : Icons.filter_alt,          // ícone cheio se houver filtro
-                    ),
-                    color: theme.colorScheme.onSecondary,  // destaque
-                    splashRadius: 22,
-                    onPressed: _openFilterSheet,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.swap_vert),
-                    color: theme.colorScheme.onSecondary,
-                    splashRadius: 22,
-                    onPressed: _openSortSheet,   // ← troque para chamar o novo método
-                  ),
-                  IconButton(
-                    icon: Icon(
-                      _showUnreadOnly ? Icons.filter_list : Icons.filter_list_outlined,
-                    ),
-                    color: _showUnreadOnly
-                        ? theme.colorScheme.primary     // destaque quando ON
-                        : theme.colorScheme.onSecondary,
-                    splashRadius: 22,
-                    tooltip: 'Somente não lidas',
-                    onPressed: () => setState(() => _showUnreadOnly = !_showUnreadOnly),
                   ),
                 ],
               ),
@@ -865,52 +1000,71 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
 
                   bool _isOpened(QueryDocumentSnapshot d) {
                     final map = d.data() as Map<String, dynamic>;
-                    return (map['opened'] as bool?) ?? false;   // se não existir ⇒ false
+                    return (map['opened'] as bool?) ?? false;
                   }
 
-                  // filtragem por aba
-                  if (_currentTab == ChatTab.novos) {
-                    docs = docs.where((d) => !_isOpened(d)).toList();
-                  } else {
-                    docs = docs.where(_isOpened).toList(); // Atendendo
+// ----- filtro por ABA (só quando NÃO estamos vendo arquivados) -----
+                  if (!_showArchived) {
+                    if (_currentTab == ChatTab.novos) {
+                      docs = docs.where((d) => !_isOpened(d)).toList();
+                    } else {
+                      docs = docs.where(_isOpened).toList(); // Atendendo
+                    }
                   }
 
-                  // filtro por texto
+// ----- filtro por texto -----
                   docs = docs.where((d) {
-                    final name =
-                    (d['name'] as String? ?? '').toLowerCase();
+                    final name = (d['name'] as String? ?? '').toLowerCase();
                     return name.contains(_searchTerm);
                   }).toList();
 
+// ----- filtro por etiquetas -----
                   if (_filterTags.isNotEmpty) {
                     docs = docs.where((d) {
-                      final map      = d.data() as Map<String, dynamic>;
-                      final tagList  = (map['tags'] as List?)?.cast<String>() ?? const [];
-                      return tagList.any(_filterTags.contains);     // pelo menos 1 tag bate
+                      final map     = d.data() as Map<String, dynamic>;
+                      final tagList = (map['tags'] as List?)?.cast<String>() ?? const [];
+                      return tagList.any(_filterTags.contains);
                     }).toList();
                   }
 
-                  // — filtro “somente não-lidas” —
+// ----- filtro “somente não-lidas” -----
                   if (_showUnreadOnly) {
+                    docs = docs.where((d) => ((d['unreadCount'] as int?) ?? 0) > 0).toList();
+                  }
+
+// ----- filtro por STATUS (aqui entra o “arquivo”) -----
+                  if (_showArchived) {
+                    // mostrar APENAS concluídos
                     docs = docs.where((d) {
-                      final unread = (d['unreadCount'] as int?) ?? 0;
-                      return unread > 0;
+                      final st = d['status'] as String? ?? '';
+                      return st == 'concluido_com_venda' || st == 'recusado';
+                    }).toList();
+                  } else {
+                    // esconder concluídos
+                    docs = docs.where((d) {
+                      final st = d['status'] as String? ?? 'novo';
+                      return st != 'concluido' &&
+                          st != 'concluido_com_venda' &&
+                          st != 'recusado';
                     }).toList();
                   }
 
-                  docs = docs.where((d) {
-                    final status = d['status'] as String? ?? 'novo';
-                    return status != 'concluido' &&
-                        status != 'concluido_com_venda' &&
-                        status != 'recusado';
-                  }).toList();
-
+// ----- vazio -----
                   if (docs.isEmpty) {
+                    final msg = _showArchived
+                        ? 'Não há conversas concluídas'
+                        : (_currentTab == ChatTab.novos
+                        ? 'Não há novos atendimentos'
+                        : 'Nenhum atendimento em andamento');
+
                     return Center(
                       child: Text(
-                        'Não há novos atendimentos',
+                        msg,
                         style: TextStyle(
-                            color: theme.colorScheme.onSecondary, fontSize: 16, fontWeight: FontWeight.w600),
+                          color: theme.colorScheme.onSecondary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     );
                   }
@@ -1037,21 +1191,20 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                   const SizedBox(width: 8),
 
                   // ---------- Botão "Conversar" ----------
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: theme.colorScheme.primary,
-                      foregroundColor: Colors.white,                         // texto branco
-                      padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                    ),
-                    onPressed: _startConversation,
-                    child: const Text(
-                      'Conversar',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                      onPressed: _startConversation,
+                      child: const Text('Conversar',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                      ),
                     ),
                   ),
                 ],

@@ -32,19 +32,53 @@ class _AtendimentosTabState extends State<AtendimentosTab> {
   }
 
   /* ───────────────────────── utilidades ───────────────────────────── */
-  Future<(String companyId, String phoneId)> _getIds() async {
-    final uid   = FirebaseAuth.instance.currentUser!.uid;
-    final usnap = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .get();
+  /// Resolve companyId/phoneId para user OU empresa.
+  /// Retorna (companyId, phoneId) onde phoneId pode ser null.
+  Future<(String companyId, String? phoneId)> _resolvePhoneCtx() async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final fs  = FirebaseFirestore.instance;
 
-    final data  = usnap.data() as Map<String, dynamic>? ?? {};
-    final companyId = (data['createdBy'] as String?)?.isNotEmpty == true
-        ? data['createdBy'] as String
-        : uid;
+    String companyId = uid;
+    String? phoneId;
 
-    final phoneId   = data['defaultPhoneId'] as String;
+    // 1) tenta users/{uid}
+    final uSnap = await fs.collection('users').doc(uid).get();
+    if (uSnap.exists) {
+      final u = uSnap.data() ?? {};
+      companyId =
+      (u['createdBy'] as String?)?.isNotEmpty == true ? u['createdBy'] as String : uid;
+      phoneId = u['defaultPhoneId'] as String?;
+    }
+
+    // 2) tenta empresas/{companyId}.defaultPhoneId
+    if (phoneId == null) {
+      final eSnap = await fs.collection('empresas').doc(companyId).get();
+      if (eSnap.exists) {
+        phoneId = eSnap.data()?['defaultPhoneId'] as String?;
+      }
+    }
+
+    // 3) pega o primeiro doc em empresas/{companyId}/phones e persiste como default
+    if (phoneId == null) {
+      final ph = await fs
+          .collection('empresas').doc(companyId)
+          .collection('phones')
+          .limit(1)
+          .get();
+
+      if (ph.docs.isNotEmpty) {
+        phoneId = ph.docs.first.id;
+
+        if (uSnap.exists) {
+          await fs.collection('users').doc(uid)
+              .set({'defaultPhoneId': phoneId}, SetOptions(merge: true));
+        } else {
+          await fs.collection('empresas').doc(companyId)
+              .set({'defaultPhoneId': phoneId}, SetOptions(merge: true));
+        }
+      }
+    }
+
     return (companyId, phoneId);
   }
 
@@ -84,36 +118,38 @@ class _AtendimentosTabState extends State<AtendimentosTab> {
 
   /* ───────────── stream de estatísticas (tempo real) ─────────────── */
   /* ───────── mesma lógica do QualityCard, mas lendo `history` ───────── */
-  Stream<_RankStats> _statsStream() async* {
-    final (companyId, phoneId) = await _getIds();
+  Stream<_RankStats> _statsStream(String companyId, String phoneId) async* {
     final endExclusive = DateTime(_to.year, _to.month, _to.day + 1);
 
+    // ATENÇÃO: esta query só funciona se cada doc em `history`
+    // tiver os campos `empresaId` e `phoneId`.
     final history$ = FirebaseFirestore.instance
         .collectionGroup('history')
         .where('empresaId', isEqualTo: companyId)
         .where('phoneId',   isEqualTo: phoneId)
         .where('changedAt', isGreaterThanOrEqualTo: _from)
-        .where('changedAt', isLessThan: endExclusive)       //  ⬅️ aqui
+        .where('changedAt', isLessThan: endExclusive)
         .where('status', whereIn: ['concluido_com_venda', 'recusado'])
-        .snapshots();                                // UMA query, UM índice
+        .snapshots();
 
     await for (final qs in history$) {
       final Map<String, int> productCount = {};
       final Map<String, int> reasonCount  = {};
-      int    totalWon  = 0;
-      int    totalLost = 0;
-      double sumSale   = 0.0;
+      var totalWon  = 0;
+      var totalLost = 0;
+      var sumSale   = 0.0;
 
       for (final d in qs.docs) {
         final data   = d.data() as Map<String, dynamic>;
-        final status = data['status'] as String;
+        final status = data['status'] as String? ?? '';
 
         if (status == 'concluido_com_venda') {
           totalWon++;
           final prod = (data['productName'] ?? '—') as String;
           productCount.update(prod, (v) => v + 1, ifAbsent: () => 1);
-          sumSale += (data['saleValue'] ?? 0).toDouble();
-        } else {
+          final dynamic v = data['saleValue'];
+          sumSale += (v is num) ? v.toDouble() : 0.0;
+        } else if (status == 'recusado') {
           totalLost++;
           final reason = (data['noSaleReason'] ?? '—') as String;
           reasonCount.update(reason, (v) => v + 1, ifAbsent: () => 1);
@@ -366,45 +402,58 @@ class _AtendimentosTabState extends State<AtendimentosTab> {
 
           /* stream de dados --------------------------------------------------- */
           Expanded(
-            child: StreamBuilder<_RankStats>(
-              stream: _statsStream(),
-              builder: (_, snap) {
-                if (snap.hasError) {
-                  return Center(
-                    child: Text(
-                      'Erro Firestore:\n${snap.error}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  );
-                }
-                if (!snap.hasData) {
+            child: FutureBuilder<(String, String?)>(
+              future: _resolvePhoneCtx(),
+              builder: (_, idSnap) {
+                if (!idSnap.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
+                final (companyId, phoneId) = idSnap.data!;
+                if (phoneId == null) {
+                  return Center(
+                    child: Text('Nenhum número configurado.', style: TextStyle(color: cs.onBackground)),
+                  );
+                }
 
-                final stats = snap.data!;
+                return StreamBuilder<_RankStats>(
+                  stream: _statsStream(companyId, phoneId),
+                  builder: (_, snap) {
+                    if (snap.hasError) {
+                      return Center(
+                        child: Text(
+                          'Erro Firestore:\n${snap.error}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      );
+                    }
+                    if (!snap.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                /* layout responsivo – scroll vertical único */
-                return SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment
-                        .stretch,
-                    children: [
-                      _rankingCard(
-                        titleText : 'Objetivos atingidos',
-                        total     : stats.wonTotal,
-                        items     : stats.productCount,
-                        somatorio : stats.sumSale,
+                    final stats = snap.data!;
+                    // ... mantém o restante da UI exatamente como está ...
+                    return SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _rankingCard(
+                            titleText : 'Objetivos atingidos',
+                            total     : stats.wonTotal,
+                            items     : stats.productCount,
+                            somatorio : stats.sumSale,
+                          ),
+                          const SizedBox(height: 20),
+                          _rankingCard(
+                            titleText : 'Objetivos perdidos',
+                            total     : stats.lostTotal,
+                            items     : stats.reasonCount,
+                          ),
+                          const SizedBox(height: 20),
+                        ],
                       ),
-                      const SizedBox(height: 20),
-                      _rankingCard(
-                        titleText : 'Objetivos perdidos',
-                        total     : stats.lostTotal,
-                        items     : stats.reasonCount,
-                      ),
-                      const SizedBox(height: 20),
-                    ],
-                  ),
+                    );
+                  },
                 );
               },
             ),

@@ -24,6 +24,14 @@ class _ManageCompaniesState extends State<ManageCompanies> {
   ScrollController _scrollController = ScrollController();
   double _scrollOffset = 0.0;
 
+  bool _getRight(Map<String, dynamic>? data, String key) {
+    if (data == null) return false;
+    if (data[key] == true) return true; // campo “flat” na raiz do doc
+    final ar = data['accessRights'];
+    if (ar is Map<String, dynamic> && ar[key] == true) return true; // dentro de accessRights
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -92,26 +100,25 @@ class _ManageCompaniesState extends State<ManageCompanies> {
   }
 
   void _updatePermissions(DocumentSnapshot<Map<String, dynamic>> userDoc) {
-    final userData = userDoc.data();
+    final data = userDoc.data();
     if (!mounted) return;
 
     setState(() {
-      hasGerenciarParceirosAccess = userData?['gerenciarParceiros'] ?? false;
+      hasGerenciarParceirosAccess =
+          _getRight(data, 'gerenciarParceiros'); // <- agora lê raiz OU accessRights
       isLoading = false;
     });
 
     if (!hasGerenciarParceirosAccess) {
       if (!_hasShownPermissionRevokedDialog) {
         _hasShownPermissionRevokedDialog = true;
-
         WidgetsBinding.instance.addPostFrameCallback((_) async {
           if (!mounted) return;
-
           await showModalBottomSheet(
             context: context,
             shape: RoundedRectangleBorder(
               side: BorderSide(color: Theme.of(context).primaryColor),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20.0)),
             ),
             builder: (BuildContext context) {
               return Container(
@@ -497,15 +504,16 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                           final int countArtsValue   = asInt(data['countArtsValue']);
                           final int countVideosValue = asInt(data['countVideosValue']);
 
-                          final bool dashboard               = asBool(data['dashboard']);
-                          final bool leads                   = asBool(data['leads']);
-                          final bool gerenciarColaboradores  = asBool(data['gerenciarColaboradores']);
-                          final bool configurarDash          = asBool(data['configurarDash']);
-                          final bool criarCampanha           = asBool(data['criarCampanha']);
-                          final bool criarForm               = asBool(data['criarForm']);
-                          final bool copiarTelefones         = asBool(data['copiarTelefones']);
-                          final bool alterarSenha            = asBool(data['alterarSenha']);
-                          final bool executarAPIs            = asBool(data['executarAPIs']);
+                          final bool dashboard              = _getRight(data, 'dashboard');
+                          final bool leads                  = _getRight(data, 'leads');
+                          final bool gerenciarColaboradores = _getRight(data, 'gerenciarColaboradores');
+                          final bool configurarDash         = _getRight(data, 'configurarDash');
+                          final bool criarCampanha          = _getRight(data, 'criarCampanha');
+                          final bool criarForm              = _getRight(data, 'criarForm');
+                          final bool copiarTelefones        = _getRight(data, 'copiarTelefones');
+                          final bool alterarSenha           = _getRight(data, 'alterarSenha');
+                          final bool executarAPIs           = _getRight(data, 'executarAPIs');
+                          final bool gerenciarProdutos      = _getRight(data, 'gerenciarProdutos');
 
                           final String? photoUrl = data['photoUrl'] as String?;
 
@@ -570,6 +578,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                                             copiarTelefones: copiarTelefones,
                                             alterarSenha: alterarSenha,
                                             executarAPIs: executarAPIs,
+                                            gerenciarProdutos: gerenciarProdutos,
                                           ),
                                         );
                                       },
@@ -646,15 +655,16 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                       final int countArtsValue   = asInt(data['countArtsValue']);
                       final int countVideosValue = asInt(data['countVideosValue']);
 
-                      final bool dashboard               = asBool(data['dashboard']);
-                      final bool leads                   = asBool(data['leads']);
-                      final bool gerenciarColaboradores  = asBool(data['gerenciarColaboradores']);
-                      final bool configurarDash          = asBool(data['configurarDash']);
-                      final bool criarCampanha           = asBool(data['criarCampanha']);
-                      final bool criarForm               = asBool(data['criarForm']);
-                      final bool copiarTelefones         = asBool(data['copiarTelefones']);
-                      final bool alterarSenha            = asBool(data['alterarSenha']);
-                      final bool executarAPIs            = asBool(data['executarAPIs']);
+                      final bool dashboard              = _getRight(data, 'dashboard');
+                      final bool leads                  = _getRight(data, 'leads');
+                      final bool gerenciarColaboradores = _getRight(data, 'gerenciarColaboradores');
+                      final bool configurarDash         = _getRight(data, 'configurarDash');
+                      final bool criarCampanha          = _getRight(data, 'criarCampanha');
+                      final bool criarForm              = _getRight(data, 'criarForm');
+                      final bool copiarTelefones        = _getRight(data, 'copiarTelefones');
+                      final bool alterarSenha           = _getRight(data, 'alterarSenha');
+                      final bool executarAPIs           = _getRight(data, 'executarAPIs');
+                      final bool gerenciarProdutos      = _getRight(data, 'gerenciarProdutos');
 
                       final String? photoUrl = data['photoUrl'] as String?;
 
@@ -719,6 +729,7 @@ class _ManageCompaniesState extends State<ManageCompanies> {
                                         copiarTelefones: copiarTelefones,
                                         alterarSenha: alterarSenha,
                                         executarAPIs: executarAPIs,
+                                        gerenciarProdutos: gerenciarProdutos,
                                       ),
                                     );
                                   },

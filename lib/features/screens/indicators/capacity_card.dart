@@ -73,17 +73,52 @@ class _CapacityCardState extends State<CapacityCard> {
     setState(() {});
   }
 
-  /* ---------------------------------------------------------------- */
-  Future<(String companyId, String phoneId)> _getIds() async {
+  /// Resolve companyId/phoneId para user OU empresa
+  Future<(String companyId, String? phoneId)> _resolvePhoneCtx() async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
-    final usnap =
-    await FirebaseFirestore.instance.collection('users').doc(uid).get();
-    final udata = usnap.data() as Map<String, dynamic>? ?? {};
+    final fs = FirebaseFirestore.instance;
 
-    final companyId = (udata['createdBy'] as String?)?.isNotEmpty == true
-        ? udata['createdBy'] as String
-        : uid;
-    final phoneId = udata['defaultPhoneId'] as String;
+    String companyId = uid;
+    String? phoneId;
+
+    // tenta users/{uid}
+    final uSnap = await fs.collection('users').doc(uid).get();
+    if (uSnap.exists) {
+      final u = uSnap.data() ?? {};
+      companyId =
+      (u['createdBy'] as String?)?.isNotEmpty == true ? u['createdBy'] as String : uid;
+      phoneId = u['defaultPhoneId'] as String?;
+    }
+
+    // tenta empresas/{companyId}.defaultPhoneId
+    if (phoneId == null) {
+      final eSnap = await fs.collection('empresas').doc(companyId).get();
+      if (eSnap.exists) {
+        phoneId = eSnap.data()?['defaultPhoneId'] as String?;
+      }
+    }
+
+    // pega o primeiro de empresas/{companyId}/phones e persiste como default
+    if (phoneId == null) {
+      final ph = await fs
+          .collection('empresas').doc(companyId)
+          .collection('phones')
+          .limit(1)
+          .get();
+
+      if (ph.docs.isNotEmpty) {
+        phoneId = ph.docs.first.id;
+
+        if (uSnap.exists) {
+          await fs.collection('users').doc(uid)
+              .set({'defaultPhoneId': phoneId}, SetOptions(merge: true));
+        } else {
+          await fs.collection('empresas').doc(companyId)
+              .set({'defaultPhoneId': phoneId}, SetOptions(merge: true));
+        }
+      }
+    }
+
     return (companyId, phoneId);
   }
 
@@ -107,18 +142,24 @@ class _CapacityCardState extends State<CapacityCard> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    return FutureBuilder(
-      future: _getIds(),
+    return FutureBuilder<(String, String?)>(
+      future: _resolvePhoneCtx(),
       builder: (context, idsSnap) {
-        if (!idsSnap.hasData) return const Center(child: CircularProgressIndicator());
+        if (!idsSnap.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
         final (companyId, phoneId) = idsSnap.data!;
+        if (phoneId == null) {
+          return Center(
+            child: Text('Nenhum número configurado.', style: TextStyle(color: cs.onBackground)),
+          );
+        }
 
         return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
-              .collection('empresas')
-              .doc(companyId)
-              .collection('phones')
-              .doc(phoneId)
+              .collection('empresas').doc(companyId)
+              .collection('phones').doc(phoneId)
               .collection('whatsappChats')
               .snapshots(),
           builder: (context, chatSnap) {
