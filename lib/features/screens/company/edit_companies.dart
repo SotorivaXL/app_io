@@ -145,7 +145,7 @@ class _EditCompaniesState extends State<EditCompanies> {
     'modConfig': true,
     'modIndicadores': true,
     'modPainel': true,
-    'modRelatorios': false,
+    'modRelatorios': true,
   };
 
   bool _isChangingPassword = false;

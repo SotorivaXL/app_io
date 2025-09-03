@@ -106,6 +106,11 @@ class _ReportsPageState extends State<ReportsPage> {
     _initIds();
   }
 
+  void _setStateSafe(VoidCallback fn) {
+    if (!mounted) return;
+    setState(fn);
+  }
+
   Future<(String companyId, String? phoneId)> _resolvePhoneCtx() async {
     final fs  = FirebaseFirestore.instance;
     final uid = FirebaseAuth.instance.currentUser!.uid;
@@ -566,10 +571,13 @@ class _ReportsPageState extends State<ReportsPage> {
     _companyId = companyId;
     _phoneId   = phoneId ?? '';
 
-    setState(() => _ready = _phoneId.isNotEmpty);
+    if (!mounted) return;
+    _setStateSafe(() => _ready = _phoneId.isNotEmpty);
 
+    if (!mounted) return;
     if (_ready) {
-      await _loadAttendants(); // já inclui a empresa no filtro
+      await _loadAttendants();
+      if (!mounted) return;
       await _loadTags();
     }
   }
@@ -606,14 +614,10 @@ class _ReportsPageState extends State<ReportsPage> {
 
     final label = '${DateFormat('dd/MM').format(range.start)} – '
         '${DateFormat('dd/MM').format(range.end)}';
-    final newFilter = ActiveFilter(
-      'Data de criação',
-      'arrivalAt',
-      range,
-      label,
-    );
+    final newFilter = ActiveFilter('Data de criação', 'arrivalAt', range, label);
 
-    setState(() {
+    if (!mounted) return;
+    _setStateSafe(() {
       if (filter != null) {
         final idx = _activeFilters.indexOf(filter);
         _activeFilters[idx] = newFilter;
@@ -627,7 +631,6 @@ class _ReportsPageState extends State<ReportsPage> {
   Future<void> _loadAttendants() async {
     final fs = FirebaseFirestore.instance;
 
-    // colaboradores (users criados pela empresa)
     final qs = await fs
         .collection('users')
         .where('createdBy', isEqualTo: _companyId)
@@ -639,7 +642,6 @@ class _ReportsPageState extends State<ReportsPage> {
       return {'id': d.id, 'name': name};
     }).toList();
 
-    // empresa como "atendente" para filtro
     String companyLabel = 'Empresa';
     final eSnap = await fs.collection('empresas').doc(_companyId).get();
     if (eSnap.exists) {
@@ -652,17 +654,16 @@ class _ReportsPageState extends State<ReportsPage> {
           'Empresa') as String;
     }
 
-    // coloca a empresa no topo (sem duplicar se já houver usuário com mesmo id)
     final already = list.any((u) => u['id'] == _companyId);
     if (!already) {
       list.insert(0, {'id': _companyId, 'name': companyLabel});
     } else {
-      // se existir user com id==companyId, padroniza o nome para o NomeEmpresa
       final idx = list.indexWhere((u) => u['id'] == _companyId);
       list[idx] = {'id': _companyId, 'name': companyLabel};
     }
 
-    setState(() {
+    if (!mounted) return;
+    _setStateSafe(() {
       _attendants = list;
     });
   }
@@ -676,10 +677,10 @@ class _ReportsPageState extends State<ReportsPage> {
         .collection('tags')
         .get();
 
-    setState(() {
+    if (!mounted) return;
+    _setStateSafe(() {
       _tags = snap.docs
-          .map((d) =>
-              {'id': d.id, 'name': (d.data()['name'] as String?) ?? 'Sem nome'})
+          .map((d) => {'id': d.id, 'name': (d.data()['name'] as String?) ?? 'Sem nome'})
           .toList();
     });
   }
@@ -809,7 +810,6 @@ class _ReportsPageState extends State<ReportsPage> {
 
     if (selected == null) return;
 
-    /* ---------- cria/atualiza o filtro escolhido ---------- */
     ActiveFilter newFilter;
     if (type == 'Status') {
       newFilter = ActiveFilter(type, 'status', selected, selected);
@@ -821,7 +821,8 @@ class _ReportsPageState extends State<ReportsPage> {
       newFilter = ActiveFilter(type, 'tags', selected, name);
     }
 
-    setState(() {
+    if (!mounted) return;
+    _setStateSafe(() {
       if (filter != null) {
         final idx = _activeFilters.indexOf(filter);
         _activeFilters[idx] = newFilter;

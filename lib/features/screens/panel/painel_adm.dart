@@ -13,7 +13,7 @@ import 'package:app_io/util/services/firestore_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import '../products/manage_products.dart';
 import '../requests/request_metting.dart';
 
@@ -96,6 +96,79 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         isLoading = false;
       });
     }
+  }
+
+  void _showLogoutConfirmationDialog() {
+    showModalBottomSheet(
+      context: context,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: Theme.of(context).primaryColor, width: 2),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(25.0)),
+      ),
+      backgroundColor: Theme.of(context).colorScheme.background,
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Confirmar Logout',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                  color: Theme.of(context).colorScheme.onSecondary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Tem certeza que deseja sair?',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 16,
+                  color: Theme.of(context).colorScheme.onSecondary,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(
+                      'Cancelar',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSecondary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton(
+                    onPressed: () async {
+                      // Mesmo fluxo da SettingsPage, usando o Provider do app
+                      await Provider.of<AuthProvider>(context, listen: false).signOut();
+                      if (!mounted) return;
+                      Navigator.of(context).pushReplacementNamed('/login');
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                    ),
+                    child: Text(
+                      'Sair',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   void _listenToUserDocument(String collectionName, String userId) {
@@ -449,6 +522,14 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                         onTap   : () => _navigateWithFade(context, const ManageProducts()),
                         isDesktop: isDesktop,
                       ),
+                    _buildCardOption(
+                      context,
+                      title: 'Sair da conta',
+                      subtitle: 'Encerrar sessão neste dispositivo',
+                      icon: Icons.exit_to_app,
+                      onTap: _showLogoutConfirmationDialog,
+                      isDesktop: false,
+                    ),
                     if (!hasGerenciarParceirosAccess &&
                         !hasGerenciarColaboradoresAccess &&
                         !hasConfigurarDashAccess &&
@@ -561,6 +642,14 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                       onTap   : () => _navigateWithFade(context, const ManageProducts()),
                       isDesktop: isDesktop,
                     ),
+                  _buildCardOption(
+                    context,
+                    title: 'Sair da conta',
+                    subtitle: 'Encerrar sessão neste dispositivo',
+                    icon: Icons.exit_to_app,
+                    onTap: _showLogoutConfirmationDialog,
+                    isDesktop: false,
+                  ),
                   if (!hasGerenciarParceirosAccess &&
                       !hasGerenciarColaboradoresAccess &&
                       !hasConfigurarDashAccess &&
