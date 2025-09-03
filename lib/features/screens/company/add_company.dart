@@ -54,7 +54,7 @@ const Map<String, bool> _kPermDefaults = {
   'modConfig'      : true,
   'modIndicadores' : true,
   'modPainel'      : true,
-  'modRelatorios'  : false,
+  'modRelatorios'  : true,
 };
 
 // Garante que todas as chaves existam como bool (sem arrays/map aninhado)

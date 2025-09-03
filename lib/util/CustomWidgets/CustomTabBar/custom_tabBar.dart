@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:app_io/features/screens/configurations/configurations.dart';
 import 'package:app_io/features/screens/reports/reports_page.dart';
 import 'package:app_io/features/screens/panel/painel_adm.dart';
 import 'package:app_io/util/CustomWidgets/BirthdayAnimationPopup/birthday_animation_popup.dart';
@@ -14,6 +13,23 @@ import 'package:flutter/rendering.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:app_io/features/screens/crm/whatsapp_chats.dart';
 import 'package:app_io/features/screens/indicators/dash_principal_reports.dart';
+import 'package:responsive_navigation_bar/responsive_navigation_bar.dart';
+
+class TabSpec {
+  final String label;
+  final IconData icon;
+  final Widget page;
+  final Type pageType;
+
+  const TabSpec({
+    required this.label,
+    required this.icon,
+    required this.page,
+    required this.pageType,
+  });
+}
+
+enum NavStyle { navy, flutterBricks }
 
 class CustomTabBarPage extends StatefulWidget {
   @override
@@ -24,26 +40,34 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     with TickerProviderStateMixin {
   late PageController _pageController;
   double _scrollOffset = 0.0;
+  static const _kTabDur = Duration(milliseconds: 800);
+  static const _kTabCurve = Curves.easeOutExpo;
 
-  List<Widget> _pages = [];
+  /// Agora usamos _tabs como fonte única de verdade para páginas/labels/ícones
+  List<TabSpec> _tabs = [];
   int _currentIndex = 0;
 
-// ====== MÓDULOS NA TABBAR (visibilidade das páginas) ======
-  bool canChats       = true;   // acesso ao módulo "Chats"
-  bool canIndicators  = true;   // acesso ao módulo "Indicadores"
-  bool canAdminPanel  = false;  // acesso ao módulo "Painel"
-  bool canConfig      = true;   // acesso à "Config." (recomendado manter true)
-  bool canReports     = false;  // (opcional) módulo "Relatórios"
+  // ====== MÓDULOS NA TABBAR (visibilidade das páginas) ======
+  bool canChats = true;
+  bool canIndicators = true;
+  bool canAdminPanel = false;
+  bool canConfig = true;
+  bool canReports = false;
 
-// ====== Permissões granulares DENTRO do Painel (mantidas) ======
-  bool canGerenciarParceiros      = false;
-  bool canGerenciarColaboradores  = false;
-  bool canConfigurarDash          = false;
-  bool canCriarForm               = false;
-  bool canCriarCampanha           = false;
+  // ====== Permissões granulares DENTRO do Painel ======
+  bool canGerenciarParceiros = false;
+  bool canGerenciarColaboradores = false;
+  bool canConfigurarDash = false;
+  bool canCriarForm = false;
+  bool canCriarCampanha = false;
 
   // Controle para expandir/recolher a barra lateral no desktop
   bool _isSidebarExpanded = true;
+
+  // Estilo de navegação atual (trocaremos para flutterBricks quando você enviar o exemplo)
+  NavStyle _navStyle = NavStyle.flutterBricks;
+
+  bool _initialPageSet = false; // garante que só setamos o inicial uma vez
 
   @override
   void initState() {
@@ -54,41 +78,49 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     _showTutorialIfFirstTime();
   }
 
-  Future<void> _showTutorialIfFirstTime() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    bool tutorialShown = prefs.getBool('tutorial_shown') ?? false;
+  void _ensureInitialOnChat(List<TabSpec> tabs) {
+    if (_initialPageSet) return;
 
-    if (!tutorialShown) {
-      WidgetsBinding.instance.addPostFrameCallback(
-            (_) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (BuildContext context) {
-              return TutorialPopup(
-                onComplete: () async {
-                  await prefs.setBool('tutorial_shown', true);
-                  Navigator.of(context).pop();
-                },
-              );
-            },
-          );
-        },
-      );
-    }
+    final chatIdx = tabs.indexWhere((t) => t.pageType == WhatsAppChats);
+    final targetIndex = chatIdx >= 0 ? chatIdx : 0;
+
+    // recria o controller já na página desejada
+    _pageController.dispose();
+    _pageController = PageController(initialPage: targetIndex);
+
+    _currentIndex = targetIndex;
+    _initialPageSet = true;
   }
 
-  int getPageIndexByType(Type pageType) {
-    return _pages.indexWhere((page) => page.runtimeType == pageType);
+  Future<void> _showTutorialIfFirstTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    final tutorialShown = prefs.getBool('tutorial_shown') ?? false;
+
+    if (!tutorialShown) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return TutorialPopup(
+              onComplete: () async {
+                await prefs.setBool('tutorial_shown', true);
+                if (mounted) Navigator.of(context).pop();
+              },
+            );
+          },
+        );
+      });
+    }
   }
 
   void _listenToPermissionsChanges() {
-    User? user = FirebaseAuth.instance.currentUser;
+    final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      print('Usuário não está autenticado');
+      debugPrint('Usuário não está autenticado');
       return;
     }
-    String userUid = user.uid;
+    final userUid = user.uid;
 
     FirebaseFirestore.instance
         .collection('users')
@@ -96,7 +128,6 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
         .snapshots()
         .listen((userDoc) {
       if (userDoc.exists) {
-        print('Documento encontrado na coleção users');
         _updatePermissions(userDoc);
       } else {
         FirebaseFirestore.instance
@@ -105,10 +136,9 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
             .snapshots()
             .listen((empresaDoc) {
           if (empresaDoc.exists) {
-            print('Documento encontrado na coleção empresas');
             _updatePermissions(empresaDoc);
           } else {
-            print('Documento não encontrado em users nem em empresas');
+            debugPrint('Documento não encontrado em users nem em empresas');
           }
         });
       }
@@ -119,66 +149,105 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     final data = (doc.data() as Map<String, dynamic>?) ?? {};
     debugPrint('Dados do usuário (perms): $data');
 
-    // 1) Lê permissões de MÓDULOS (defaults pensados p/ não quebrar nada)
-    final bool newCanChats      = (data['modChats'] ?? true) as bool;
+    final bool newCanChats = (data['modChats'] ?? true) as bool;
     final bool newCanIndicators = (data['modIndicadores'] ?? true) as bool;
     final bool newCanAdminPanel = (data['modPainel'] ?? false) as bool;
-    final bool newCanConfig     = (data['modConfig'] ?? true) as bool;
-    final bool newCanReports    = (data['modRelatorios'] ?? false) as bool; // opcional
+    final bool newCanConfig = (data['modConfig'] ?? true) as bool;
+    final bool newCanReports = (data['modRelatorios'] ?? false) as bool;
 
-    // 2) Lê permissões granulares do Painel (já existiam)
-    final bool newParceiros     = (data['gerenciarParceiros'] ?? false) as bool;
-    final bool newColabs        = (data['gerenciarColaboradores'] ?? false) as bool;
-    final bool newConfigDash    = (data['configurarDash'] ?? false) as bool;
-    final bool newCriarForm     = (data['criarForm'] ?? false) as bool;
-    final bool newCriarCamp     = (data['criarCampanha'] ?? false) as bool;
+    final bool newParceiros = (data['gerenciarParceiros'] ?? false) as bool;
+    final bool newColabs = (data['gerenciarColaboradores'] ?? false) as bool;
+    final bool newConfigDash = (data['configurarDash'] ?? false) as bool;
+    final bool newCriarForm = (data['criarForm'] ?? false) as bool;
+    final bool newCriarCamp = (data['criarCampanha'] ?? false) as bool;
 
-    // 3) Se nada mudou, não refaz UI
-    final nothingChanged =
-        canChats == newCanChats &&
-            canIndicators == newCanIndicators &&
-            canAdminPanel == newCanAdminPanel &&
-            canConfig == newCanConfig &&
-            canReports == newCanReports &&
-            canGerenciarParceiros == newParceiros &&
-            canGerenciarColaboradores == newColabs &&
-            canConfigurarDash == newConfigDash &&
-            canCriarForm == newCriarForm &&
-            canCriarCampanha == newCriarCamp;
+    final nothingChanged = canChats == newCanChats &&
+        canIndicators == newCanIndicators &&
+        canAdminPanel == newCanAdminPanel &&
+        canConfig == newCanConfig &&
+        canReports == newCanReports &&
+        canGerenciarParceiros == newParceiros &&
+        canGerenciarColaboradores == newColabs &&
+        canConfigurarDash == newConfigDash &&
+        canCriarForm == newCriarForm &&
+        canCriarCampanha == newCriarCamp;
 
     if (nothingChanged) return;
 
-    // 4) Monta as páginas NA ORDEM padronizada
-    final pages = <Widget>[];
-    if (newCanChats)      pages.add(const WhatsAppChats());
-    if (newCanIndicators) pages.add(const IndicatorsPage());
-    if (newCanAdminPanel) pages.add(AdminPanelPage());
-    if (newCanReports)    pages.add(ReportsPage()); // opcional
-    if (newCanConfig)     pages.add(SettingsPage());
+// Monta as abas posicionando "Chats" no MEIO e trocando ícone para casa
+    final List<TabSpec> tabs = [];
+
+    // 1) HOME/CHAT — sempre primeiro à esquerda
+    if ((data['modChats'] ?? true) as bool) {
+      tabs.add(const TabSpec(
+        label: 'Chat',
+        icon: Icons.home,
+        page: WhatsAppChats(),
+        pageType: WhatsAppChats,
+      ));
+    }
+
+    // 2) DEMAIS MÓDULOS (no meio)
+    if ((data['modIndicadores'] ?? true) as bool) {
+      tabs.add(const TabSpec(
+        label: 'Indicadores',
+        icon: Icons.bar_chart,
+        page: IndicatorsPage(),
+        pageType: IndicatorsPage,
+      ));
+    }
+    if ((data['modRelatorios'] ?? false) as bool) {
+      tabs.add(const TabSpec(
+        label: 'Relatórios',
+        icon: Icons.edit_document,
+        page: ReportsPage(),
+        pageType: ReportsPage,
+      ));
+    }
+
+    // 3) CONFIGURAÇÕES — sempre por último
+    if ((data['modPainel'] ?? false) as bool) {
+      tabs.add(TabSpec(
+        label: 'Configurações',
+        icon: Icons.settings,
+        page: AdminPanelPage(),
+        pageType: AdminPanelPage,
+      ));
+    }
 
     setState(() {
-      canChats      = newCanChats;
+      canChats = newCanChats;
       canIndicators = newCanIndicators;
       canAdminPanel = newCanAdminPanel;
-      canConfig     = newCanConfig;
-      canReports    = newCanReports;
+      canConfig = newCanConfig;
+      canReports = newCanReports;
 
-      canGerenciarParceiros     = newParceiros;
+      canGerenciarParceiros = newParceiros;
       canGerenciarColaboradores = newColabs;
-      canConfigurarDash         = newConfigDash;
-      canCriarForm              = newCriarForm;
-      canCriarCampanha          = newCriarCamp;
+      canConfigurarDash = newConfigDash;
+      canCriarForm = newCriarForm;
+      canCriarCampanha = newCriarCamp;
 
-      _pages = pages;
+      _tabs = tabs.isEmpty
+          ? [
+        TabSpec(
+          label: 'Configurações',
+          icon: Icons.settings,
+          page: AdminPanelPage(),
+          pageType: AdminPanelPage,
+        )
+      ]
+          : tabs;
 
-      if (_pages.isEmpty) {
-        // Evita PageView sem páginas
-        _pages = [SettingsPage()];
-      }
+      // GARANTE que a PRIMEIRA tela após login é o Chat (agora em index 0)
+      _ensureInitialOnChat(_tabs);
 
-      if (_currentIndex >= _pages.length) {
-        _currentIndex = _pages.length - 1;
-        _pageController.jumpToPage(_currentIndex);
+      // Proteção se o índice atual saiu do range após mudança de permissões
+      if (_currentIndex >= _tabs.length) {
+        _currentIndex = _tabs.length - 1;
+        if (_pageController.hasClients) {
+          _pageController.jumpToPage(_currentIndex);
+        }
       }
     });
   }
@@ -190,23 +259,14 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   }
 
   String _getTitle() {
-    if (_currentIndex >= _pages.length) return 'IO Connect';
-    final p = _pages[_currentIndex];
-    if (p is WhatsAppChats)   return 'Chat';
-    if (p is IndicatorsPage)  return 'Indicadores';
-    if (p is AdminPanelPage)  return 'Painel Administrativo';
-    if (p is ReportsPage)     return 'Relatórios';
-    if (p is SettingsPage)    return 'Configurações';
-    return 'IO Connect';
+    if (_currentIndex >= _tabs.length) return 'IO Connect';
+    return _tabs[_currentIndex].label;
   }
 
   String _getPrefix() {
-    if (_currentIndex < _pages.length) {
-      if (_pages[_currentIndex] is SettingsPage) {
-        return "Bem-vindo(a) às";
-      } else {
-        return "Bem-vindo(a) ao";
-      }
+    if (_currentIndex < _tabs.length &&
+        _tabs[_currentIndex].pageType == AdminPanelPage) {
+      return "Bem-vindo(a) às";
     }
     return "Bem-vindo(a) ao";
   }
@@ -223,7 +283,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     String? birthday;
 
     final userDoc =
-    await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
     if (userDoc.exists) {
       birthday = userDoc.data()?['birth'];
     } else {
@@ -238,18 +298,16 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
 
     if (birthday != null) {
       final today = DateTime.now();
-      final birthdayParts = birthday.split('-');
-      if (birthdayParts.length == 3) {
-        final birthDay = int.parse(birthdayParts[0]);
-        final birthMonth = int.parse(birthdayParts[1]);
+      final parts = birthday.split('-');
+      if (parts.length == 3) {
+        final birthDay = int.parse(parts[0]);
+        final birthMonth = int.parse(parts[1]);
 
         if (birthDay == today.day && birthMonth == today.month) {
           final prefs = await SharedPreferences.getInstance();
           final key =
-              'birthday_shown_$uid${today.toIso8601String()}';
-
+              'birthday_shown_${uid}_${today.year}-${today.month}-${today.day}';
           final shownToday = prefs.getBool(key) ?? false;
-
           if (!shownToday) {
             _showBirthdayPopup();
             await prefs.setBool(key, true);
@@ -274,147 +332,182 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
   @override
   Widget build(BuildContext context) {
     final bool isDesktop = MediaQuery.of(context).size.width > 1024;
-
-    // 1) Monte os itens UMA vez
-    final bottomItems = _buildBottomNavyBarItems();
-    final bool showBottomBar = !isDesktop && bottomItems.length >= 2 && bottomItems.length <= 5;
+    final bool showBottomBar =
+        !isDesktop && _tabs.length >= 2 && _tabs.length <= 5;
 
     return ConnectivityBanner(
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.background,
         appBar: isDesktop
-            ? null // Remove o AppBar no desktop
+            ? null
             : PreferredSize(
-          preferredSize: Size.fromHeight(
-              (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0)),
-          child: Opacity(
-            opacity: (1.0 - (_scrollOffset / 40)).clamp(0.0, 1.0),
-            child: AppBar(
-              toolbarHeight:
-              (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0),
-              title: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _getPrefix(),
-                        style: TextStyle(
-                          fontFamily: 'BrandingSF',
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSecondary,
+                preferredSize: Size.fromHeight(
+                    (100.0 - (_scrollOffset / 2)).clamp(56.0, 100.0)),
+                child: Opacity(
+                  opacity: (1.0 - (_scrollOffset / 40)).clamp(0.0, 1.0),
+                  child: AppBar(
+                    toolbarHeight:
+                        (100.0 - (_scrollOffset / 2)).clamp(56.0, 100.0),
+                    title: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _getPrefix(),
+                              style: TextStyle(
+                                fontFamily: 'BrandingSF',
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                                color:
+                                    Theme.of(context).colorScheme.onSecondary,
+                              ),
+                            ),
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 250),
+                              child: Text(
+                                _getTitle(),
+                                key: ValueKey<String>(_getTitle()),
+                                style: TextStyle(
+                                  fontFamily: 'BrandingSF',
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 30,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .surfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      Text(
-                        _getTitle(),
-                        key: ValueKey<String>(_getTitle()),
-                        style: TextStyle(
-                          fontFamily: 'BrandingSF',
-                          fontWeight: FontWeight.w700,
-                          fontSize: 30,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surfaceVariant,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
+                    centerTitle: false,
+                    automaticallyImplyLeading: false,
+                    backgroundColor: Theme.of(context).colorScheme.secondary,
+                    foregroundColor: Theme.of(context).colorScheme.outline,
                   ),
-                ],
+                ),
               ),
-              centerTitle: false,
-              automaticallyImplyLeading: false,
-              backgroundColor:
-              Theme.of(context).colorScheme.secondary,
-              foregroundColor:
-              Theme.of(context).colorScheme.outline,
-            ),
-          ),
-        ),
         body: Row(
           children: [
             if (isDesktop) _buildDesktopSidebar(),
             Expanded(
               child: NotificationListener<ScrollNotification>(
-                onNotification: (_) => false,
-                child: _pages.isEmpty
-                // 2) Evita PageView sem páginas antes das permissões chegarem
-                    ? const Center(child: CircularProgressIndicator())
-                    : PageView(
-                  controller: _pageController,
-                  onPageChanged: (index) {
-                    if (mounted) setState(() => _currentIndex = index);
+                  onNotification: (notification) {
+                    // Opcional: anime o AppBar se a página atual tiver scroll primário
+                    if (notification.metrics.axis == Axis.vertical) {
+                      setState(() {
+                        _scrollOffset = notification.metrics.pixels;
+                      });
+                    }
+                    return false;
                   },
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  children: _pages,
-                ),
-              ),
+                  child: _tabs.isEmpty
+                      ? const Center(child: CircularProgressIndicator())
+                      : PageView(
+                          controller: _pageController,
+                          onPageChanged: (index) {
+                            if (!mounted) return;
+                            setState(() => _currentIndex = index);
+                          },
+                          children: _tabs.map((t) => t.page).toList(),
+                        )),
             ),
           ],
         ),
-
-        // 3) Só mostra a bottom bar se houver 2–5 itens
         bottomNavigationBar: showBottomBar
             ? SafeArea(
-          child: Opacity(
-            opacity: (1.0 - (_scrollOffset / 40)).clamp(0.0, 1.0),
-            child: BottomNavyBar(
-              backgroundColor: Theme.of(context).colorScheme.secondary,
-              showInactiveTitle: false,
-              selectedIndex: _currentIndex.clamp(0, bottomItems.length - 1),
-              showElevation: true,
-              itemCornerRadius: 24,
-              iconSize: 25,
-              curve: Curves.easeIn,
-              onItemSelected: (index) {
-                if (!mounted) return;
-                setState(() => _currentIndex = index);
-                _pageController.jumpToPage(index);
-              },
-              items: bottomItems, // <- usa a lista já calculada
-            ),
-          ),
-        )
+                child: _buildBottomBar(),
+              )
             : null,
       ),
     );
   }
 
-  // Barra lateral para desktop
+  /// Sidebar desktop usando a mesma fonte de dados (_tabs)
   Widget _buildDesktopSidebar() {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       padding: _isSidebarExpanded
-          ? EdgeInsets.only(left: 15)
-          : EdgeInsets.zero, // Padding condicional
-      width: _isSidebarExpanded ? 300 : 80, // Largura da barra lateral
-      color: Theme.of(context).colorScheme.secondary,
+          ? const EdgeInsets.only(left: 15)
+          : EdgeInsets.zero,
+      width: _isSidebarExpanded ? 300 : 80,
+      color: cs.secondary,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        // Garante que os itens ocupem toda a largura
         children: [
-          // Botão para expandir/recolher a barra lateral
           IconButton(
             icon: Icon(
               _isSidebarExpanded ? Icons.chevron_left : Icons.chevron_right,
-              color: Theme.of(context).colorScheme.onSecondary,
+              color: cs.onSecondary,
             ),
-            onPressed: () {
-              setState(() {
-                _isSidebarExpanded = !_isSidebarExpanded;
-              });
-            },
+            onPressed: () =>
+                setState(() => _isSidebarExpanded = !_isSidebarExpanded),
           ),
-          // Espaçamento entre o botão e os ícones
-          SizedBox(height: 20),
-          // Ícones e nomes das páginas
+          const SizedBox(height: 20),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              // Garante que os itens ocupem toda a largura
-              children: _buildDesktopSidebarItems(),
+              children: List.generate(_tabs.length, (i) {
+                final tab = _tabs[i];
+                final bool isSelected = i == _currentIndex;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Tooltip(
+                    message: tab.label,
+                    child: InkWell(
+                      onTap: () {
+                        setState(() => _currentIndex = i);
+                        _pageController.jumpToPage(i);
+                      },
+                      child: Container(
+                        decoration: isSelected
+                            ? BoxDecoration(
+                                color: cs.primary,
+                                borderRadius:
+                                    const BorderRadius.all(Radius.circular(8)),
+                              )
+                            : null,
+                        padding: _isSidebarExpanded
+                            ? const EdgeInsets.symmetric(
+                                horizontal: 15, vertical: 20)
+                            : const EdgeInsets.symmetric(
+                                horizontal: 0, vertical: 20),
+                        margin: _isSidebarExpanded
+                            ? const EdgeInsets.only(right: 16)
+                            : const EdgeInsets.only(right: 8, left: 8),
+                        child: Row(
+                          mainAxisAlignment: _isSidebarExpanded
+                              ? MainAxisAlignment.start
+                              : MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              tab.icon,
+                              color: isSelected ? Colors.white : cs.onSecondary,
+                              size: 32,
+                            ),
+                            if (_isSidebarExpanded)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 15),
+                                child: Text(
+                                  tab.label,
+                                  style: TextStyle(
+                                    color: isSelected
+                                        ? Colors.white
+                                        : cs.onSecondary,
+                                    fontSize: 17,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
             ),
           ),
         ],
@@ -422,118 +515,147 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     );
   }
 
-  List<Widget> _buildDesktopSidebarItems() {
-    List<Widget> items = [];
-
-    Widget buildSidebarItem(IconData icon, String title, Type pageType) {
-      final bool isSelected =
-          _pages.isNotEmpty && _pages[_currentIndex].runtimeType == pageType;
-
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5),
-        child: Tooltip(
-          message: title,
-          child: InkWell(
-            onTap: () {
-              final pageIndex = getPageIndexByType(pageType);
-              if (pageIndex != -1) {
-                setState(() {
-                  _currentIndex = pageIndex;
-                  _pageController.jumpToPage(pageIndex);
-                });
-              } else {
-                debugPrint('Página do tipo $pageType não encontrada.');
-              }
-            },
-            child: Container(
-              decoration: isSelected
-                  ? BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                borderRadius: const BorderRadius.all(Radius.circular(8)),
-              )
-                  : null,
-              padding: _isSidebarExpanded
-                  ? const EdgeInsets.symmetric(horizontal: 15, vertical: 20)
-                  : const EdgeInsets.symmetric(horizontal: 0,  vertical: 20),
-              margin: _isSidebarExpanded
-                  ? const EdgeInsets.only(right: 16)
-                  : const EdgeInsets.only(right: 8, left: 8),
-              child: Row(
-                mainAxisAlignment:
-                _isSidebarExpanded ? MainAxisAlignment.start : MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    icon,
-                    color: isSelected
-                        ? Colors.white
-                        : Theme.of(context).colorScheme.onSecondary,
-                    size: 32,
-                  ),
-                  if (_isSidebarExpanded)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 15),
-                      child: Text(
-                        title,
-                        style: TextStyle(
-                          color: isSelected
-                              ? Colors.white
-                              : Theme.of(context).colorScheme.onSecondary,
-                          fontSize: 17,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
+  /// Constrói a bottom bar de acordo com o estilo escolhido
+  Widget _buildBottomBar() {
+    switch (_navStyle) {
+      case NavStyle.navy:
+        return _buildNavyBar();
+      case NavStyle.flutterBricks:
+        return _buildFlutterBricksBar(); // iremos trocar o miolo após você enviar o exemplo
     }
-
-    // Gera itens na MESMA ordem de _pages
-    for (final page in _pages) {
-      if (page is WhatsAppChats) {
-        items.add(buildSidebarItem(Icons.chat, 'Chat', WhatsAppChats));
-      } else if (page is IndicatorsPage) {
-        items.add(buildSidebarItem(Icons.bar_chart, 'Indicadores', IndicatorsPage));
-      } else if (page is AdminPanelPage) {
-        items.add(buildSidebarItem(Icons.admin_panel_settings, 'Painel Adm', AdminPanelPage));
-      } else if (page is ReportsPage) {
-        items.add(buildSidebarItem(Icons.edit_document, 'Relatórios', ReportsPage));
-      } else if (page is SettingsPage) {
-        items.add(buildSidebarItem(Icons.settings, 'Configurações', SettingsPage));
-      }
-    }
-
-    return items;
   }
 
-  List<BottomNavyBarItem> _buildBottomNavyBarItems() {
+  /// Mantém seu BottomNavyBar atual (cores puxadas do Theme)
+  Widget _buildNavyBar() {
+    final cs = Theme.of(context).colorScheme;
+    return Opacity(
+      opacity: (1.0 - (_scrollOffset / 40)).clamp(0.0, 1.0),
+      child: BottomNavyBar(
+        backgroundColor: cs.secondary,
+        showInactiveTitle: false,
+        selectedIndex: _currentIndex.clamp(0, _tabs.length - 1),
+        showElevation: true,
+        itemCornerRadius: 24,
+        iconSize: 25,
+        curve: Curves.easeIn,
+        onItemSelected: (index) {
+          if (!mounted) return;
+          setState(() => _currentIndex = index);
+          _pageController.jumpToPage(index);
+        },
+        items: _tabs
+            .map((t) => BottomNavyBarItem(
+                  icon: Icon(t.icon),
+                  title: Text(t.label),
+                  inactiveColor: cs.onSecondary,
+                  activeColor: cs.tertiary,
+                ))
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _buildFlutterBricksBar() {
     final cs = Theme.of(context).colorScheme;
 
-    BottomNavyBarItem makeItem(IconData icon, String label) => BottomNavyBarItem(
-      icon         : Icon(icon),
-      title        : Text(label),
-      inactiveColor: cs.onSecondary,
-      activeColor  : cs.tertiary,
+    final pillGradient = LinearGradient(
+      begin: Alignment.centerLeft,
+      end: Alignment.centerRight,
+      colors: [cs.primary, cs.tertiary],
     );
 
-    final items = <BottomNavyBarItem>[];
+    final buttons = _tabs.map((t) => NavigationBarButton(
+      icon: t.icon,
+      text: t.label,
+      backgroundGradient: pillGradient,
+    )).toList();
 
-    // Mesma ordem de _pages
-    for (final page in _pages) {
-      if (page is WhatsAppChats) {
-        items.add(makeItem(Icons.chat, 'Chat'));
-      } else if (page is IndicatorsPage) {
-        items.add(makeItem(Icons.bar_chart, 'Indicadores'));
-      } else if (page is AdminPanelPage) {
-        items.add(makeItem(Icons.admin_panel_settings, 'Painel Adm'));
-      } else if (page is ReportsPage) {
-        items.add(makeItem(Icons.edit_document, 'Relatórios'));
-      } else if (page is SettingsPage) {
-        items.add(makeItem(Icons.settings, 'Config.'));
-      }
-    }
-    return items;
+    return SafeArea(
+      top: false,
+      child: Material(
+        color: Colors.transparent,
+        child: IconTheme(
+          data: const IconThemeData(size: 28),
+          child: ResponsiveNavigationBar(
+            backgroundColor: cs.secondary,
+            backgroundOpacity: 1.0,
+            selectedIndex: _currentIndex.clamp(0, _tabs.length - 1),
+            onTabChange: (i) {
+              _pageController.animateToPage(
+                i,
+                duration: const Duration(milliseconds: 420),
+                curve: Curves.easeOutExpo,
+              );
+            },
+            showActiveButtonText: false,
+            inactiveIconColor: cs.onSecondary.withOpacity(.45),
+            navigationBarButtons: buttons,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FBIconButton extends StatelessWidget {
+  final IconData icon;
+  final bool selected;
+  final Color selectedColor;
+  final Color unselectedColor;
+  final VoidCallback onPressed;
+
+  const _FBIconButton({
+    required this.icon,
+    required this.selected,
+    required this.selectedColor,
+    required this.unselectedColor,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        IconButton(
+          onPressed: onPressed,
+          icon: Icon(
+            icon,
+            size: 25,
+            color: selected ? selectedColor : unselectedColor,
+          ),
+          splashRadius: 24,
+        ),
+      ],
+    );
+  }
+}
+
+class _FBCenterButton extends StatelessWidget {
+  final IconData icon;
+  final Color bg;
+  final Color fg;
+  final VoidCallback onPressed;
+  final double radius;
+
+  const _FBCenterButton({
+    required this.icon,
+    required this.bg,
+    required this.fg,
+    required this.onPressed,
+    this.radius = 24, // ~48px de diâmetro, combina com height 56
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: bg,
+      child: IconButton(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 25, color: fg),
+        splashRadius: radius,
+      ),
+    );
   }
 }

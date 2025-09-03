@@ -244,7 +244,7 @@ exports.createUserAndCompany = functions
                 modIndicadores: coalesceBool([accessRights.modIndicadores, accessRights.dashboard], true),
                 modPainel: coalesceBool([accessRights.modPainel], hasAnyAdminSubPerm),
                 modConfig: coalesceBool([accessRights.modConfig], true),
-                modRelatorios: coalesceBool([accessRights.modRelatorios], false),
+                modRelatorios: coalesceBool([accessRights.modRelatorios], true),
 
                 gerenciarParceiros: !!accessRights.gerenciarParceiros,
                 gerenciarColaboradores: !!accessRights.gerenciarColaboradores,
