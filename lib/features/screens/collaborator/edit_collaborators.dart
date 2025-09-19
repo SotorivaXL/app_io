@@ -27,12 +27,10 @@ class EditCollaborators extends StatefulWidget {
   final bool modIndicadores;
   final bool modPainel;
   final bool modRelatorios; // se você usa a aba Relatórios
-  final bool modConfig;
 
   // ===== NOVO: permissões internas do Painel =====
   final bool gerenciarParceiros;
   final bool gerenciarColaboradores;
-  final bool configurarDash;
   final bool criarForm;
   final bool criarCampanha;
   final bool gerenciarProdutos;
@@ -54,12 +52,10 @@ class EditCollaborators extends StatefulWidget {
     required this.modIndicadores,
     required this.modPainel,
     this.modRelatorios = false,
-    required this.modConfig,
 
     // internas painel
     this.gerenciarParceiros = false,
     this.gerenciarColaboradores = false,
-    this.configurarDash = false,
     this.criarForm = false,
     this.criarCampanha = false,
     this.gerenciarProdutos = false,
@@ -95,12 +91,10 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
     'modIndicadores': true,
     'modPainel': false,
     'modRelatorios': false,
-    'modConfig': true,
 
     // INTERNAS (Painel)
     'gerenciarParceiros': false,
     'gerenciarColaboradores': false,
-    'configurarDash': false,
     'criarForm': false,
     'criarCampanha': false,
     'gerenciarProdutos': false,
@@ -135,11 +129,9 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
     accessRights['modIndicadores']  = widget.modIndicadores;
     accessRights['modPainel']       = widget.modPainel;
     accessRights['modRelatorios']   = widget.modRelatorios;
-    accessRights['modConfig']       = widget.modConfig;
 
     accessRights['gerenciarParceiros']     = widget.gerenciarParceiros;
     accessRights['gerenciarColaboradores'] = widget.gerenciarColaboradores;
-    accessRights['configurarDash']         = widget.configurarDash;
     accessRights['criarForm']              = widget.criarForm;
     accessRights['criarCampanha']          = widget.criarCampanha;
     accessRights['gerenciarProdutos']      = widget.gerenciarProdutos;
@@ -184,7 +176,6 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
       if (key == 'modPainel' && value == false) {
         accessRights['gerenciarParceiros'] = false;
         accessRights['gerenciarColaboradores'] = false;
-        accessRights['configurarDash'] = false;
         accessRights['criarForm'] = false;
         accessRights['criarCampanha'] = false;
         accessRights['gerenciarProdutos'] = false;
@@ -194,7 +185,6 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
       const subs = [
         'gerenciarParceiros',
         'gerenciarColaboradores',
-        'configurarDash',
         'criarForm',
         'criarCampanha',
         'gerenciarProdutos',
@@ -242,14 +232,12 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
         section('Acesso aos módulos'),
         cb(keyName: 'modChats',        label: 'Chats'),
         cb(keyName: 'modIndicadores',  label: 'Indicadores'),
-        cb(keyName: 'modPainel',       label: 'Painel Adm'),
+        cb(keyName: 'modPainel',       label: 'Configurações'),
         cb(keyName: 'modRelatorios',   label: 'Relatórios'),
-        cb(keyName: 'modConfig',       label: 'Configurações'),
 
         section('Permissões internas (Painel)'),
         cb(keyName: 'gerenciarParceiros',     label: 'Gerenciar Parceiros'),
         cb(keyName: 'gerenciarColaboradores', label: 'Gerenciar Colaboradores'),
-        cb(keyName: 'configurarDash',         label: 'Configurar Dash'),
         cb(keyName: 'criarForm',              label: 'Criar Formulário'),
         cb(keyName: 'criarCampanha',          label: 'Criar Campanha'),
         cb(keyName: 'gerenciarProdutos',      label: 'Gerenciar Produtos'),
@@ -277,7 +265,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
       // Sanitiza: se modPainel false, limpa sub-permissões
       final rights = Map<String, bool>.from(accessRights);
       if (!(rights['modPainel'] ?? false)) {
-        for (final k in ['gerenciarParceiros','gerenciarColaboradores','configurarDash','criarForm','criarCampanha','gerenciarProdutos']) {
+        for (final k in ['gerenciarParceiros','gerenciarColaboradores','criarForm','criarCampanha','gerenciarProdutos']) {
           rights[k] = false;
         }
       }
@@ -296,11 +284,9 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
         'modIndicadores' : rights['modIndicadores'] ?? true,
         'modPainel'      : rights['modPainel'] ?? false,
         'modRelatorios'  : rights['modRelatorios'] ?? false,
-        'modConfig'      : rights['modConfig'] ?? true,
 
         'gerenciarParceiros'     : rights['gerenciarParceiros'] ?? false,
         'gerenciarColaboradores' : rights['gerenciarColaboradores'] ?? false,
-        'configurarDash'         : rights['configurarDash'] ?? false,
         'criarForm'              : rights['criarForm'] ?? false,
         'criarCampanha'          : rights['criarCampanha'] ?? false,
         'gerenciarProdutos' : rights['gerenciarProdutos'] ?? false,

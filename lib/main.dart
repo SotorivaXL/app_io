@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:http/http.dart' as http;
 import 'dart:typed_data';
 import 'package:app_io/auth/guard/auth_guard.dart';
 import 'package:app_io/auth/login/login_page.dart';
@@ -23,11 +23,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
+import 'features/screens/chatbot/create_chatbot.dart';
+import 'features/screens/chatbot/create_chatbot_funnel.dart';
 import 'features/screens/crm/chat_detail.dart';
 import 'firebase_options.dart';
 import 'package:image/image.dart' as img;
-import 'package:flutter/foundation.dart' show consolidateHttpClientResponseBytes, kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 
+//
+// ===================== Utils: Avatar em círculo =====================
+//
 Future<Uint8List?> _roundAvatar(String url) async {
   final data = await _downloadBytes(url);
   if (data == null) return null;
@@ -38,7 +43,6 @@ Future<Uint8List?> _roundAvatar(String url) async {
   final size   = src.width < src.height ? src.width : src.height;
   final circle = img.Image(width: size, height: size);
 
-  // desenha só os pixels dentro do raio
   final cx = size / 2, cy = size / 2, r2 = cx * cx;
   for (var y = 0; y < size; y++) {
     for (var x = 0; x < size; x++) {
@@ -55,27 +59,23 @@ Future<Uint8List?> _roundAvatar(String url) async {
 
 Future<Uint8List?> _downloadBytes(String url) async {
   try {
-    final req  = await HttpClient().getUrl(Uri.parse(url));
-    final resp = await req.close();
-    if (resp.statusCode == 200) {
-      // helper do Flutter que junta todos os chunks
-      return consolidateHttpClientResponseBytes(resp);
-    }
+    final resp = await http.get(Uri.parse(url));
+    if (resp.statusCode == 200) return resp.bodyBytes;
   } catch (_) {}
-  return null;                           // erro → só devolve null
+  return null; // erro → devolve null
 }
 
-// 1.1 – chave global para podermos navegar fora de widgets
+//
+// ===================== Navegação global =====================
+//
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-// 1.2 – handler que o Android/iOS chama quando a notificação chega
-@pragma('vm:entry-point')                      // <- não remova
+@pragma('vm:entry-point') // handler de background (somente mobile/desktop)
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  // aqui você grava logs ou analytics; **não** faça navegação
+  // logs/analytics apenas; não faça navegação aqui
 }
 
-// 1.3 – função que vai abrir a tela certa quando o usuário tocar na notificação
 void _handleMessage(RemoteMessage message) {
   final d = message.data;
   if (d['openChat'] == 'true' && d['chatId'] != null) {
@@ -95,70 +95,87 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
 FlutterLocalNotificationsPlugin();
 
 final List<Locale> appSupportedLocales = <Locale>{
-  const Locale('en', ''),          // Inglês
-  const Locale('pt', 'BR'),        // Português-Brasil
-  ...flc.CountryLocalizations.supportedLocales           // ← lista de Strings
-      .map(Locale.new),                               //   → Locale
+  const Locale('en', ''),
+  const Locale('pt', 'BR'),
+  ...flc.CountryLocalizations.supportedLocales.map(Locale.new),
 }.toList();
 
+//
+// ===================== main() =====================
+//
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Solicita a permissão de rastreamento para iOS (ATT)
-  if (!kIsWeb && Platform.isIOS) {
+  // ATT (somente iOS nativo)
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
     await _forceAppTrackingPermission();
   }
 
-  // Inicializa o Firebase
+  // Firebase (todas as plataformas)
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Desabilita a persistência local no Firestore (caso necessário)
-  FirebaseFirestore.instance.settings = Settings(
+  // Firestore: sem persistência local (opcional)
+  FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: false,
   );
 
-  // Inicializa o serviço de conectividade
+  // Conectividade (seu serviço interno)
   final connectivityService = ConnectivityService();
   connectivityService.initialize();
 
-  // Define orientação do app para retrato
-  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-    ]);
+  // Travar orientação em retrato (apenas iOS/Android)
+  if (!kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS)) {
+    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   }
 
-  // Inicializa as notificações locais
-  await initializeLocalNotifications();
+  // Notificações locais: NÃO no Web
+  if (!kIsWeb) {
+    await initializeLocalNotifications();
 
-  if (!kIsWeb && Platform.isAndroid) {
-    final androidImpl = flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-    if (androidImpl != null) {
-      final enabled = await androidImpl.areNotificationsEnabled();
-      if (enabled == false) {
-        try { await (androidImpl as dynamic).requestPermission(); } catch (_) {
-          try { await (androidImpl as dynamic).requestNotificationsPermission(); } catch (_) {}
+    // Permissão em Android 13+
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      final androidImpl = flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      if (androidImpl != null) {
+        final enabled = await androidImpl.areNotificationsEnabled();
+        if (enabled == false) {
+          try {
+            await (androidImpl as dynamic).requestPermission();
+          } catch (_) {
+            try {
+              await (androidImpl as dynamic).requestNotificationsPermission();
+            } catch (_) {}
+          }
         }
       }
     }
   }
 
-  // Ativa o Firebase App Check usando o provedor App Attest para iOS
-  await FirebaseAppCheck.instance.activate(
-    appleProvider: AppleProvider.appAttest,
-  );
-  // 2.1 – registra o handler de background (obrigatório)
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  // App Check: por enquanto, só iOS (sem reCAPTCHA no Web)
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+    try {
+      await FirebaseAppCheck.instance.activate(
+        appleProvider: AppleProvider.appAttest,
+      );
+    } catch (_) {}
+  }
 
-// 2.2 – se o app estava **fechado** e foi aberto tocando na notificação
-  final initialMsg = await FirebaseMessaging.instance.getInitialMessage();
-  if (initialMsg != null) _handleMessage(initialMsg);
+  // FCM background handler: NÃO no Web (requer SW/VAPID)
+  if (!kIsWeb) {
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  }
 
-// 2.3 – se o app estava em background e o usuário tocou na notificação
-  FirebaseMessaging.onMessageOpenedApp.listen(_handleMessage);
+  // Se o app foi aberto por notificação: NÃO no Web enquanto sem SW/VAPID
+  if (!kIsWeb) {
+    final initialMsg = await FirebaseMessaging.instance.getInitialMessage();
+    if (initialMsg != null) _handleMessage(initialMsg);
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleMessage);
+  }
 
   runApp(
     MultiProvider(
@@ -171,42 +188,42 @@ Future<void> main() async {
   );
 }
 
+//
+// ===================== iOS ATT =====================
+//
 Future<void> _forceAppTrackingPermission() async {
   print('Solicitando permissão de rastreamento...');
   var status = await AppTrackingTransparency.trackingAuthorizationStatus;
-
-  // Força a exibição se a permissão não foi decidida
   while (status == TrackingStatus.notDetermined) {
     status = await AppTrackingTransparency.requestTrackingAuthorization();
     print('Status da permissão ATT: $status');
   }
 }
 
+//
+// ===================== Local Notifications (não Web) =====================
+//
 Future<void> initializeLocalNotifications() async {
-  // ícone 24 × 24 branco gerado e colocado em drawable
   const AndroidInitializationSettings initSettingsAndroid =
   AndroidInitializationSettings('ic_stat_ioconnect');
 
-  const DarwinInitializationSettings initSettingsIOS =
-  DarwinInitializationSettings();
+  const DarwinInitializationSettings initSettingsIOS = DarwinInitializationSettings();
 
   const InitializationSettings initSettings = InitializationSettings(
     android: initSettingsAndroid,
-    iOS:     initSettingsIOS,
+    iOS: initSettingsIOS,
   );
 
   await flutterLocalNotificationsPlugin.initialize(
     initSettings,
-    // callback dispara se o usuário tocar na notificação local
     onDidReceiveNotificationResponse: (resp) {
-      // payload foi salvo como String ⇒ vira Map
       final data = Uri.splitQueryString(resp.payload ?? '');
       if (data['openChat'] == 'true') {
         navigatorKey.currentState?.push(
           MaterialPageRoute(
             builder: (_) => ChatDetail(
-              chatId:       data['chatId'] ?? '',
-              chatName:     data['chatName'] ?? 'Contato',
+              chatId: data['chatId'] ?? '',
+              chatName: data['chatName'] ?? 'Contato',
               contactPhoto: data['contactPhoto'] ?? '',
             ),
           ),
@@ -216,6 +233,9 @@ Future<void> initializeLocalNotifications() async {
   );
 }
 
+//
+// ===================== App =====================
+//
 class MyApp extends StatefulWidget {
   @override
   _MyAppState createState() => _MyAppState();
@@ -235,11 +255,14 @@ class _MyAppState extends State<MyApp> {
 
   void _initializeFirebaseMessaging() async {
     try {
+      // Sem SW/VAPID → não inicializa FCM no Web
+      if (kIsWeb) return;
+
       _firebaseMessaging = FirebaseMessaging.instance;
 
-      // Solicitar permissão no iOS para notificações
-      if (!kIsWeb && Platform.isIOS) {
-        NotificationSettings settings = await _firebaseMessaging!.requestPermission(
+      // iOS: solicitar permissão
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        final settings = await _firebaseMessaging!.requestPermission(
           alert: true,
           badge: true,
           sound: true,
@@ -247,22 +270,16 @@ class _MyAppState extends State<MyApp> {
         print('Permissões de notificação: ${settings.authorizationStatus}');
       }
 
-      // Obter o token FCM e salvar no Firestore
-      _firebaseMessaging!.getToken().then((token) {
-        if (token != null) {
-          _saveTokenToFirestore(token);
-        }
-      });
+      // Token e refresh
+      final token = await _firebaseMessaging!.getToken();
+      if (token != null) _saveTokenToFirestore(token);
 
-      // Atualizações de token
-      _firebaseMessaging!.onTokenRefresh.listen((newToken) {
-        _saveTokenToFirestore(newToken);
-      });
+      _firebaseMessaging!.onTokenRefresh.listen(_saveTokenToFirestore);
 
-      // Escutar notificações em primeiro plano
+      // Mensagens em foreground
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         print('Mensagem recebida no foreground: ${message.notification?.title}');
-        if (message.notification != null) {
+        if (message.notification != null && !kIsWeb) {
           _showNotification(
             message.notification!.title,
             message.notification!.body,
@@ -270,10 +287,10 @@ class _MyAppState extends State<MyApp> {
           );
         }
       });
-      // Notificações quando o app é aberto a partir de uma notificação
+
+      // Se abrir por notificação (já registrado no main para initial/opened)
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
         print('Notificação clicada: ${message.data}');
-        // Lógica ao abrir o app a partir da notificação
       });
     } catch (e) {
       print('Erro ao inicializar FirebaseMessaging: $e');
@@ -285,46 +302,52 @@ class _MyAppState extends State<MyApp> {
     final user = authProvider.user;
     if (user == null) return;
 
-    final usersRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+    final usersRef =
+    FirebaseFirestore.instance.collection('users').doc(user.uid);
     final usersSnap = await usersRef.get();
 
-    // Se já existe doc em /users E tem createdBy => é colaborador
     if (usersSnap.exists) {
-      final createdBy = (usersSnap.data()?['createdBy'] ?? '').toString().trim();
+      final createdBy =
+      (usersSnap.data()?['createdBy'] ?? '').toString().trim();
       if (createdBy.isNotEmpty) {
         await usersRef.set({
           'fcmToken': token,
           'lastActivity': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
-        return; // não grava em /empresas nesse caso
+        return;
       }
     }
 
-    // Dono/empresa (sem createdBy): grava APENAS em /empresas/{uid}
-    await FirebaseFirestore.instance.collection('empresas').doc(user.uid).set({
+    await FirebaseFirestore.instance
+        .collection('empresas')
+        .doc(user.uid)
+        .set({
       'fcmToken': token,
       'lastActivity': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
 
-  void _showNotification(String? title, String? body,
-      Map<String, dynamic> payload) {
-    const AndroidNotificationDetails androidDetails =
-    AndroidNotificationDetails(
+  void _showNotification(
+      String? title, String? body, Map<String, dynamic> payload) {
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
       'high_importance_channel',
       'Notificações importantes',
       importance: Importance.max,
-      priority : Priority.high,
-      icon     : 'ic_stat_ioconnect',   // <- aqui
+      priority: Priority.high,
+      icon: 'ic_stat_ioconnect',
     );
 
-    const NotificationDetails details =
-    NotificationDetails(android: androidDetails,
-        iOS: const DarwinNotificationDetails());
+    const NotificationDetails details = NotificationDetails(
+      android: androidDetails,
+      iOS: DarwinNotificationDetails(),
+    );
 
     flutterLocalNotificationsPlugin.show(
-      0, title, body, details,
-      payload: Uri(queryParameters: payload).query,   // mantém padrão
+      0,
+      title,
+      body,
+      details,
+      payload: Uri(queryParameters: payload).query,
     );
   }
 
@@ -338,7 +361,7 @@ class _MyAppState extends State<MyApp> {
       themeMode: ThemeMode.system,
       debugShowCheckedModeBanner: false,
       localizationsDelegates: const [
-        flc.CountryLocalizations.delegate,          // ← picker
+        flc.CountryLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
@@ -350,17 +373,14 @@ class _MyAppState extends State<MyApp> {
         '/leads': (context) => AuthGuard(child: LeadsPage()),
         '/login': (context) => LoginPage(),
         '/admin': (context) => AuthGuard(child: AdminPanelPage()),
+        '/chatbots/create': (_) => const CreateChatbotFunnelPage(),
       },
       onGenerateRoute: (settings) => null,
       onUnknownRoute: (settings) {
         return MaterialPageRoute(
           builder: (context) => Scaffold(
-            appBar: AppBar(
-              title: Text('Erro 404'),
-            ),
-            body: Center(
-              child: Text('Página não encontrada!'),
-            ),
+            appBar: AppBar(title: const Text('Erro 404')),
+            body: const Center(child: Text('Página não encontrada!')),
           ),
         );
       },

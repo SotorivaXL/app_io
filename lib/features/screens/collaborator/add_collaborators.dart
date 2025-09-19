@@ -47,7 +47,6 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
     // PERMISSÕES INTERNAS (Painel)
     'gerenciarParceiros': false,
     'gerenciarColaboradores': false,
-    'configurarDash': false,
     'criarForm': false,
     'criarCampanha': false,
     'gerenciarProdutos': false,
@@ -65,7 +64,6 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
       if (key == 'modPainel' && value == false) {
         accessRights['gerenciarParceiros'] = false;
         accessRights['gerenciarColaboradores'] = false;
-        accessRights['configurarDash'] = false;
         accessRights['criarForm'] = false;
         accessRights['criarCampanha'] = false;
         accessRights['gerenciarProdutos'] = false; // <-- NOVO
@@ -74,7 +72,6 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
       const subPerms = [
         'gerenciarParceiros',
         'gerenciarColaboradores',
-        'configurarDash',
         'criarForm',
         'criarCampanha',
         'gerenciarProdutos',
@@ -214,14 +211,12 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
         section('Acesso aos módulos'),
         cb(keyName: 'modChats',        label: 'Chats'),
         cb(keyName: 'modIndicadores',  label: 'Indicadores'),
-        cb(keyName: 'modPainel',       label: 'Painel Adm'),
+        cb(keyName: 'modPainel',       label: 'Configurações'),
         cb(keyName: 'modRelatorios',   label: 'Relatórios'), // se usar
-        cb(keyName: 'modConfig',       label: 'Configurações'),
 
         section('Permissões internas (Painel)'),
         cb(keyName: 'gerenciarParceiros',     label: 'Gerenciar Parceiros'),
         cb(keyName: 'gerenciarColaboradores', label: 'Gerenciar Colaboradores'),
-        cb(keyName: 'configurarDash',         label: 'Configurar Dash'),
         cb(keyName: 'criarForm',              label: 'Criar Formulário'),
         cb(keyName: 'criarCampanha',          label: 'Criar Campanha'),
         cb(keyName: 'gerenciarProdutos',      label: 'Gerenciar Produtos'),

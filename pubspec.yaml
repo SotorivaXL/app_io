@@ -2,7 +2,7 @@ name: app_io
 description: "A new Flutter project."
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 2.1.8+3
+version: 3.0.1+9
 
 environment:
   sdk: '>=3.4.3 <4.0.0'
@@ -36,7 +36,7 @@ dependencies:
   async: ^2.11.0
   flutter_holo_date_picker: ^2.0.0
   fl_chart: ^1.1.0
-  syncfusion_flutter_datepicker: ^30.2.7
+  syncfusion_flutter_datepicker: ^31.1.17
   bottom_navy_bar: ^6.1.0
   file_picker: ^10.1.9
   flutter_secure_storage: ^9.2.2

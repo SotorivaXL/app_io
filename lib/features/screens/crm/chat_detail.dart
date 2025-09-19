@@ -1398,6 +1398,12 @@ class _ChatDetailState extends State<ChatDetail> {
    * 2. Monta o widget da mensagem (texto / imagem / áudio …)
    *════════════════════════════════════════════════════════════════════*/
 
+    // -----SYSTEM -------------------------------------------------------  ✅
+    if (type == 'system') {
+      final label = data['content'] as String? ?? '';
+      return _buildSystemMarker(label, timestamp);
+    }
+
     // ----- TEXTO -------------------------------------------------------  ✅
     if (type == 'text') {
       return _buildRegularBubble(
@@ -1668,6 +1674,55 @@ class _ChatDetailState extends State<ChatDetail> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSystemMarker(String text, dynamic ts) {
+    final cs = Theme.of(context).colorScheme;
+
+    String when = '';
+    if (ts is Timestamp) {
+      final dt = ts.toDate();
+      when = '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: cs.inverseSurface,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, size: 14),
+                const SizedBox(width: 6),
+                Text(
+                  text,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+                if (when.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    when,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: cs.onSurfaceVariant.withOpacity(.7),
+                    ),
+                  ),
+                ]
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -108,7 +108,7 @@ class _AddCompanyState extends State<AddCompany> {
     'modConfig': true,
     'modIndicadores': true,
     'modPainel': true,
-    'modRelatorios': false,
+    'modRelatorios': true,
   };
 
   // Máscaras
