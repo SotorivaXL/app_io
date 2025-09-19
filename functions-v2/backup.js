@@ -37,6 +37,7 @@ const ZAPI_HOSTS = [
     'https://api.z-api.io',
 ];
 
+// Use "function" (declaração) para evitar problemas de TDZ/escopo
 async function callZ(instanceId, token, path, payload, headers = {}, timeout = 15000) {
     let lastErr = null;
 
@@ -1370,839 +1371,819 @@ exports.backfillInstanceIdHash = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (r
 
 // FUNCTIONS CHATBOTS
 
-const BOT = {
-    sessionDoc: (chatDocRef) => chatDocRef.collection('bot').doc('session'),
-    queueCol:   (chatDocRef) => chatDocRef.collection('botQueue'),
-    // quantidade máxima de tarefas processadas por tick
-    TICK_LIMIT: 40,
-};
+// === Dispara job recém-criado imediatamente (com "espera curta" até runAt) ===
+exports.onBotJobCreated = onDocumentCreated(
+    { document: 'empresas/{empresaId}/phones/{phoneId}/whatsappChats/{chatId}/botQueue/{jobId}', secrets: [ZAPI_ENC_KEY] },
+    async (event) => {
+        const d = event.data?.data() || {};
+        const { empresaId, phoneId, chatId } = event.params;
 
-// ----------------------------------------------------------------
-// ENVIO VIA Z-API (ajuste se já existir um sender na sua base)
-async function sendTextWithZapi({ phoneDoc, chatId, text }) {
-    const phonePath = phoneDoc?.ref?.path || '(unknown)';
-    const { instanceId, token, clientToken, apiUrl, where } =
-        readZapiCredsFromPhoneDoc(phoneDoc);
-
-    logger.info('[ZAPI:cfg-check]', {
-        phonePath,
-        where,                      // 'chatbot' | 'root' | 'none'
-        hasInstanceId: !!instanceId,
-        hasToken: !!token,
-        hasClientToken: !!clientToken,
-        apiBase: apiUrl
-    });
-
-    if (!instanceId || !token) {
-        throw new Error('Z-API: credenciais ausentes (instanceId/token) nem no root nem em .chatbot');
-    }
-
-    const digits = String(chatId || '')
-        .replace('@s.whatsapp.net', '')
-        .replace(/\D/g, '');
-
-    const url = `${apiUrl}/instances/${instanceId}/token/${token}/send-text`;
-    const headers = {};
-    if (clientToken) headers['client-token'] = clientToken;  // <— essencial!
-
-    logger.info('[ZAPI:send-text]', { to: digits, preview: String(text || '').slice(0, 80) });
-    await axios.post(url, { phone: digits, message: text }, { headers });
-}
-
-// ----------------------------------------------------------------
-// UTILITÁRIOS
-// ----------------------------------------------------------------
-const nowTs = () => admin.firestore.Timestamp.now();
-const inMs = (ms) => admin.firestore.Timestamp.fromMillis(Date.now() + Math.max(0, ms));
-const minutesToMs = (m) => (Math.max(0, Number(m||0)) * 60 * 1000) | 0;
-
-function normalizeDigits(s) { return String(s || '').replace(/\D/g, ''); }
-
-function formatMenu(step, vars) {
-    const base = renderTemplate(step.text || 'Escolha uma opção:', vars);
-    const lines = (step.options || []).map(o => {
-        const label = renderTemplate(o.label || '', vars);
-        return `*${o.key}* - ${label}`;
-    });
-    return [base, ...lines].join('\n');
-}
-
-function findStep(steps, id) {
-    return steps.find(s => s.id === id) || { id: 'end', type: 'end' };
-}
-
-function resolveActiveChatbotId({ phoneDoc, chatDocData }) {
-    const d = (phoneDoc?.data() || {});
-    const m = d.chatbot || {};
-
-    const enabled = (m.enabled === true) || (d.enabled === true);
-    const botId   = m.botId || d.botId || d.chatbotId; // tolera root/chat
-
-    if (enabled && botId) return botId;
-    if (chatDocData?.chatbotId) return chatDocData.chatbotId;
-    return null;
-}
-
-// ----------------------------------------------------------------
-// ENFILEIRAMENTO (novo)
-// ----------------------------------------------------------------
-async function enqueue({ empresaId, phoneId, chatId, stepId, type, runAt, reason, inline = false }) {
-    const { chatDocRef } = getChatRefs(empresaId, phoneId, chatId);
-    const q = chatDocRef.collection('botQueue');
-    const docRef = q.doc();
-
-    const payload = {
-        type,
-        stepId,
-        status: 'pending',
-        runAt: runAt || nowTs(),
-        reason: reason || null,
-        createdAt: nowTs(),
-        attempts: 0,
-    };
-
-    await docRef.set(payload);
-    logger.info('[BOT] enqueued', {
-        chatPath: chatDocRef.path, type, stepId, reason,
-        runAt: (payload.runAt.toDate ? payload.runAt.toDate() : new Date())
-    });
-
-    // Processamento inline é OPCIONAL. Recomendado manter false
-    // quando você tem o gatilho onDocumentCreated habilitado.
-    if (inline) {
         try {
-            await processQueueDoc(docRef);
-        } catch (e) {
-            logger.error('[BOT] inline process failed (fallback ficará a cargo do trigger/cron)', e);
-        }
-    }
+            const now = Date.now();
+            const due = d.runAt?.toMillis?.() || 0;
+            if (d.status !== 'pending') return;
 
-    return docRef.id;
-}
+            const NEAR_FUTURE_MS = 15_000;
+            if (due > now + NEAR_FUTURE_MS) return;
 
-async function cancelTimeoutTasksForStep({ empresaId, phoneId, chatId, stepId }) {
-    const { chatDocRef } = getChatRefs(empresaId, phoneId, chatId);
-    const snap = await BOT.queueCol(chatDocRef)
-        .where('type', '==', 'timeout_step')
-        .where('stepId', '==', stepId)
-        .where('status', '==', 'pending')
-        .get();
+            const waitMs = Math.max(0, Math.min(due - now, NEAR_FUTURE_MS));
+            if (waitMs > 0) await new Promise(r => setTimeout(r, waitMs));
 
-    const batch = admin.firestore().batch();
-    snap.docs.forEach(d => batch.update(d.ref, { status: 'canceled', canceledAt: nowTs() }));
-    if (!snap.empty) await batch.commit();
-}
+            const claimed = await db.runTransaction(async (tx) => {
+                const fresh = await tx.get(event.data.ref);
+                const cur = fresh.data() || {};
+                const curDue = cur.runAt?.toMillis?.() || 0;
+                if (cur.status !== 'pending' || curDue > Date.now()) return false;
+                tx.update(event.data.ref, { status: 'processing', processingAt: admin.firestore.FieldValue.serverTimestamp() });
+                return true;
+            });
+            if (!claimed) return;
 
-// ----------------------------------------------------------------
-// SESSÃO
-// ----------------------------------------------------------------
-async function loadOrInitSession({ empresaId, phoneId, chatId, chatbotDoc }) {
-    const { chatDocRef } = getChatRefs(empresaId, phoneId, chatId);
-    const sessRef = BOT.sessionDoc(chatDocRef);
-    let sessSnap = await sessRef.get();
-
-    if (!sessSnap.exists) {
-        const base = {
-            chatbotId: chatbotDoc.id,
-            currentStepId: null,
-            awaitingReply: false,
-            waitUntil: null,
-            retries: 0,
-            status: 'idle', // idle | running | ended | handoff
-            vars: {},       // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-            createdAt: nowTs(),
-            updatedAt: nowTs(),
-        };
-        await sessRef.set(base);
-        sessSnap = await sessRef.get();
-    } else {
-        // garante vars
-        const cur = sessSnap.data() || {};
-        if (!cur.vars || typeof cur.vars !== 'object') {
-            await sessRef.set({ vars: {} }, { merge: true });
-            sessSnap = await sessRef.get();
-        }
-    }
-    return { sessRef, session: sessSnap.data() };
-}
-
-// ----------------------------------------------------------------
-// EXECUÇÃO DE UM PASSO (envio e agendamentos) — com variáveis e handoff
-// ----------------------------------------------------------------
-async function executeSendStepTask({ empresaId, phoneId, chatId, phoneDoc, chatbot, step, defaultSpacingMs }) {
-    logger.info('[BOT] send-step', { stepId: step.id, type: step.type, next: step.next });
-
-    const { chatDocRef } = getChatRefs(empresaId, phoneId, chatId);
-    const sessRef = BOT.sessionDoc(chatDocRef);
-
-    // carrega sessão p/ templates e estado
-    const sessSnap = await sessRef.get();
-    const session = (sessSnap.exists ? sessSnap.data() : {}) || {};
-    const vars = session.vars || {};
-
-    await applyStepActionsToChat({ empresaId, phoneId, chatId, step });
-
-    // ---------- DEDUPE (anti envio duplicado por 20s) ----------
-    // Agora o preview usa o CONTEÚDO RENDERIZADO, para deduplicar corretamente.
-    const renderedMessage = step.type === 'message' ? renderTemplate(step.text || '', vars) : '';
-    const renderedMenu = step.type === 'menu' ? formatMenu(step, vars) : '';
-    const preview =
-        step.type === 'menu'     ? renderedMenu :
-            step.type === 'capture'  ? (step.ask || '') :
-                step.type === 'message'  ? renderedMessage :
-                    ''; // 'end' e 'handoff' não têm preview textual
-
-    const GUARD_WINDOW_MS = 20_000; // 20s
-    if (preview) {
-        const hashPart = Buffer.from(String(preview)).toString('base64').slice(0, 64);
-        const dedupeKey = `send:${step.id}:${hashPart}`;
-        const guardRef = chatDocRef.collection('botSendGuards').doc(dedupeKey);
-        const guardSnap = await guardRef.get();
-        const now = Date.now();
-        const createdAtMs = guardSnap.exists
-            ? (guardSnap.data()?.createdAt?.toMillis?.() || 0)
-            : 0;
-
-        if (guardSnap.exists && (now - createdAtMs) < GUARD_WINDOW_MS) {
-            logger.warn('[BOT] dedupe-hit — pulando envio duplicado', { stepId: step.id });
-        } else {
-            await guardRef.set({ createdAt: nowTs(), stepId: step.id });
-
-            // 1) enviar mensagem conforme tipo (RENDERIZADO)
-            if (step.type === 'message') {
-                if (renderedMessage) {
-                    const r = await sendTextWithZapi({ phoneDoc, chatId, text: renderedMessage });
-                    await persistBotTextMessage({ empresaId, phoneId, chatId, text: renderedMessage, zapiId: r?.zapiId });
-                }
-            } else if (step.type === 'capture') {
-                const ask = step.ask || '';
-                if (ask) {
-                    const r = await sendTextWithZapi({ phoneDoc, chatId, text: ask });
-                    await persistBotTextMessage({ empresaId, phoneId, chatId, text: ask, zapiId: r?.zapiId });
-                }
-            } else if (step.type === 'menu') {
-                const r = await sendTextWithZapi({ phoneDoc, chatId, text: renderedMenu });
-                await persistBotTextMessage({ empresaId, phoneId, chatId, text: renderedMenu, zapiId: r?.zapiId });
-            }
-        }
-    }
-
-    // Tipos sem envio direto, mas com efeito na sessão:
-    if (step.type === 'end') {
-         await persistSystemEventMessage({
-               empresaId, phoneId, chatId,
-               event: 'bot_end',
-               label: 'Atendimento encerrado automaticamente',
-               extra: { stepId: step.id }
-         });
-        await sessRef.set({ status: 'ended', awaitingReply: false, currentStepId: step.id, updatedAt: nowTs() }, { merge: true });
-        return;
-    }
-
-    if (step.type === 'handoff') {
-        // Marca estado e PARA a automação. A mensagem de "aguarde" já foi enviada
-        // pelo passo 'message' anterior (ex.: ${id}_msg), se existir.
-        await sessRef.set({
-            status: 'handoff',
-            awaitingReply: false,
-            currentStepId: step.id,
-            updatedAt: nowTs(),
-        }, { merge: true });
-
-
-         await persistSystemEventMessage({
-               empresaId, phoneId, chatId,
-               event: 'handoff',
-               label: 'Atendimento transferido para um atendente',
-               extra: { stepId: step.id }
-         });
-
-        // se quiser, pode notificar operador aqui
-        // e opcionalmente avançar para step.next se existir
-        if (step.next && step.next !== 'end') {
-             await enqueue({
-                   empresaId, phoneId, chatId,
-                   stepId: step.next,
-                   type: 'send_step',
-                   runAt: nowTs(),                // << instantâneo
-                   reason: 'post-handoff-next',
-                   inline: false,
-                 });
-        }
-        return;
-    }
-
-    // 2) decidir: aguarda resposta ou segue em frente
-    const meta = step.meta || {};
-    const waitMin = Number(meta.timeoutMinutes || 0);
-    const wantsCapture = (step.type === 'message' && step.var) || (step.type === 'capture'); // message com var capta
-
-    if (step.type === 'message' && !wantsCapture) {
-        // Mensagem "simples": se não tem timeout → segue automático
-        if (!waitMin || waitMin <= 0) {
-            if (step.next && step.next !== 'end') {
-                 await enqueue({
-                       empresaId, phoneId, chatId,
-                       stepId: step.next,
-                       type: 'send_step',
-                       runAt: nowTs(),                // << instantâneo
-                       reason: 'auto-next',
-                       inline: false,
-                     });
-            } else {
-                await sessRef.set({ status: 'ended', awaitingReply: false, currentStepId: step.id, updatedAt: nowTs() }, { merge: true });
-            }
-            return;
-        }
-    }
-
-    // Se chegou aqui, ou o step é menu/capture, ou é message com var, ou message com timeout
-    const waitUntil = waitMin ? inMs(minutesToMs(waitMin)) : null;
-    await sessRef.set({
-        currentStepId: step.id,
-        awaitingReply: true,
-        waitUntil,
-        status: 'running',
-        updatedAt: nowTs(),
-    }, { merge: true });
-
-    if (waitMin && meta.timeoutNext) {
-        await enqueue({
-            empresaId, phoneId, chatId,
-            stepId: step.id,
-            type: 'timeout_step',
-            runAt: waitUntil,
-            reason: 'awaiting-timeout',
-            inline: false,
-        });
-    }
-}
-
-// ----------------------------------------------------------------
-// DECISÃO POR RESPOSTA (onReply / menu / capture)
-// ----------------------------------------------------------------
-function decodeDigits(s) { return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/[^\d\-a-zá-ú ]/gi, ''); }
-
-function resolveMenuNext(step, userText) {
-    const d = String(userText || '').replace(/\D/g, '');
-    const exact = (step.options || []).find(o => String(o.key) === d);
-    return exact?.next || null;
-}
-
-async function handleReply({
-                               empresaId, phoneId, chatId, phoneDoc,
-                               chatbot, session, userText, defaultSpacingMs
-                           }) {
-    const step = findStep(chatbot.steps, session.currentStepId);
-    const { chatDocRef } = getChatRefs(empresaId, phoneId, chatId);
-    const sessRef = BOT.sessionDoc(chatDocRef);
-
-    // carrega snapshot fresco (vamos gravar vars)
-    const sessSnap = await sessRef.get();
-    const cur = (sessSnap.exists ? sessSnap.data() : {}) || {};
-    const vars = cur.vars && typeof cur.vars === 'object' ? cur.vars : {};
-
-    let nextId = null;
-
-    if (step.type === 'menu') {
-        const chosenDigits = String(userText || '').replace(/\D/g, '');
-        nextId = resolveMenuNext(step, userText);
-
-        if (!nextId) {
-            // Fallback de menu
-            const fb = chatbot.fallback || { message: 'Não entendi. Responda com um número.', maxRetries: 2, onFail: 'handoff' };
-            const retries = (session.retries || 0) + 1;
-
-            if (retries > (fb.maxRetries || 2)) {
-                await sendTextWithZapi({ phoneDoc, chatId, text: fb.message || 'Encaminhando para atendimento…' });
-                await sessRef.set({
-                    awaitingReply: false,
-                    currentStepId: step.id,
-                    status: fb.onFail === 'handoff' ? 'handoff' : 'ended',
-                    retries: 0,
-                    updatedAt: nowTs(),
-                }, { merge: true });
-
-                await persistSystemEventMessage({
-                    empresaId, phoneId, chatId,
-                    event: fb.onFail === 'handoff' ? 'handoff' : 'bot_end',
-                    label: fb.onFail === 'handoff'
-                        ? 'Atendimento transferido para um atendente'
-                        : 'Atendimento encerrado automaticamente',
-                    extra: { stepId: step.id, reason: 'menu-fallback-max-retries' },
-                });
-
+            const { phoneDocRef, chatDocRef, msgsColRef } = getChatRefs(empresaId, phoneId, chatId);
+            const { instanceId, token, clientToken } = await getZCredPlain(empresaId, phoneDocRef);
+            if (!instanceId || !token || !clientToken) {
+                await event.data.ref.set({ status: 'error', error: 'missing-credentials' }, { merge: true });
                 return;
             }
 
-            const fbText = fb.message || 'Não entendi. Responda com um número.';
-            const r = await sendTextWithZapi({ phoneDoc, chatId, text: fbText });
-            await persistBotTextMessage({ empresaId, phoneId, chatId, text: fbText, zapiId: r?.zapiId });
-            await sessRef.set({
-                retries,
-                awaitingReply: true,
-                currentStepId: step.id,
-                updatedAt: nowTs(),
+            if (d.type === 'burst') {
+                const seq = Array.isArray(d.items) ? d.items : [];
+                const gap = Number(d.defaultSpacingMs || 600);
+                logger.info('[burst:start]', { chatId, count: seq.length, gap });
+
+                for (let i = 0; i < seq.length; i++) {
+                    const it = seq[i];
+                    const wait = i === 0 ? 0 : (Number(it.delayMs) || gap);
+                    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+                    logger.info('[burst:send]', { chatId, i, waitMs: wait, preview: String(it.text || '').slice(0, 80) });
+                    await sendBotText(instanceId, token, clientToken, chatId, String(it.text || ''));
+                    await logOut(msgsColRef, String(it.text || ''));
+                }
+
+                logger.info('[burst:done]', { chatId, count: seq.length });
+                await event.data.ref.set({ status: 'done', doneAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+                return;
+            }
+
+            if (d.type === 'timeout') {
+                const sessionRef = chatDocRef.collection('runtime').doc('bot');
+                const sSnap = await sessionRef.get();
+                const session = sSnap.data() || {};
+                if (!session.active)  { await event.data.ref.set({ status: 'skipped', reason: 'inactive' }, { merge: true }); return; }
+                if (session.stepId !== d.stepId) { await event.data.ref.set({ status: 'skipped', reason: 'moved-step' }, { merge: true }); return; }
+                if ((session.lastUserAt || 0) > (d.runAt?.toMillis?.() || 0)) {
+                    await event.data.ref.set({ status: 'skipped', reason: 'user-replied' }, { merge: true }); return;
+                }
+
+                const botSnap = await db.doc(`empresas/${empresaId}/chatbots/${session.botId}`).get();
+                if (!botSnap.exists) { await event.data.ref.set({ status: 'error', error: 'bot-not-found' }, { merge: true }); return; }
+
+                const bot = botSnap.data() || {};
+                const stepsArr = Array.isArray(bot.steps) ? bot.steps : [];
+                const steps    = indexById(stepsArr);
+                const startId  = d.nextId || steps[session.stepId]?.meta?.timeoutNext || 'end';
+                const walked   = walkUntilInteractive(steps, startId, session.vars, stepsArr);
+
+                await enqueueBurst({
+                    empresaId, phoneId, chatId,
+                    items: walked.outMsgs,
+                    originStepId: walked.interactiveStep ? walked.interactiveStep.id : walked.finalStepId,
+                    defaultSpacingMs: Number(bot.defaultSpacingMs || 1200)
+                });
+
+                const nextStep = walked.interactiveStep || steps[walked.finalStepId];
+                await sessionRef.set({
+                    stepId: (nextStep && nextStep.id) || walked.finalStepId,
+                    lastBotAt: Date.now(),
                 }, { merge: true });
-            return;
-        }
 
-        // Se o menu define var, gravamos a tecla escolhida
-        if (step.var) {
-            vars[step.var] = chosenDigits;
-            await sessRef.set({ vars, updatedAt: nowTs() }, { merge: true });
-        }
+                const tmMin = Number(nextStep?.meta?.timeoutMinutes || 0);
+                const tmNext = nextStep?.meta?.timeoutNext || null;
+                if (tmMin > 0) {
+                    await enqueueTimeout({ empresaId, phoneId, chatId, stepId: nextStep.id, nextId: tmNext, timeoutMinutes: tmMin });
+                }
 
-    } else {
-        // message/capture: qualquer texto conta como "reply" → next
-        // Se message tinha var, captura a resposta do usuário
-        if (step.type === 'message' && step.var) {
-            vars[step.var] = String(userText || '').trim();
-            await sessRef.set({ vars, updatedAt: nowTs() }, { merge: true });
-        }
-        // capture tradicional (se ainda existir em fluxos antigos)
-        if (step.type === 'capture' && step.var) {
-            vars[step.var] = String(userText || '').trim();
-            await sessRef.set({ vars, updatedAt: nowTs() }, { merge: true });
-        }
+                await event.data.ref.set({ status: 'done', doneAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+                return;
+            }
 
-        nextId = step.next || null;
+            await event.data.ref.set({ status: 'error', error: 'unknown-type' }, { merge: true });
+        } catch (err) {
+            await event.data.ref.set({ status: 'error', error: String(err?.message || err) }, { merge: true });
+        }
     }
+);
 
-    await cancelTimeoutTasksForStep({ empresaId, phoneId, chatId, stepId: step.id });
-    logger.info('[BOT] reply-routing', { from: step.id, type: step.type, userText, nextId });
+function mask(s) { return s ? String(s).slice(0, 6) + '…' : null; }
 
-    // Escolher próximo
-    if (nextId && nextId !== 'end') {
-        await sessRef.set({
-            currentStepId: nextId,
-            awaitingReply: false,
-            retries: 0,
-            updatedAt: nowTs(),
-        }, { merge: true });
-
-        if (nextId === step.id) {
-            logger.warn('[BOT] nextId equals current stepId — loop avoided', { stepId: step.id });
-            await sessRef.set({ status: 'ended', awaitingReply: false, updatedAt: nowTs() }, { merge: true });
-            return;
-        }
-
-         await enqueue({
-               empresaId, phoneId, chatId,
-               stepId: nextId,
-               type: 'send_step',
-               runAt: nowTs(),                // << instantâneo
-               reason: 'on-reply-next',
-             });
-    } else {
-        const endStep = findStep(chatbot.steps, nextId || 'end');
-        await applyStepActionsToChat({ empresaId, phoneId, chatId, step: endStep });
-
-        await sessRef.set({
-            status: 'ended',
-            currentStepId: step.id,
-            awaitingReply: false,
-            updatedAt: nowTs(),
-        }, { merge: true });
-    }
+// leitura aninhada segura: getPath(emp, "zapi.instanceId")
+function getPath(obj, path) {
+    try {
+        return String(path).split('.').reduce((o,k)=> (o && (k in o)) ? o[k] : undefined, obj);
+    } catch { return undefined; }
 }
 
-// ----------------------------------------------------------------
-// TIMEOUT (onTimeout)
-// ----------------------------------------------------------------
-async function handleTimeout({
-                                 empresaId, phoneId, chatId, phoneDoc, chatbot, task, defaultSpacingMs
-                             }) {
-    const { chatDocRef } = getChatRefs(empresaId, phoneId, chatId);
-    const sessSnap = await BOT.sessionDoc(chatDocRef).get();
-    const session = (sessSnap.exists ? sessSnap.data() : {}) || {};
-
-    // Só processa se ainda estamos esperando resposta desse MESMO step
-    if (!session.awaitingReply || session.currentStepId !== task.stepId) return;
-
-    const step = findStep(chatbot.steps, task.stepId);
-    const to = (step.meta || {}).timeoutNext || null;
-
-    await BOT.sessionDoc(chatDocRef).set({
-        awaitingReply: false,
-        updatedAt: nowTs()
-    }, { merge: true });
-
-    if (to && to !== 'end') {
-         await enqueue({
-               empresaId, phoneId, chatId,
-               stepId: to,
-               type: 'send_step',
-               runAt: nowTs(),                // << instantâneo (o atraso já foi o timeout)
-               reason: 'on-timeout-next',
-             });
-    } else {
-        const endStep = findStep(chatbot.steps, to || 'end');
-        await applyStepActionsToChat({ empresaId, phoneId, chatId, step: endStep });
-        await BOT.sessionDoc(chatDocRef).set({ status: 'ended', currentStepId: step.id, updatedAt: nowTs() }, { merge: true });
-        await BOT.sessionDoc(chatDocRef).set({
-            status: 'ended',
-            currentStepId: step.id,
-            updatedAt: nowTs()
-        }, { merge: true });
-    }
+function firstNonEmpty(list) {
+    for (const v of list) { if (v !== undefined && v !== null && String(v).trim() !== '') return String(v); }
+    return null;
 }
 
-// ----------------------------------------------------------------
-// PROCESSAMENTO DE UMA TAREFA DA FILA (novo, com lock)
-// ----------------------------------------------------------------
-async function processQueueDoc(refOrSnap) {
-    // normaliza para DocumentReference
-    const ref = refOrSnap?.ref ? refOrSnap.ref : refOrSnap;
-    if (!ref) { logger.error('[BOT] processQueueDoc: ref vazio'); return; }
+async function getZCredPlain(empresaId, phoneDocRef) {
+    const [phoneSnap, empSnap] = await Promise.all([phoneDocRef.get(), db.doc(`empresas/${empresaId}`).get()]);
+    const phone = phoneSnap.exists ? (phoneSnap.data() || {}) : {};
+    const emp   = empSnap.exists   ? (empSnap.data()   || {}) : {};
 
-    // Apenas log informativo; a decisão acontece dentro do lock
-    logger.info('[BOT] processing-check', { id: ref.id });
+    const pick = (...cands) => {
+        for (const v of cands) {
+            const s = (v === undefined || v === null) ? '' : String(v);
+            if (!s.trim()) continue;
+            try { return decryptIfNeeded(s); } catch { return s; }
+        }
+        return null;
+    };
 
-    // ---- LOCK via transaction: só UM executor troca para "processing"
-    let acquired = false;
-    await admin.firestore().runTransaction(async (tx) => {
-        const fresh = await tx.get(ref);
-        if (!fresh.exists) return;
+    const instanceId  = pick(phone.instanceId, phone?.zapi?.instanceId, emp.instanceId, emp?.zapi?.instanceId, process.env.ZAPI_ID);
+    const token       = pick(phone.token,      phone?.zapi?.token,      emp.token,      emp?.zapi?.token,      process.env.ZAPI_TOKEN);
+    const clientToken = pick(phone.clientToken,phone?.zapi?.clientToken,emp.clientToken,emp?.zapi?.clientToken,process.env.ZAPI_CLIENT_TOKEN);
 
-        const cur = fresh.data();
-        // tolera até 5s no futuro para o onCreate pegar imediatamente
-         const runAtMs = cur.runAt.toMillis();
-         const earlySlackMs = 5000; // 5s
-         const isSend = cur.type === 'send_step';
-         const canStart = runAtMs <= Date.now() || (isSend && (runAtMs - Date.now()) <= earlySlackMs);
-         if (cur.status !== 'pending' || !canStart) return;
-
-        tx.update(ref, {
-            status: 'processing',
-            startedAt: nowTs(),
-            attempts: (cur.attempts || 0) + 1,
-        });
-        acquired = true;
+    logger.info('[botCreds]', {
+        empresaId,
+        phonePath: phoneDocRef.path,
+        instanceIdPreview: instanceId ? String(instanceId).slice(0,6) + '…' : null,
+        hasToken: !!token, hasClientToken: !!clientToken
     });
 
-    if (!acquired) {
-        logger.info('[BOT] skip — já processado, ainda pendente futuro, ou outro worker adquiriu', { id: ref.id });
-        return;
-    }
-
-    // Agora este worker é o DONO do task
-    try {
-        // caminho: empresas/{empresaId}/phones/{phoneId}/whatsappChats/{chatId}/botQueue/{taskId}
-        const path = ref.path.split('/');
-        const empresaId = path[1];
-        const phoneId   = path[3];
-        const chatId    = path[5];
-
-        let phoneDoc;
-        try {
-            const ctx = await getPhoneCtxByNumber(phoneId);
-            phoneDoc  = ctx.phoneDoc;
-        } catch (e) {
-            logger.error('processQueueDoc:getPhoneCtxByNumber', e);
-            // rebaixa para pending dali a pouco para tentar de novo
-            await ref.update({ status: 'pending', error: String(e?.message || e), runAt: inMs(2000) });
-            return;
-        }
-
-        const snap = await ref.get(); // re-lê após lock para obter o payload atual
-        const data = snap.data() || {};
-        logger.info('[BOT] processing-task', { id: ref.id, type: data.type, stepId: data.stepId });
-
-        const { chatDocRef } = getChatRefs(empresaId, phoneId, chatId);
-
-        // carregar chatbotId (chat → phone.chatbot.botId ou chat.chatbotId)
-        const chatSnap  = await chatDocRef.get();
-        const chatData  = chatSnap.data() || {};
-        const chatbotId = chatData.chatbotId
-            || (phoneDoc.data()?.chatbot?.enabled ? phoneDoc.data().chatbot.botId : null);
-
-        if (!chatbotId) throw new Error('Nenhum chatbot ativo: defina phones/{phoneId}.chatbot.enabled=true e .botId');
-
-        const botSnap = await admin.firestore()
-            .collection('empresas').doc(empresaId)
-            .collection('chatbots').doc(chatbotId).get();
-        if (!botSnap.exists) throw new Error('Chatbot não encontrado');
-
-        const chatbot          = botSnap.data();
-        const defaultSpacingMs = Number(chatbot.defaultSpacingMs || 1200);
-        const step             = findStep(chatbot.steps || [], data.stepId);
-
-        if (data.type === 'send_step') {
-            await executeSendStepTask({ empresaId, phoneId, chatId, phoneDoc, chatbot, step, defaultSpacingMs });
-        } else if (data.type === 'timeout_step') {
-            await handleTimeout({ empresaId, phoneId, chatId, phoneDoc, chatbot, task: data, defaultSpacingMs });
-        }
-
-        await ref.update({ status: 'done', finishedAt: nowTs(), error: admin.firestore.FieldValue.delete() });
-    } catch (err) {
-        logger.error('processQueueDoc error', err);
-        await ref.update({
-            status: 'pending',
-            error: String(err?.message || err),
-            runAt: inMs(2000)
-        });
-    }
+    return { instanceId, token, clientToken };
 }
 
-// ----------------------------------------------------------------
-// PONTO DE ENTRADA (chamado pelo seu zApiWebhook)
-// ----------------------------------------------------------------
-// TROQUE o maybeHandleByBot pelo abaixo (mesma assinatura que seu webhook já usa)
-async function maybeHandleByBot({ empresaId, phoneDoc, chatId, messageContent }) {
-    try {
-        const phoneId = phoneDoc.id;
-        logger.info('[BOT] maybeHandleByBot/in', { empresaId, phoneId, chatId });
+exports.processBotQueue = onSchedule(
+    { schedule: 'every 1 minutes', secrets: [ZAPI_ENC_KEY] },
+    async () => {
+        logger.info('[processBotQueue] start');
+        const nowTs = admin.firestore.Timestamp.now();
 
-        const { chatDocRef } = getChatRefs(empresaId, phoneId, chatId);
-        const chatSnap = await chatDocRef.get();
-        const chatData = chatSnap.data() || {};
-
-        const chatbotId = resolveActiveChatbotId({ phoneDoc, chatDocData: chatData });
-        if (!chatbotId) {
-            const cfg = (phoneDoc.data()?.chatbot) || {};
-            logger.info('[BOT] no-chatbot-configured-or-disabled → skipping', {
-                phoneId,
-                cfgEnabled: cfg.enabled === true,
-                cfgBotId: cfg.botId || null
+        let snap;
+        try {
+            snap = await db.collectionGroup('botQueue')
+                .where('status', '==', 'pending')
+                .where('runAt', '<=', nowTs)
+                .orderBy('runAt', 'asc')
+                .limit(100)
+                .get();
+        } catch (err) {
+            const msg = String(err?.message || '');
+            const idxUrl = msg.match(/https?:\/\/console\.firebase\.google\.com\/[^\s)]+/i)?.[0] || null;
+            logger.error('[processBotQueue] query falhou — índice (status, runAt) necessário.', {
+                code: err?.code, message: msg, indexUrl: idxUrl
             });
             return;
         }
 
-        const botSnap = await admin.firestore()
-            .collection('empresas').doc(empresaId)
-            .collection('chatbots').doc(chatbotId).get();
+        if (snap.empty) return;
 
-        if (!botSnap.exists) { logger.warn('[BOT] chatbot-not-found', { empresaId, chatbotId }); return; }
+        for (const doc of snap.docs) {
+            const claimed = await db.runTransaction(async (tx) => {
+                const fresh = await tx.get(doc.ref);
+                const d = fresh.data() || {};
+                const due = d.runAt?.toMillis?.() || 0;
+                if (d.status !== 'pending' || due > Date.now()) return false;
+                tx.update(doc.ref, {
+                    status: 'processing',
+                    processingAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                return true;
+            }).catch(() => false);
 
-        const chatbot = botSnap.data();
-        logger.info('[BOT] chatbot-loaded', {
-            chatbotId, startStepId: chatbot.startStepId, stepsCount: (chatbot.steps || []).length
-        });
+            if (!claimed) continue;
 
-        const defaultSpacingMs = Number(chatbot.defaultSpacingMs || 1200);
+            try {
+                const parts = doc.ref.path.split('/');
+                const empresaId = parts[1], phoneId = parts[3], chatId = parts[5];
 
-        // marca no chat qual bot está sendo usado (opcional)
-        if (chatData.chatbotId !== chatbotId) await chatDocRef.set({ chatbotId }, { merge: true });
+                const { phoneDocRef, chatDocRef, msgsColRef } = getChatRefs(empresaId, phoneId, chatId);
+                const { instanceId, token, clientToken } = await getZCredPlain(empresaId, phoneDocRef);
+                if (!instanceId || !token || !clientToken) {
+                    await doc.ref.set({ status: 'error', error: 'missing-credentials' }, { merge: true });
+                    continue;
+                }
 
-        // cria/carrega sessão
-        const { sessRef, session } = await loadOrInitSession({ empresaId, phoneId, chatId, chatbotDoc: botSnap });
-        logger.info('[BOT] session-state', session);
+                const job = doc.data() || {};
+                if (job.type === 'burst') {
+                    const seq = Array.isArray(job.items) ? job.items : [];
+                    const gap = Number(job.defaultSpacingMs || 600);
+                    for (let i = 0; i < seq.length; i++) {
+                        const it = seq[i];
+                        const wait = i === 0 ? 0 : (Number(it.delayMs) || gap);
+                        if (wait > 0) await new Promise(r => setTimeout(r, wait));
+                        await sendBotText(instanceId, token, clientToken, chatId, String(it.text || ''));
+                        await logOut(msgsColRef, String(it.text || ''));
+                    }
+                    await doc.ref.set({ status: 'done', doneAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+                    continue;
+                }
 
-        // se ainda não começou, começa pelo startStepId
-        if (!session.currentStepId && session.status !== 'running') {
-            const first = chatbot.startStepId || (chatbot.steps?.[0]?.id) || 'end';
-            logger.info('[BOT] starting-flow', { first });
-            await sessRef.set({ status: 'running', updatedAt: nowTs() }, { merge: true });
-            await enqueue({ empresaId, phoneId, chatId, stepId: first, type: 'send_step', runAt: nowTs(), reason: 'start' });
-            return;
-        }
+                if (job.type === 'timeout') {
+                    const sessionRef = chatDocRef.collection('runtime').doc('bot');
+                    const sSnap = await sessionRef.get();
+                    const session = sSnap.data() || {};
+                    if (!session.active) { await doc.ref.set({ status: 'skipped', reason: 'inactive' }, { merge: true }); continue; }
+                    if (session.stepId !== job.stepId) { await doc.ref.set({ status: 'skipped', reason: 'moved-step' }, { merge: true }); continue; }
+                    if ((session.lastUserAt || 0) > (job.runAt?.toMillis?.() || 0)) { await doc.ref.set({ status: 'skipped', reason: 'user-replied' }, { merge: true }); continue; }
 
-        // se está aguardando e o usuário respondeu → segue pelo onReply
-        if (messageContent && session.awaitingReply && session.currentStepId) {
-            logger.info('[BOT] got-reply', { stepId: session.currentStepId, preview: String(messageContent).slice(0,60) });
-            await handleReply({ empresaId, phoneId, chatId, phoneDoc, chatbot, session, userText: messageContent, defaultSpacingMs });
-            return;
-        }
+                    const botSnap = await db.doc(`empresas/${empresaId}/chatbots/${session.botId}`).get();
+                    if (!botSnap.exists) { await doc.ref.set({ status: 'error', error: 'bot-not-found' }, { merge: true }); continue; }
 
-        // se não está aguardando e temos currentStepId → garante continuidade
-        if (!session.awaitingReply && session.currentStepId) {
-            logger.info('[BOT] resume-step', { stepId: session.currentStepId });
-             await enqueue({
-                   empresaId, phoneId, chatId,
-                   stepId: session.currentStepId,
-                   type: 'send_step',
-                   runAt: nowTs(),                // << instantâneo
-                   reason: 'resume'
-             });
-        }
-    } catch (e) {
-        logger.error('maybeHandleByBot failed', e);
-    }
-}
-exports.maybeHandleByBot = maybeHandleByBot;
+                    const bot = botSnap.data() || {};
+                    const stepsArr = Array.isArray(bot.steps) ? bot.steps : [];
+                    const steps    = indexById(stepsArr);
+                    const startId  = job.nextId || steps[session.stepId]?.meta?.timeoutNext || 'end';
+                    const walked   = walkUntilInteractive(steps, startId, session.vars, stepsArr);
 
-// ----------------------------------------------------------------
-// PROCESSADORES DE FILA
-// ----------------------------------------------------------------
+                    await enqueueBurst({
+                        empresaId, phoneId, chatId,
+                        items: walked.outMsgs,
+                        originStepId: walked.interactiveStep ? walked.interactiveStep.id : walked.finalStepId,
+                        defaultSpacingMs: Number(bot.defaultSpacingMs || 1200)
+                    });
 
-// 2) cron a cada minuto para pegar pendentes vencidas (collectionGroup)
-exports.processBotQueue = onSchedule(
-    { schedule: 'every 1 minutes', timeZone: 'America/Sao_Paulo', region: 'us-central1' },
-    async () => {
-        const now = admin.firestore.Timestamp.now();
-        const snap = await admin.firestore()
-            .collectionGroup('botQueue')
-            .where('status', '==', 'pending')
-            .where('runAt', '<=', now)
-            .orderBy('runAt', 'asc')
-            .limit(BOT.TICK_LIMIT)
-            .get();
+                    const nextStep = walked.interactiveStep || steps[walked.finalStepId];
+                    await sessionRef.set({
+                        stepId: (nextStep && nextStep.id) || walked.finalStepId,
+                        lastBotAt: Date.now(),
+                    }, { merge: true });
 
-        logger.info('[BOT] scheduler tick', { pending: snap.size });
-        for (const d of snap.docs) {
-            try { await processQueueDoc(d.ref); }
-            catch (e) { logger.error('processBotQueue item error', e); }
-        }
-    }
-);
+                    const tmMin = Number(nextStep?.meta?.timeoutMinutes || 0);
+                    const tmNext = nextStep?.meta?.timeoutNext || null;
+                    if (tmMin > 0) {
+                        await enqueueTimeout({ empresaId, phoneId, chatId, stepId: nextStep.id, nextId: tmNext, timeoutMinutes: tmMin });
+                    }
 
-exports.onQueueCreatedWhatsapp = onDocumentCreated(
-    {
-        document: 'empresas/{empresaId}/phones/{phoneId}/whatsappChats/{chatId}/botQueue/{taskId}',
-        region: 'us-central1',
-    },
-    async (event) => {
-        logger.info('[BOT] onQueueCreatedWhatsapp fired', { path: event.data?.ref?.path });
-        try { await processQueueDoc(event.data.ref); }
-        catch (e) { logger.error('onQueueCreatedWhatsapp error', e); }
-    }
-);
+                    await doc.ref.set({ status: 'done', doneAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+                    continue;
+                }
 
-// (opcional) legado: se você tiver chats/ em algum ambiente
-exports.onQueueCreatedChats = onDocumentCreated(
-    {
-        document: 'empresas/{empresaId}/phones/{phoneId}/chats/{chatId}/botQueue/{taskId}',
-        region: 'us-central1',
-    },
-    async (event) => {
-        try { await processQueueDoc(event.data.ref); }
-        catch (e) { logger.error('onQueueCreatedChats error', e); }
-    }
-);
-
-function readZapiCredsFromPhoneDoc(phoneDoc) {
-    const d = (phoneDoc.data() || {});
-    const m = d.chatbot || {};
-
-    const instanceId =
-        m.instanceId || d.instanceId ||
-        m.instanceID || d.instanceID ||
-        m.instance   || d.instance   || null;
-
-    const token =
-        m.token || d.token ||
-        m.apiToken || d.apiToken || null;
-
-    const clientToken =
-        m.clientToken || d.clientToken || null;
-
-    const apiUrl = m.apiUrl || d.apiUrl || 'https://api.z-api.io';
-
-    const where =
-        (m.instanceId || m.token || m.clientToken || m.apiUrl) ? 'chatbot' :
-            (d.instanceId || d.token || d.clientToken || d.apiUrl) ? 'root' : 'none';
-
-    return { instanceId, token, clientToken, apiUrl, where };
-}
-
-// ----------------------------------------------------------------
-// TEMPLATES E MENUS (com variáveis)
-// ----------------------------------------------------------------
-function renderTemplate(str, vars) {
-    try {
-        if (!str) return str;
-        const v = vars || {};
-        return String(str).replace(/\{\{\s*([a-zA-Z0-9_\.]+)\s*\}\}/g, (_m, k) => {
-            if (v && Object.prototype.hasOwnProperty.call(v, k)) {
-                const val = v[k];
-                return val === undefined || val === null ? '' : String(val);
+                await doc.ref.set({ status: 'error', error: 'unknown-type' }, { merge: true });
+            } catch (err) {
+                await doc.ref.set({ status: 'error', error: String(err?.message || err) }, { merge: true });
             }
-            return '';
+        }
+    });
+
+
+// Caminho de fila por chat
+function botQueueCol(empresaId, phoneId, chatId) {
+    return db.collection('empresas').doc(empresaId)
+        .collection('phones').doc(phoneId)
+        .collection('whatsappChats').doc(chatId)
+        .collection('botQueue');
+}
+
+function asBurstItem(x) {
+    if (!x) return null;
+    if (typeof x === 'string') return { text: x, delayMs: 0 };
+    if (typeof x.text === 'string') return { text: String(x.text), delayMs: Number(x.delayMs || 0) };
+    return null;
+}
+
+// === ENFILERADOR DE UM ÚNICO ENVIO (com log por item) ===
+async function enqueueSend({ empresaId, phoneId, chatId, text, delayMs = 0, originStepId = null }) {
+    const runAt = admin.firestore.Timestamp.fromMillis(Date.now() + Math.max(0, delayMs));
+    const payload = {
+        type: 'send',
+        text: String(text || ''),
+        originStepId: originStepId || null,
+        runAt,
+        status: 'pending',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    const ref = await botQueueCol(empresaId, phoneId, chatId).add(payload);
+    logger.info('[enqueueSend]', {
+        empresaId, phoneId, chatId, jobId: ref.id, originStepId,
+        runAtIso: new Date(runAt.toMillis()).toISOString(),
+        textPreview: String(text || '').slice(0, 120)
+    });
+}
+
+async function enqueueBurst({ empresaId, phoneId, chatId, items, originStepId = null, defaultSpacingMs = 600 }) {
+    const valid = (items || []).map(asBurstItem).filter(Boolean);
+
+    if (valid.length === 0) {
+        logger.info('[enqueueBurst] nada a enfileirar', { empresaId, phoneId, chatId, originStepId });
+        return;
+    }
+
+    const runAt = admin.firestore.Timestamp.fromMillis(Date.now());
+    const payload = {
+        type: 'burst',
+        items: valid,                                   // ✅ era seq
+        originStepId: originStepId || null,
+        defaultSpacingMs: Number(defaultSpacingMs || 600),
+        runAt,
+        status: 'pending',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    const ref = await botQueueCol(empresaId, phoneId, chatId).add(payload);
+
+    logger.info('[enqueueBurst] enfileirado', {
+        empresaId, phoneId, chatId,
+        jobId: ref.id,
+        count: valid.length,                            // ✅ era seq.length
+        originStepId,
+        defaultSpacingMs: Number(defaultSpacingMs || 600),
+    });
+}
+
+async function enqueueTimeout({ empresaId, phoneId, chatId, stepId, nextId, timeoutMinutes }) {
+    const ms = Math.max(1, Number(timeoutMinutes || 0)) * 60 * 1000;
+    const runAt = admin.firestore.Timestamp.fromMillis(Date.now() + ms);
+    const payload = {
+        type: 'timeout',
+        stepId,
+        nextId: nextId || null,
+        runAt,
+        status: 'pending',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    await botQueueCol(empresaId, phoneId, chatId).add(payload);
+    logger.info('[enqueueTimeout]', {
+        empresaId, phoneId, chatId, stepId, nextId, timeoutMinutes,
+        runAtIso: new Date(runAt.toMillis()).toISOString()
+    });
+}
+
+function isQuestionText(t) {
+    const s = String(t || '').trim();
+    // considera "pergunta" se contém "?" em qualquer lugar (inclui pt-BR)
+    return s.includes('?');
+}
+
+function truncateAtFirstQuestion(items) {
+    const out = [];
+    for (const it of items || []) {
+        out.push(it);
+        if (isQuestionText(it?.text)) break;
+    }
+    return out.length ? out : items;
+}
+
+async function maybeHandleByBot({ empresaId, phoneDoc, chatId, messageContent }) {
+    logger.info('[maybeHandleByBot] start', { empresaId, phoneId: phoneDoc.id, chatId });
+
+    const phoneId  = phoneDoc.id;
+    const phoneData = phoneDoc.data() || {};
+    const botCfg   = phoneData.chatbot || {};
+    logger.info('[bot:cfg]', { chatId, enabled: !!botCfg.enabled, botId: botCfg.botId || null });
+
+    if (!botCfg.enabled || !botCfg.botId) {
+        logger.info('[bot:skip:cfg]', { chatId });
+        return;
+    }
+
+    const empSnap  = await db.doc(`empresas/${empresaId}`).get();
+    const empData  = empSnap.exists ? (empSnap.data() || {}) : {};
+    const instanceId  = phoneData.instanceId  || empData.instanceId  || process.env.ZAPI_ID;
+    const token       = phoneData.token       || empData.token       || process.env.ZAPI_TOKEN;
+    const clientToken = phoneData.clientToken || empData.clientToken || process.env.ZAPI_CLIENT_TOKEN;
+
+    logger.info('[bot:creds]', { chatId, hasInstance: !!instanceId, hasToken: !!token, hasClientToken: !!clientToken });
+    if (!instanceId || !token || !clientToken) {
+        logger.warn('[bot:skip:creds-missing]', { chatId });
+        return;
+    }
+
+    const { chatDocRef } = getChatRefs(empresaId, phoneId, chatId);
+    const sessionRef = chatDocRef.collection('runtime').doc('bot');
+
+    // status do chat
+    const chatSnap = await chatDocRef.get();
+    const chatStatus = (chatSnap.data() || {}).status;
+    logger.info('[bot:chat-status]', { chatId, status: chatStatus || 'undefined' });
+    if (chatStatus === 'atendendo') {
+        logger.info('[bot:skip:handoff]', { chatId });
+        return;
+    }
+
+    // opt-out
+    const optout = (botCfg.optOutKeywords || []).some(k =>
+        (messageContent || '').toLowerCase().includes(String(k).toLowerCase())
+    );
+    logger.info('[bot:optout-check]', { chatId, matched: optout, keywords: botCfg.optOutKeywords || [] });
+    if (optout) {
+        await sessionRef.set({ active: false }, { merge: true });
+        await chatDocRef.set({ status: 'atendendo' }, { merge: true });
+        logger.info('[bot:optout:handoff]', { chatId });
+        return;
+    }
+
+    // carrega BOT
+    const botSnap = await db.doc(`empresas/${empresaId}/chatbots/${botCfg.botId}`).get();
+    if (!botSnap.exists) {
+        logger.warn('[bot:skip:bot-not-found]', { chatId, botId: botCfg.botId });
+        return;
+    }
+    const bot = botSnap.data() || {};
+    const stepsArr = Array.isArray(bot.steps) ? bot.steps : [];
+    const steps    = indexById(stepsArr);
+
+    // sessão
+    const sessionSnap = await sessionRef.get();
+    let session = sessionSnap.exists ? (sessionSnap.data() || {}) : {
+        active: true,
+        botId: botCfg.botId,
+        stepId: bot.startStepId || 'start',
+        vars: {},
+        fallbackCount: 0,
+    };
+    logger.info('[bot:session]', {
+        chatId,
+        exists: sessionSnap.exists,
+        active: !!session.active,
+        stepId: session.stepId
+    });
+
+    // marca msg do usuário
+    await sessionRef.set({ lastUserAt: Date.now() }, { merge: true });
+
+    // horário comercial
+    const closed = isClosed(bot.officeHours);
+    logger.info('[bot:office-hours]', { chatId, configured: !!bot.officeHours?.enabled, closed });
+    if (closed && bot.officeHours?.enabled) {
+        const msg = bot.officeHours.closedMessage || 'Em breve responderemos.';
+        logger.info('[bot:closed:send]', { chatId, preview: msg.slice(0,80) });
+        await enqueueBurst({
+            empresaId, phoneId, chatId,
+            items: [{ text: msg }],
+            originStepId: session.stepId,
+            defaultSpacingMs: Number(bot.defaultSpacingMs || 1200),
         });
-    } catch (e) {
-        // nunca deixe template quebrar envio
-        return String(str || '');
+        return;
+    }
+
+    // ---------- PRIMEIRO TURNO ----------
+    // ---------- PRIMEIRO TURNO ----------
+    if (!sessionSnap.exists) {
+        const walked = walkUntilInteractive(steps, session.stepId, session.vars, stepsArr);
+        const intro  = normalizeBurst(bot.intro || bot.introBurst || bot.startBurst);
+
+        const firstOutText  = (walked.outMsgs?.[0]?.text || '').trim();
+        const greetingText  = (bot.greeting || '').trim();
+
+        // Evita duplicar a saudação quando o 1º step já é uma mensagem interativa
+        // ou quando a saudação é exatamente igual ao 1º texto do fluxo.
+        const useGreeting =
+            greetingText &&
+            greetingText !== firstOutText &&
+            !(walked.interactiveStep?.type === 'message');
+
+        const itemsBeforeTrim = [
+            ...(useGreeting ? [{ text: greetingText }] : []),
+            ...intro,
+            ...walked.outMsgs,
+        ];
+
+        const trimmed = truncateAtFirstQuestion(itemsBeforeTrim);
+
+        await enqueueBurst({
+            empresaId, phoneId, chatId,
+            items: trimmed,
+            originStepId: walked.interactiveStep ? walked.interactiveStep.id : walked.finalStepId,
+            defaultSpacingMs: Number(bot.defaultSpacingMs || 1200),
+        });
+
+        const interactive = walked.interactiveStep || steps[walked.finalStepId];
+
+        await sessionRef.set({
+            ...session,
+            stepId: interactive?.id || walked.finalStepId,
+            startedAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastBotAt: Date.now(),
+        }, { merge: true });
+
+        const tmMin  = Number(interactive?.meta?.timeoutMinutes || 0);
+        const tmNext = interactive?.meta?.timeoutNext || null;
+        if (tmMin > 0) {
+            await enqueueTimeout({ empresaId, phoneId, chatId, stepId: interactive.id, nextId: tmNext, timeoutMinutes: tmMin });
+        }
+        return;
+    }
+
+    // sessão existente mas inativa
+    if (!session.active) {
+        logger.info('[bot:skip:inactive-session]', { chatId });
+        return;
+    }
+
+    // ---------- TURNOS SEGUINTES ----------
+    const decision = computeNextStep(bot, session, messageContent, stepsArr);
+    const items = (decision.outMessages || []).map(x => (typeof x === 'string' ? { text: x } : x));
+
+    logger.info('[bot:turn]', {
+        chatId,
+        prevStepId: session.stepId,
+        newStepId: decision.session.stepId,
+        emitted: items.length,
+        preview: items.map(i => i.text).slice(0,3)
+    });
+
+    await enqueueBurst({
+        empresaId, phoneId, chatId,
+        items,
+        originStepId: decision.session.stepId,
+        defaultSpacingMs: Number(bot.defaultSpacingMs || 1200)
+    });
+
+    await sessionRef.set(decision.session, { merge: true });
+
+    const newStep = steps[decision.session.stepId];
+    const tmMin = Number(newStep?.meta?.timeoutMinutes || 0);
+    const tmNext = newStep?.meta?.timeoutNext || null;
+    if (tmMin > 0) await enqueueTimeout({ empresaId, phoneId, chatId, stepId: newStep.id, nextId: tmNext, timeoutMinutes: tmMin });
+
+    if (decision.handoff) {
+        logger.info('[bot:handoff]', { chatId, to: 'atendendo' });
+        await chatDocRef.set({ status: 'atendendo' }, { merge: true });
     }
 }
 
-// ---------- TAGS (etiquetas) ----------
-async function applyStepActionsToChat({ empresaId, phoneId, chatId, step }) {
+function buildIntroBurst(bot, startId, vars) {
+    const steps = indexById(bot.steps || []);
+    const stepsOrder = bot.steps || [];
+    const out = [];
+
+    if (bot.greeting) out.push(bot.greeting);
+    const intro = normalizeBurst(bot.intro || bot.introBurst || bot.startBurst);
+    intro.forEach(m => out.push(m.text));
+
+    const { outMsgs, finalStepId } = walkUntilInteractive(
+        steps,
+        startId || bot.startStepId || 'start',
+        vars,
+        stepsOrder
+    );
+    out.push(...outMsgs);
+
+    if (out.length === 0 && !bot.greeting) out.push('Olá! 👋');
+    return { outMsgs: out, finalStepId };
+}
+
+// ---------- helpers ----------
+function isClosed(office) {
+    if (!office?.enabled) return false;
     try {
-        const tagId = step?.actions?.addTagId;
-        if (!tagId) return;
+        const tz = office.tz || 'America/Sao_Paulo';
+        const now = new Date();
+        const day = ['sun','mon','tue','wed','thu','fri','sat'][now.getDay()];
+        const rule = office[day];
+        if (!rule) return true;
+        const [hs, ms] = rule.start.split(':').map(Number);
+        const [he, me] = rule.end.split(':').map(Number);
+        const start = new Date(now); start.setHours(hs, ms, 0, 0);
+        const end   = new Date(now); end.setHours(he, me, 0, 0);
+        return !(now >= start && now <= end);
+    } catch { return false; }
+}
 
-        // empresas/{empresaId}/phones/{phoneId}/whatsappChats/{chatId}
-        const { chatDocRef } = getChatRefs(empresaId, phoneId, chatId);
+function render(txt, vars) {
+    return String(txt || '').replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, k) => vars?.[k] ?? '');
+}
+function nextIdByOrder(stepsOrder, currentId) {
+    const arr = Array.isArray(stepsOrder) ? stepsOrder : [];
+    const idx = arr.findIndex(s => s && s.id === currentId);
+    if (idx === -1) return arr[0]?.id || null;           // se não achar, volta ao primeiro
+    return arr[idx + 1]?.id || null;                     // próximo da lista (ex.: 0 → 1)
+}
 
-        await chatDocRef.set(
-            { tags: admin.firestore.FieldValue.arrayUnion(tagId) },
-            { merge: true }
-        );
+function emitSingleStep(stepsById, stepId, vars) {
+    if (!stepId) return [];
+    const step = stepsById[stepId];
+    if (!step) return [];
+    const t = String(step.type || '').toLowerCase();
+    const out = [];
 
-        // (Opcional) registrar também em subcoleção:
-        // await chatDocRef.collection('tags').doc(tagId).set({ createdAt: nowTs() }, { merge: true });
+    // pre/preamble (se você usa)
+    normalizeBurst(step.pre || step.preamble || step.preMessages).forEach(m => out.push(m));
 
-        logger.info('[BOT] tag-applied', { chatPath: chatDocRef.path, stepId: step.id, tagId });
-    } catch (e) {
-        logger.error('[BOT] tag-apply-failed', e);
+    if (t === 'menu') {
+        const ask = getMenuAsk(step); if (ask) out.push({ text: render(ask, vars) });
+        return out;
     }
+    if (t === 'form') {
+        const ask = getFormAsk(step, vars); if (ask) out.push({ text: render(ask, vars) });
+        return out;
+    }
+    if (t === 'capture') {
+        const ask = getCaptureAsk(step); if (ask) out.push({ text: render(ask, vars) });
+        return out;
+    }
+    if (t === 'message') {
+        const txt = (step.text || '').toString().trim();
+        if (txt) out.push({ text: render(txt, vars) });
+        return out;
+    }
+    return out;
 }
 
-async function persistBotTextMessage({ empresaId, phoneId, chatId, text, zapiId = null }) {
-    if (!text) return null;
-    const { chatDocRef } = getChatRefs(empresaId, phoneId, chatId);
+// Decide a próxima etapa (menu, form, capture, message, end)
+function computeNextStep(bot, session, userText, stepsArr) {
+    const steps = indexById(stepsArr);
+    const cur   = steps[session.stepId] || { id: 'end', type: 'end' };
+    const outMessages = [];
+    let handoff = false;
 
-    const msg = {
-        content: text,
-        type: 'text',            // o app renderiza como texto
-        fromMe: true,            // “nosso lado” (direita + ✓✓)
-        read: false,             // app só pinta ✓✓ quando receber confirmação
-        sender: 'chatbot',
-        senderName: 'Chatbot',
-        senderPhoto: null,
-        status: 'enviado',
-        zapiId: zapiId,
-        timestamp: nowTs(),
+    const clean = String(userText || '').trim();
+    const fallbackNext = cur.next || nextIdByOrder(stepsArr, cur.id) || 'end';
+
+    let nextId = 'end';
+    let nextSession = session;
+
+    if (cur.type === 'menu') {
+        const opts = Array.isArray(cur.options) ? cur.options : [];
+        const chosen = opts.find(o => String(o.key).toLowerCase() === clean.toLowerCase());
+        if (!chosen) {
+            const fb = bot?.fallback?.message || 'Não entendi. Responda com uma das opções.';
+            outMessages.push({ text: fb });
+            logger.info('[computeNextStep:menu:no-match]', { stepId: cur.id, user: clean, options: opts.map(o=>o.key) });
+            return { outMessages, handoff: false, session: { ...session, fallbackCount: (session.fallbackCount || 0) + 1 } };
+        }
+        nextId = chosen.next || fallbackNext;
+
+    } else if (cur.type === 'capture') {
+        const targetVar = cur.var || cur.name || cur.field || 'lastInput';
+        const vars = { ...(session.vars || {}), [targetVar]: clean };
+        nextSession = { ...session, vars };
+        nextId = fallbackNext;
+
+    } else if (cur.type === 'form') {
+        const fields = Array.isArray(cur.fields) ? cur.fields : [];
+        // acha o próximo campo pendente
+        const pending = fields.find(f => !(session.vars || {})[f.name]);
+        if (pending) {
+            // grava a resposta do usuário no campo pendente atual
+            const vars = { ...(session.vars || {}), [pending.name]: clean };
+            nextSession = { ...session, vars };
+            // vê se ainda resta algum campo
+            const still = fields.find(f => !(vars)[f.name]);
+            if (still) {
+                // fica no mesmo step e pergunta o próximo campo (walkUntilInteractive vai emitir o ask do form)
+                nextId = cur.id;
+            } else {
+                // formulário concluído
+                nextId = fallbackNext;
+            }
+        } else {
+            // não havia pendências -> avança
+            nextId = fallbackNext;
+        }
+
+    } else if (cur.type === 'message') {
+        nextId = fallbackNext;
+
+    } else {
+        nextId = fallbackNext;
+    }
+
+    const walked = walkUntilInteractive(steps, nextId, nextSession.vars, stepsArr);
+    outMessages.push(...walked.outMsgs);
+
+    const nextInteractive = walked.interactiveStep || steps[walked.finalStepId];
+    const newStepId = nextInteractive?.id || walked.finalStepId || 'end';
+
+    if (outMessages.length === 0) {
+        outMessages.push({ text: bot?.fallback?.noNextMessage || 'Perfeito, obrigado! 👌' });
+    }
+
+    logger.info('[computeNextStep]', {
+        curId: cur.id, curType: cur.type,
+        user: clean,
+        chosenNextId: nextId,
+        emitted: outMessages.length,
+        newStepId
+    });
+
+    return {
+        outMessages,
+        handoff,
+        session: {
+            ...nextSession,
+            stepId: newStepId,
+            lastBotAt: Date.now(),
+            fallbackCount: 0
+        }
     };
-
-    const msgRef = await chatDocRef.collection('messages').add(msg);
-
-    // Atualiza resumo do chat (lista)
-    const dt = new Date();
-    const hh = String(dt.getHours()).padStart(2, '0');
-    const mm = String(dt.getMinutes()).padStart(2, '0');
-    await chatDocRef.set({
-        lastMessage: text,
-        lastMessageTime: `${hh}:${mm}`,
-        timestamp: nowTs(),
-    }, { merge: true });
-
-    return msgRef.id;
 }
 
-// Mensagem de sistema (não atualiza lastMessage da lista)
-async function persistSystemEventMessage({
-                                             empresaId, phoneId, chatId,
-                                             event,                  // 'handoff' | 'bot_end' | 'timeout_end' | etc
-                                             label,                  // texto humanizado que aparecerá no chat
-                                             extra = {},             // metadados opcionais
-                                         }) {
-    if (!label) return;
-
-    const { chatDocRef } = getChatRefs(empresaId, phoneId, chatId);
-
-    // leve proteção contra duplicidade por step/evento
-    const guardId = `sys:${event}:${(extra.stepId || 'na')}`;
-    const guardRef = chatDocRef.collection('botSendGuards').doc(guardId);
-    const guard = await guardRef.get();
-    if (guard.exists) return; // já registrado
-
-    await guardRef.set({ createdAt: nowTs(), event });
-
-    const msg = {
-        type: 'system',
-        content: label,         // o que o app mostra no chip
-        systemEvent: event,     // chave para iconografia/cores, se quiser
-        fromMe: false,          // centralizado, não é “de mim”
-        read: true,             // não precisa ✓✓
-        status: 'system',
-        timestamp: nowTs(),
-        meta: extra || null
-    };
-
-    await chatDocRef.collection('messages').add(msg);
+function indexById(arr) {
+    const m = {};
+    for (const it of Array.isArray(arr) ? arr : []) {
+        if (it && it.id) m[it.id] = it;
+    }
+    return m;
 }
 
+async function sendBotText(instanceId, token, clientToken, chatId, text) {
+    const digits = (s) => String(s || '').replace(/\D/g,'');
+    const phoneDigits = digits(chatId);
+    const headers = { 'client-token': clientToken };
+    const payload = { phone: phoneDigits, message: String(text || '') };
+    await callZ(instanceId, token, '/send-text', payload, headers, 15000);
+}
 
-// FIM // FUNCTIONS CHATBOTS
+async function logOut(msgsColRef, content) {
+    await msgsColRef.add({
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        fromMe: true,
+        type: 'text',
+        content: String(content || ''),
+        status: 'sent',
+        read: false,
+        meta: { by: 'bot' }
+    });
+}
+
+function asArray(x) {
+    if (!x) return [];
+    return Array.isArray(x) ? x : [x];
+}
+
+function normalizeBurst(b) {
+    if (!Array.isArray(b)) return [];
+    return b.map(x => (typeof x === 'string')
+        ? ({ text: x, delayMs: 0 })
+        : ({ text: String(x?.text || ''), delayMs: Number(x?.delayMs || 0) }));
+}
+
+function getPreMessages(step) {
+    // suporte a chaves equivalentes
+    return normalizeBurst(step?.pre || step?.preamble || step?.preMessages);
+}
+
+function getMenuAsk(step) {
+    return step?.text || null;
+}
+
+function getFormAsk(step, vars) {
+    // pega o próximo campo pendente
+    const nextField = (step?.fields || []).find(f => !(vars || {})[f.name]);
+    return nextField?.ask || null;
+}
+
+function getCaptureAsk(step) {
+    return step?.ask || null;
+}
+
+function walkUntilInteractive(steps, startId, vars = {}, stepsArr = []) {
+    const outMsgs = [];
+    const seen = new Set();
+    let curId = startId;
+    let interactiveStep = null;
+    let finalStepId = startId;
+
+    const isInteractiveMessage = (s) =>
+        s?.type === 'message' && Number(s?.meta?.timeoutMinutes || 0) > 0;
+
+    while (curId && steps[curId] && !seen.has(curId)) {
+        seen.add(curId);
+        const s = steps[curId];
+        finalStepId = s.id;
+
+        if (s.type === 'end') {
+            break;
+        }
+
+        if (s.type === 'menu') {
+            if (s.text) outMsgs.push({ text: s.text });
+            interactiveStep = s;
+            break;
+        }
+
+        if (s.type === 'capture') {
+            if (s.ask) outMsgs.push({ text: s.ask });
+            interactiveStep = s;
+            break;
+        }
+
+        if (s.type === 'form') {
+            const ask = getFormAsk(s, vars);
+            if (ask) outMsgs.push({ text: ask });
+            interactiveStep = s; // form é interativo (espera resposta)
+            break;
+        }
+
+        if (s.type === 'message') {
+            if (s.text) outMsgs.push({ text: s.text });
+            if (isInteractiveMessage(s)) {
+                interactiveStep = s;
+                break;
+            }
+            curId = s.next || 'end';
+            continue;
+        }
+
+        // tipos desconhecidos: protege
+        curId = s.next || 'end';
+    }
+
+    return { outMsgs, interactiveStep, finalStepId };
+}

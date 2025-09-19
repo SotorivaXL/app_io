@@ -14,6 +14,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
+import '../chatbot/manage_chatbots.dart';
 import '../products/manage_products.dart';
 import '../requests/request_metting.dart';
 
@@ -519,9 +520,17 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                         title   : 'Gerenciar Produtos',
                         subtitle: 'Criar, editar e excluir produtos',
                         icon    : Icons.inventory_2_outlined,
-                        onTap   : () => _navigateWithFade(context, const ManageProducts()),
+                        onTap   : () => _navigateWithFade(context, ManageProducts()),
                         isDesktop: isDesktop,
                       ),
+                    _buildCardOption(
+                      context,
+                      title: 'Chatbots',
+                      subtitle: 'Crie e personalize respostas automáticas',
+                      icon: Icons.smart_toy_outlined,
+                      onTap: () => _navigateWithFade(context, ManageChatbotsPage()),
+                      isDesktop: isDesktop,
+                    ),
                     _buildCardOption(
                       context,
                       title: 'Sair da conta',
@@ -642,6 +651,14 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                       onTap   : () => _navigateWithFade(context, const ManageProducts()),
                       isDesktop: isDesktop,
                     ),
+                  _buildCardOption(
+                    context,
+                    title: 'Chatbots',
+                    subtitle: 'Crie e personalize respostas automáticas',
+                    icon: Icons.smart_toy_outlined,
+                    onTap: () => _navigateWithFade(context, ManageChatbotsPage()),
+                    isDesktop: isDesktop,
+                  ),
                   _buildCardOption(
                     context,
                     title: 'Sair da conta',

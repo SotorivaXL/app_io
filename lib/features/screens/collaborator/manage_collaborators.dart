@@ -70,12 +70,10 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
         modIndicadores: c['modIndicadores'] ?? true,
         modPainel: c['modPainel'] ?? false,
         modRelatorios: c['modRelatorios'] ?? false,
-        modConfig: c['modConfig'] ?? true,
 
         // PERMISSÕES INTERNAS (Painel)
         gerenciarParceiros: c['gerenciarParceiros'] ?? false,
         gerenciarColaboradores: c['gerenciarColaboradores'] ?? false,
-        configurarDash: c['configurarDash'] ?? false,
         criarForm: c['criarForm'] ?? false,
         criarCampanha: c['criarCampanha'] ?? false,
         gerenciarProdutos:      c['gerenciarProdutos'] ?? false,
