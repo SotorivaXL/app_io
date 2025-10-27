@@ -33,6 +33,7 @@ class _ManageProductsState extends State<ManageProducts> {
   void initState() {
     super.initState();
     _listenPermission();
+    _listenPermission();
     _resolveCompanyId();
   }
 
