@@ -451,159 +451,166 @@ class _ManageCompaniesState extends State<ManageCompanies> {
               ),
             ),
 
-            // O restante do corpo permanece inalterado
+            // Corpo
             body: isDesktop
-                ? Center(
-              child: Container(
-                constraints: BoxConstraints(maxWidth: 1850),
-                child: SafeArea(
-                  top: true,
-                  child: StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('empresas')
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return Center(child: CircularProgressIndicator());
-                      }
+                ? Align( // ✅ Desktop: gruda no topo
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1500), // ✅ mesma largura máxima
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16), // ✅ só laterais
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 30),
+                    child: SafeArea(
+                      top: true,
+                      child: StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('empresas')
+                            .snapshots(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return Center(child: CircularProgressIndicator());
+                          }
 
-                      if (snapshot.hasError) {
-                        return Center(child: Text('Erro ao carregar empresas'));
-                      }
+                          if (snapshot.hasError) {
+                            return Center(child: Text('Erro ao carregar empresas'));
+                          }
 
-                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                        return Center(child: Text('Nenhuma empresa encontrada'));
-                      }
+                          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                            return Center(child: Text('Nenhuma empresa encontrada'));
+                          }
 
-                      final companies = snapshot.data!.docs;
+                          final companies = snapshot.data!.docs;
 
-                      // Filtrar as empresas com base em isDevAccount e currentUserId
-                      final filteredCompanies = companies.where((doc) {
-                        final data = doc.data() as Map<String, dynamic>?;
-                        final bool isDevAccount = data?['isDevAccount'] == true;
-                        if (isDevAccount) return doc.id == currentUserId;
-                        return true;
-                      }).toList();
+                          // Filtrar as empresas com base em isDevAccount e currentUserId
+                          final filteredCompanies = companies.where((doc) {
+                            final data = doc.data() as Map<String, dynamic>?;
+                            final bool isDevAccount = data?['isDevAccount'] == true;
+                            if (isDevAccount) return doc.id == currentUserId;
+                            return true;
+                          }).toList();
 
-                      return ListView.builder(
-                        controller: _scrollController,
-                        itemCount: filteredCompanies.length,
-                        itemBuilder: (context, index) {
-                          final company = filteredCompanies[index];
-                          final data = company.data() as Map<String, dynamic>;
+                          return ListView.builder(
+                            controller: _scrollController,
+                            itemCount: filteredCompanies.length,
+                            itemBuilder: (context, index) {
+                              final company = filteredCompanies[index];
+                              final data = company.data() as Map<String, dynamic>;
 
-                          bool asBool(dynamic v) => v == true;
-                          int asInt(dynamic v) => v is int ? v : (v is num ? v.toInt() : 0);
+                              bool asBool(dynamic v) => v == true;
+                              int asInt(dynamic v) => v is int ? v : (v is num ? v.toInt() : 0);
 
-                          final String nomeEmpresa = (data['NomeEmpresa'] ?? '') as String;
-                          final String contract    = (data['contract'] ?? '') as String;
-                          final String email       = (data['email'] ?? '') as String;
-                          final String cnpj        = (data['cnpj'] ?? '') as String;
-                          final String founded     = (data['founded'] ?? '').toString();
+                              final String nomeEmpresa = (data['NomeEmpresa'] ?? '') as String;
+                              final String contract    = (data['contract'] ?? '') as String;
+                              final String email       = (data['email'] ?? '') as String;
+                              final String cnpj        = (data['cnpj'] ?? '') as String;
+                              final String founded     = (data['founded'] ?? '').toString();
 
-                          final int countArtsValue   = asInt(data['countArtsValue']);
-                          final int countVideosValue = asInt(data['countVideosValue']);
+                              final int countArtsValue   = asInt(data['countArtsValue']);
+                              final int countVideosValue = asInt(data['countVideosValue']);
 
-                          final bool dashboard              = _getRight(data, 'dashboard');
-                          final bool leads                  = _getRight(data, 'leads');
-                          final bool gerenciarColaboradores = _getRight(data, 'gerenciarColaboradores');
-                          final bool configurarDash         = _getRight(data, 'configurarDash');
-                          final bool criarCampanha          = _getRight(data, 'criarCampanha');
-                          final bool criarForm              = _getRight(data, 'criarForm');
-                          final bool copiarTelefones        = _getRight(data, 'copiarTelefones');
-                          final bool alterarSenha           = _getRight(data, 'alterarSenha');
-                          final bool executarAPIs           = _getRight(data, 'executarAPIs');
-                          final bool gerenciarProdutos      = _getRight(data, 'gerenciarProdutos');
+                              final bool dashboard              = _getRight(data, 'dashboard');
+                              final bool leads                  = _getRight(data, 'leads');
+                              final bool gerenciarColaboradores = _getRight(data, 'gerenciarColaboradores');
+                              final bool configurarDash         = _getRight(data, 'configurarDash');
+                              final bool criarCampanha          = _getRight(data, 'criarCampanha');
+                              final bool criarForm              = _getRight(data, 'criarForm');
+                              final bool copiarTelefones        = _getRight(data, 'copiarTelefones');
+                              final bool alterarSenha           = _getRight(data, 'alterarSenha');
+                              final bool executarAPIs           = _getRight(data, 'executarAPIs');
+                              final bool gerenciarProdutos      = _getRight(data, 'gerenciarProdutos');
 
-                          final String? photoUrl = data['photoUrl'] as String?;
+                              final String? photoUrl = data['photoUrl'] as String?;
 
-                          return Card(
-                            elevation: 4,
-                            color: Theme.of(context).colorScheme.secondary,
-                            margin: EdgeInsets.only(left: 10, right: 10, top: 20),
-                            child: Container(
-                              padding: EdgeInsets.all(10), // Aumenta o padding para desktop
-                              child: ListTile(
-                                contentPadding: EdgeInsets.all(8), // Aumenta o padding interno do ListTile
-                                leading: CircleAvatar(
-                                  radius: 30,
-                                  backgroundImage: (photoUrl != null && photoUrl.isNotEmpty) ? NetworkImage(photoUrl) : null,
-                                  child: (photoUrl == null || photoUrl.isEmpty) ? const Icon(Icons.business) : null,
-                                ),
-                                title: Text(
-                                  nomeEmpresa,
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 18, // Aumenta o tamanho da fonte para desktop
-                                    color: Theme.of(context).colorScheme.onSecondary,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  'Contrato: $contract',
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w400,
-                                    fontSize: 16, // Aumenta o tamanho da fonte para desktop
-                                    color: Theme.of(context).colorScheme.onSecondary,
-                                  ),
-                                ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: Icon(
-                                        Icons.edit,
+                              return Card(
+                                elevation: 4,
+                                color: Theme.of(context).colorScheme.secondary,
+                                margin: EdgeInsets.only(left: 10, right: 10, top: 20),
+                                child: Container(
+                                  padding: EdgeInsets.all(10), // Aumenta o padding para desktop
+                                  child: ListTile(
+                                    contentPadding: EdgeInsets.all(8), // Aumenta o padding interno do ListTile
+                                    leading: CircleAvatar(
+                                      radius: 30,
+                                      backgroundImage: (photoUrl != null && photoUrl.isNotEmpty) ? NetworkImage(photoUrl) : null,
+                                      child: (photoUrl == null || photoUrl.isEmpty) ? const Icon(Icons.business) : null,
+                                    ),
+                                    title: Text(
+                                      nomeEmpresa,
+                                      style: TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 18, // Aumenta o tamanho da fonte para desktop
                                         color: Theme.of(context).colorScheme.onSecondary,
-                                        size: 30,
                                       ),
-                                      onPressed: () {
-                                        _navigateWithBottomToTopTransition(
-                                          context,
-                                          EditCompanies(
-                                            companyId: company.id,
-                                            nomeEmpresa: nomeEmpresa,
-                                            email: email,
-                                            contract: contract,
-                                            cnpj: cnpj,
-                                            founded: founded,
-                                            countArtsValue: countArtsValue,
-                                            countVideosValue: countVideosValue,
-                                            dashboard: dashboard,
-                                            leads: leads,
-                                            gerenciarColaboradores: gerenciarColaboradores,
-                                            configurarDash: configurarDash,
-                                            criarCampanha: criarCampanha,
-                                            criarForm: criarForm,
-                                            copiarTelefones: copiarTelefones,
-                                            alterarSenha: alterarSenha,
-                                            executarAPIs: executarAPIs,
-                                            gerenciarProdutos: gerenciarProdutos,
+                                    ),
+                                    subtitle: Text(
+                                      'Contrato: $contract',
+                                      style: TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontWeight: FontWeight.w400,
+                                        fontSize: 16, // Aumenta o tamanho da fonte para desktop
+                                        color: Theme.of(context).colorScheme.onSecondary,
+                                      ),
+                                    ),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: Icon(
+                                            Icons.edit,
+                                            color: Theme.of(context).colorScheme.onSecondary,
+                                            size: 30,
                                           ),
-                                        );
-                                      },
+                                          onPressed: () {
+                                            _navigateWithBottomToTopTransition(
+                                              context,
+                                              EditCompanies(
+                                                companyId: company.id,
+                                                nomeEmpresa: nomeEmpresa,
+                                                email: email,
+                                                contract: contract,
+                                                cnpj: cnpj,
+                                                founded: founded,
+                                                countArtsValue: countArtsValue,
+                                                countVideosValue: countVideosValue,
+                                                dashboard: dashboard,
+                                                leads: leads,
+                                                gerenciarColaboradores: gerenciarColaboradores,
+                                                configurarDash: configurarDash,
+                                                criarCampanha: criarCampanha,
+                                                criarForm: criarForm,
+                                                copiarTelefones: copiarTelefones,
+                                                alterarSenha: alterarSenha,
+                                                executarAPIs: executarAPIs,
+                                                gerenciarProdutos: gerenciarProdutos,
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                        IconButton(
+                                          icon: Icon(
+                                            Icons.delete,
+                                            color: Colors.red,
+                                            size: 30,
+                                          ),
+                                          onPressed: () {
+                                            _showDeleteConfirmationDialog(
+                                              company.id,
+                                              email,
+                                            );
+                                          },
+                                        ),
+                                      ],
                                     ),
-                                    IconButton(
-                                      icon: Icon(
-                                        Icons.delete,
-                                        color: Colors.red,
-                                        size: 30,
-                                      ),
-                                      onPressed: () {
-                                        _showDeleteConfirmationDialog(
-                                          company.id,
-                                          email,
-                                        );
-                                      },
-                                    ),
-                                  ],
+                                  ),
                                 ),
-                              ),
-                            ),
+                              );
+                            },
                           );
                         },
-                      );
-                    },
+                      ),
+                    ),
                   ),
                 ),
               ),

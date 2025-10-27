@@ -30,9 +30,6 @@ import 'firebase_options.dart';
 import 'package:image/image.dart' as img;
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 
-//
-// ===================== Utils: Avatar em círculo =====================
-//
 Future<Uint8List?> _roundAvatar(String url) async {
   final data = await _downloadBytes(url);
   if (data == null) return null;

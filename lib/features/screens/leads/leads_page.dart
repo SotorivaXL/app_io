@@ -600,46 +600,31 @@ class _LeadsPageState extends State<LeadsPage> {
 
     return ConnectivityBanner(
       child: Scaffold(
-        body: Padding(
-          padding: EdgeInsetsDirectional.fromSTEB(10, 20, 10, 0),
-          child: isDesktop
-              ? Container(
-            constraints: BoxConstraints(
-              maxWidth: 1850, // Define a largura máxima para desktop
-            ),
-            padding: EdgeInsets.symmetric(horizontal: 50), // 50px de padding nas laterais
-            child: isLoading
-                ? CustomScrollView(
-              slivers: [
-                _buildShimmerEffect(),
-              ],
-            )
-                : (empresaId == null
-                ? Align(
-              alignment: Alignment.topCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 20.0),
-                child: Text(
-                  'Erro: Empresa não encontrada.',
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: Colors.red,
-                    fontWeight: FontWeight.bold,
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1500),
+            child: Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(10, 20, 10, 0),
+              child: isLoading
+                  ? CustomScrollView(slivers: [_buildShimmerEffect()])
+                  : (empresaId == null
+                  ? Align(
+                alignment: Alignment.topCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 20.0),
+                  child: Text(
+                    'Erro: Empresa não encontrada.',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ),
-            )
-                : _buildCampanhasStream(empresaId!)),
-          )
-              : isLoading
-              ? CustomScrollView(
-            slivers: [
-              _buildShimmerEffect(),
-            ],
-          )
-              : (empresaId == null
-              ? Center(child: Text('Erro: Empresa não encontrada.'))
-              : _buildCampanhasStream(empresaId!)),
+              )
+                  : _buildCampanhasStream(empresaId!)),
+            ),
+          ),
         ),
       ),
     );

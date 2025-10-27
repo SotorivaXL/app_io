@@ -559,7 +559,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
                   alignment: Alignment.topCenter,
                   // Alinha o conteúdo ao topo e centraliza horizontalmente
                   child: Container(
-                    constraints: BoxConstraints(maxWidth: 1850),
+                    constraints: BoxConstraints(maxWidth: 1500),
                     child: SafeArea(
                       top: false,
                       child: Container(

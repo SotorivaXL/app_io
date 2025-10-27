@@ -31,6 +31,8 @@ class _CapacityCardState extends State<CapacityCard> {
   bool _panEnabled = true;
   bool _zoomEnabled = true;
 
+  late final bool isDesktop = MediaQuery.of(context).size.width >= 1024;
+
   /* ------------------------- tooltip ------------------------------ */
   int? _fixedGroup;       // índice do grupo fixado
   Offset? _tooltipPos;    // coordenada local dentro do gráfico
@@ -241,7 +243,9 @@ class _CapacityCardState extends State<CapacityCard> {
 
             /* ---- widget principal ---- */
             return Container(
-              margin: const EdgeInsets.only(top: 20),
+              margin: EdgeInsets.only(
+                top: MediaQuery.of(context).size.width >= 1024 ? 20 : 8,
+              ),
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
                 color: cs.secondary,
@@ -263,7 +267,20 @@ class _CapacityCardState extends State<CapacityCard> {
                   const SizedBox(height: 16),
 
                   /* métricas */
-                  Row(
+                  isDesktop
+                  // DESKTOP/WEB: alinhado à esquerda, com espaçamento fixo
+                      ? Wrap(
+                    alignment: WrapAlignment.start,
+                    spacing: 28,         // espaço horizontal entre as métricas
+                    runSpacing: 8,       // caso quebre em 2 linhas em telas menores
+                    children: [
+                      _metric('Total de Atendimentos', totalAtend.toString(), cs),
+                      _metric('Novos', totalNovos.toString(), cs),
+                      _metric('Concluídos', totalFins.toString(), cs),
+                    ],
+                  )
+                  // MOBILE: mantém exatamente como estava (spaceBetween)
+                      : Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       _metric('Total de Atendimentos', totalAtend.toString(), cs),

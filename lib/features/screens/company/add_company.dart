@@ -579,7 +579,7 @@ class _AddCompanyState extends State<AddCompany> {
           body: isDesktop
               ? Center(
             child: Container(
-              constraints: const BoxConstraints(maxWidth: 1850),
+              constraints: const BoxConstraints(maxWidth: 1500),
               child: SafeArea(
                 child: SingleChildScrollView(child: _buildMainContent(context)),
               ),
