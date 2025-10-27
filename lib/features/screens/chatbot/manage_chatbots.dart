@@ -443,17 +443,49 @@ class _ManageChatbotsPageState extends State<ManageChatbotsPage> {
     double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
     double opacity = (1.0 - (_scrollOffset / 100)).clamp(0.0, 1.0);
 
+    // ▼▼▼ SOMENTE DESKTOP: largura máx. 1500, padding laterais 16, padding-top 35
+    final bool isDesktop = MediaQuery.of(context).size.width > 1024;
+    Widget desktopWrap(Widget child) => Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1500),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Padding(
+            padding: const EdgeInsets.only(top: 35),
+            child: child,
+          ),
+        ),
+      ),
+    );
+    // ▲▲▲
+
     if (_resolving) {
       return Scaffold(
         appBar: _buildStyledAppBar(appBarHeight, opacity, cs),
-        body: const Center(child: CircularProgressIndicator()),
+        body: isDesktop
+            ? desktopWrap(const Center(child: CircularProgressIndicator()))
+            : const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_resolveError != null) {
       return Scaffold(
         appBar: _buildStyledAppBar(appBarHeight, opacity, cs),
-        body: Center(
+        body: isDesktop
+            ? desktopWrap(
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Text(
+                _resolveError!,
+                style: Theme.of(context).textTheme.bodyLarge,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        )
+            : Center(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
             child: Text(
@@ -469,9 +501,10 @@ class _ManageChatbotsPageState extends State<ManageChatbotsPage> {
     final empresaId = _empresaId!;
     return Scaffold(
       appBar: _buildStyledAppBar(appBarHeight, opacity, cs),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
+      body: isDesktop
+          ? desktopWrap(
+        // mesma estrutura original, apenas envolvida pelo wrapper
+        Column(
           children: [
             _PhonesSelector(
               empresaId: empresaId,
@@ -492,7 +525,8 @@ class _ManageChatbotsPageState extends State<ManageChatbotsPage> {
                 child: _ChatbotsList(
                   empresaId: empresaId,
                   phoneId: _selectedPhoneId!,
-                  scrollController: _scrollController, // ← faz a AppBar reagir
+                  scrollController:
+                  _scrollController, // ← faz a AppBar reagir
                   onActivate: (botId) async {
                     try {
                       await _activateBot(
@@ -544,7 +578,92 @@ class _ManageChatbotsPageState extends State<ManageChatbotsPage> {
                     botId: botId,
                     botName: botName,
                   ),
-                  onViewBot: (botId) => _goToViewBot(empresaId: empresaId, botId: botId),
+                  onViewBot: (botId) =>
+                      _goToViewBot(empresaId: empresaId, botId: botId),
+                ),
+              ),
+          ],
+        ),
+      )
+          : Padding(
+        // MOBILE mantém exatamente a estrutura original
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            _PhonesSelector(
+              empresaId: empresaId,
+              selectedPhoneId: _selectedPhoneId,
+              onChanged: (phoneId) {
+                setState(() => _selectedPhoneId = phoneId);
+              },
+            ),
+            const SizedBox(height: 16),
+            if (_selectedPhoneId == null)
+              const _EmptyHint(
+                icon: Icons.phone_android,
+                text:
+                'Selecione um número (phone) para gerenciar qual chatbot ficará ativo.',
+              )
+            else
+              Expanded(
+                child: _ChatbotsList(
+                  empresaId: empresaId,
+                  phoneId: _selectedPhoneId!,
+                  scrollController:
+                  _scrollController, // ← faz a AppBar reagir
+                  onActivate: (botId) async {
+                    try {
+                      await _activateBot(
+                        empresaId: empresaId,
+                        phoneId: _selectedPhoneId!,
+                        botId: botId,
+                      );
+                      if (!mounted) return;
+                      await _showNotice(
+                        title: 'Chatbot ativado',
+                        message: 'Chatbot ativado para este número.',
+                        buttonText: 'Ok',
+                      );
+                    } catch (e) {
+                      if (!mounted) return;
+                      await _showNotice(
+                        title: 'Erro ao ativar',
+                        message: 'Falha ao ativar chatbot: $e',
+                        buttonText: 'Fechar',
+                      );
+                    }
+                  },
+                  onDeactivate: () async {
+                    try {
+                      await _deactivateBot(
+                        empresaId: empresaId,
+                        phoneId: _selectedPhoneId!,
+                      );
+                      if (!mounted) return;
+                      await _showNotice(
+                        title: 'Chatbot desativado',
+                        message: 'Chatbot desativado para este número.',
+                        buttonText: 'Ok',
+                      );
+                    } catch (e) {
+                      if (!mounted) return;
+                      await _showNotice(
+                        title: 'Erro ao desativar',
+                        message: 'Falha ao desativar chatbot: $e',
+                        buttonText: 'Fechar',
+                      );
+                    }
+                  },
+                  onCreateBot: _goToCreateBot,
+                  onEditBot: (botId) =>
+                      _goToEditBot(empresaId: empresaId, botId: botId),
+                  onDeleteBot: (botId, botName) => _deleteBot(
+                    empresaId: empresaId,
+                    botId: botId,
+                    botName: botName,
+                  ),
+                  onViewBot: (botId) =>
+                      _goToViewBot(empresaId: empresaId, botId: botId),
                 ),
               ),
           ],

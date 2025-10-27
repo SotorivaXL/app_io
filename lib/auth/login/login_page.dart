@@ -34,7 +34,7 @@ class _LoginPageState extends State<LoginPage> {
     super.initState();
     _loadSavedCredentials();
     final authProvider =
-        Provider.of<app_io_auth.AuthProvider>(context, listen: false);
+    Provider.of<app_io_auth.AuthProvider>(context, listen: false);
     authProvider.listenToAuthChanges();
   }
 
@@ -201,17 +201,17 @@ class _LoginPageState extends State<LoginPage> {
     switch (e.code) {
       case 'invalid-email':
         errorMessage =
-            'O endereço de e-mail fornecido é inválido. Verifique e tente novamente.';
+        'O endereço de e-mail fornecido é inválido. Verifique e tente novamente.';
         titleMessage = 'E-mail inválido';
         break;
       case 'user-disabled':
         errorMessage =
-            'A conta foi desativada. Entre em contato com o suporte.';
+        'A conta foi desativada. Entre em contato com o suporte.';
         titleMessage = 'Login não permitido';
         break;
       case 'user-not-found':
         errorMessage =
-            'Não há registro de usuário com esse e-mail. Verifique e tente novamente.';
+        'Não há registro de usuário com esse e-mail. Verifique e tente novamente.';
         titleMessage = 'Login não permitido';
         break;
       case 'wrong-password':
@@ -220,22 +220,22 @@ class _LoginPageState extends State<LoginPage> {
         break;
       case 'email-already-in-use':
         errorMessage =
-            'Já existe uma conta com esse e-mail. Tente fazer login ou use um e-mail diferente.';
+        'Já existe uma conta com esse e-mail. Tente fazer login ou use um e-mail diferente.';
         titleMessage = 'E-mail existente';
         break;
       case 'weak-password':
         errorMessage =
-            'A senha fornecida é muito fraca. Escolha uma senha mais forte.';
+        'A senha fornecida é muito fraca. Escolha uma senha mais forte.';
         titleMessage = 'Senha inválida';
         break;
       case 'operation-not-allowed':
         errorMessage =
-            'Essa operação não está permitida. Entre em contato com o suporte.';
+        'Essa operação não está permitida. Entre em contato com o suporte.';
         titleMessage = 'Operação não permitida';
         break;
       case 'invalid-credential':
         errorMessage =
-            'E-mail ou senha incorretos, verifique e faça login novamente!.';
+        'E-mail ou senha incorretos, verifique e faça login novamente!.';
         titleMessage = 'E-mail ou senha inválidos';
         break;
       case 'invalid-verification-code':
@@ -252,7 +252,7 @@ class _LoginPageState extends State<LoginPage> {
         break;
       default:
         errorMessage =
-            'Ocorreu um erro inesperado. Tente novamente mais tarde.';
+        'Ocorreu um erro inesperado. Tente novamente mais tarde.';
         titleMessage = 'ocorreu um erro';
         break;
     }
@@ -333,9 +333,14 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final loginModel = Provider.of<LoginPageModel>(context);
-    double screenWidth = MediaQuery.of(context).size.width;
-    double textFieldWidth = screenWidth > 480 ? screenWidth * 0.5 : screenWidth;
-    double horizontalPadding = screenWidth > 480 ? 0 : 20;
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool isDesktop = screenWidth > 1024;
+
+    // ✅ Largura máxima consistente para campos, botão e checkbox
+    final double formMaxWidth = isDesktop
+        ? 520
+        : min(screenWidth - 40, 520); // mantém respiro lateral no mobile
+
     String theme = getThemeBasedValue(context);
 
     return GestureDetector(
@@ -350,16 +355,16 @@ class _LoginPageState extends State<LoginPage> {
           child: Center(
             child: SingleChildScrollView(
               child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 50),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Padding(
-                      padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 50),
+                      padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 50),
                       child: Image.asset(
                         theme,
-                        width: 400,
+                        width: isDesktop ? 400 : min(320, screenWidth * .8),
                       ),
                     ),
                     // LOGIN text - remains centered
@@ -370,16 +375,16 @@ class _LoginPageState extends State<LoginPage> {
                           .textTheme
                           .headlineLarge
                           ?.copyWith(
-                            fontFamily: 'BrandingSF',
-                            fontSize: 30,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.onSecondary,
-                          ),
+                        fontFamily: 'BrandingSF',
+                        fontSize: 30,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSecondary,
+                      ),
                     ),
-                    SizedBox(height: 50),
+                    const SizedBox(height: 50),
                     // EMAIL TextFormField
-                    Container(
-                      width: textFieldWidth,
+                    SizedBox(
+                      width: formMaxWidth,
                       child: TextFormField(
                         controller: _emailController,
                         obscureText: false,
@@ -390,12 +395,12 @@ class _LoginPageState extends State<LoginPage> {
                               .textTheme
                               .bodyMedium
                               ?.copyWith(
-                                fontFamily: 'Poppins',
-                                fontWeight: FontWeight.w500,
-                                fontSize: 12,
-                                color:
-                                    Theme.of(context).colorScheme.onSecondary,
-                              ),
+                            fontFamily: 'Poppins',
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                            color:
+                            Theme.of(context).colorScheme.onSecondary,
+                          ),
                           labelText: 'E-mail',
                           labelStyle: TextStyle(
                             fontFamily: 'Poppins',
@@ -432,14 +437,14 @@ class _LoginPageState extends State<LoginPage> {
                             borderRadius: BorderRadius.circular(25),
                           ),
                           contentPadding:
-                              EdgeInsetsDirectional.fromSTEB(20, 16, 20, 16),
+                          const EdgeInsetsDirectional.fromSTEB(20, 16, 20, 16),
                         ),
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              fontFamily: 'Poppins',
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: Theme.of(context).colorScheme.onSecondary,
-                            ),
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Theme.of(context).colorScheme.onSecondary,
+                        ),
                         textAlign: TextAlign.start,
                         keyboardType: TextInputType.emailAddress,
                         validator: (value) {
@@ -451,10 +456,10 @@ class _LoginPageState extends State<LoginPage> {
                         },
                       ),
                     ),
-                    SizedBox(height: 30),
+                    const SizedBox(height: 30),
                     // SENHA TextFormField
-                    Container(
-                      width: textFieldWidth,
+                    SizedBox(
+                      width: formMaxWidth,
                       child: TextFormField(
                         controller: _passwordController,
                         focusNode: _passwordFocusNode,
@@ -466,12 +471,12 @@ class _LoginPageState extends State<LoginPage> {
                               .textTheme
                               .bodyMedium
                               ?.copyWith(
-                                fontFamily: 'Poppins',
-                                fontWeight: FontWeight.w500,
-                                fontSize: 12,
-                                color:
-                                    Theme.of(context).colorScheme.onSecondary,
-                              ),
+                            fontFamily: 'Poppins',
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                            color:
+                            Theme.of(context).colorScheme.onSecondary,
+                          ),
                           labelText: 'Senha',
                           labelStyle: TextStyle(
                             fontFamily: 'Poppins',
@@ -508,20 +513,20 @@ class _LoginPageState extends State<LoginPage> {
                             borderRadius: BorderRadius.circular(25),
                           ),
                           contentPadding:
-                              EdgeInsetsDirectional.fromSTEB(20, 16, 20, 16),
+                          const EdgeInsetsDirectional.fromSTEB(20, 16, 20, 16),
                           suffixIcon: InkWell(
                             onTap: () => setState(
-                              () => _passwordVisibility = !_passwordVisibility,
+                                  () => _passwordVisibility = !_passwordVisibility,
                             ),
                             focusNode: FocusNode(skipTraversal: true),
-                            hoverColor: Color(0x20933FFC),
+                            hoverColor: const Color(0x20933FFC),
                             borderRadius: BorderRadius.circular(25),
                             child: Icon(
                               _passwordVisibility
                                   ? Icons.visibility_off_outlined
                                   : Icons.visibility_outlined,
                               color:
-                                  Theme.of(context).colorScheme.inverseSurface,
+                              Theme.of(context).colorScheme.inverseSurface,
                               size: 20,
                             ),
                           ),
@@ -530,12 +535,12 @@ class _LoginPageState extends State<LoginPage> {
                           _loginFuture = _login();
                         },
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              fontFamily: 'Poppins',
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: 0,
-                              color: Theme.of(context).colorScheme.onSecondary,
-                            ),
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0,
+                          color: Theme.of(context).colorScheme.onSecondary,
+                        ),
                         textAlign: TextAlign.start,
                         validator: (value) {
                           if (value == null || value.isEmpty) {
@@ -546,85 +551,83 @@ class _LoginPageState extends State<LoginPage> {
                         },
                       ),
                     ),
-                    SizedBox(height: 30),
+                    const SizedBox(height: 30),
                     // LOGIN Button
                     FutureBuilder<void>(
                       future: _loginFuture,
                       builder: (context, snapshot) {
-                        return Container(
-                          width: textFieldWidth,
-                          // Define a largura do botão igual à largura do TextFormField
+                        return SizedBox(
+                          width: formMaxWidth, // ✅ mesma largura dos campos
                           child: snapshot.connectionState ==
-                                  ConnectionState.waiting
+                              ConnectionState.waiting
                               ? ElevatedButton(
-                                  onPressed: null,
-                                  // Desabilita o botão enquanto carrega
-                                  style: ElevatedButton.styleFrom(
-                                    padding: EdgeInsets.symmetric(
-                                        horizontal: 25, vertical: 15),
-                                    backgroundColor:
-                                        Theme.of(context).colorScheme.primary,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(25),
-                                    ),
-                                  ),
-                                  child: SizedBox(
-                                    width: 20,
-                                    height:
-                                        20, // Define o tamanho da ProgressBar
-                                    child: CircularProgressIndicator(
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                          Theme.of(context)
-                                              .colorScheme
-                                              .primary),
-                                      strokeWidth: 2.0,
-                                    ),
-                                  ),
-                                )
+                            onPressed: null,
+                            // Desabilita o botão enquanto carrega
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 25, vertical: 15),
+                              backgroundColor:
+                              Theme.of(context).colorScheme.primary,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(25),
+                              ),
+                            ),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    Theme.of(context)
+                                        .colorScheme
+                                        .primary),
+                                strokeWidth: 2.0,
+                              ),
+                            ),
+                          )
                               : ElevatedButton.icon(
-                                  onPressed: () {
-                                    setState(() {
-                                      FocusScope.of(context).unfocus();
-                                      _loginFuture = _login();
-                                    });
-                                  },
-                                  icon: Icon(
-                                    Icons.login_outlined,
-                                    color:
-                                        Theme.of(context).colorScheme.outline,
-                                    size: 20,
-                                  ),
-                                  label: Text(
-                                    'ENTRAR',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelLarge
-                                        ?.copyWith(
-                                          fontFamily: 'Poppins',
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w600,
-                                          letterSpacing: 0,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .outline,
-                                        ),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    padding: EdgeInsets.symmetric(
-                                        horizontal: 25, vertical: 15),
-                                    backgroundColor:
-                                        Theme.of(context).colorScheme.primary,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(25),
-                                    ),
-                                  ),
-                                ),
+                            onPressed: () {
+                              setState(() {
+                                FocusScope.of(context).unfocus();
+                                _loginFuture = _login();
+                              });
+                            },
+                            icon: Icon(
+                              Icons.login_outlined,
+                              color:
+                              Theme.of(context).colorScheme.outline,
+                              size: 20,
+                            ),
+                            label: Text(
+                              'ENTRAR',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelLarge
+                                  ?.copyWith(
+                                fontFamily: 'Poppins',
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outline,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 25, vertical: 15),
+                              backgroundColor:
+                              Theme.of(context).colorScheme.primary,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(25),
+                              ),
+                            ),
+                          ),
                         );
                       },
                     ),
-                    SizedBox(height: 20),
+                    const SizedBox(height: 20),
                     SizedBox(
-                      width: 450,
+                      width: formMaxWidth, // ✅ alinha o checkbox com os campos
                       child: CheckboxListTile(
                         title: Text(
                           'Lembrar de mim',

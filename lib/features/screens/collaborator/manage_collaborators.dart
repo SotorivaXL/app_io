@@ -36,12 +36,11 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
         .collection('users')
         .where('createdBy', isEqualTo: userId)
         .snapshots()
-        .map((snapshot) =>
-        snapshot.docs.map((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          data['uid'] = doc.id; // Adiciona o ID do documento (UID) ao map
-          return data;
-        }).toList());
+        .map((snapshot) => snapshot.docs.map((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      data['uid'] = doc.id; // Adiciona o ID do documento (UID) ao map
+      return data;
+    }).toList());
   }
 
   @override
@@ -76,7 +75,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
         gerenciarColaboradores: c['gerenciarColaboradores'] ?? false,
         criarForm: c['criarForm'] ?? false,
         criarCampanha: c['criarCampanha'] ?? false,
-        gerenciarProdutos:      c['gerenciarProdutos'] ?? false,
+        gerenciarProdutos: c['gerenciarProdutos'] ?? false,
 
         // OUTROS
         leads: c['leads'] ?? false,
@@ -112,11 +111,9 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           const begin = Offset(0.0, 1.0); // Começa de baixo para cima
           const end = Offset.zero;
-          const curve = Curves
-              .easeInOut; // Usando easeInOut para uma animação suave
+          const curve = Curves.easeInOut; // Usando easeInOut para uma animação suave
 
-          final tween = Tween(begin: begin, end: end).chain(
-              CurveTween(curve: curve));
+          final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
           final offsetAnimation = animation.drive(tween);
 
           return SlideTransition(
@@ -124,8 +121,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
             child: child,
           );
         },
-        transitionDuration: Duration(
-            milliseconds: 300), // Define a duração da animação
+        transitionDuration: Duration(milliseconds: 300), // Define a duração da animação
       ),
     );
   }
@@ -136,8 +132,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
       await FirebaseFirestore.instance.collection('users').doc(uid).delete();
 
       // Deleta o colaborador do Firebase Authentication usando uma Cloud Function
-      HttpsCallable callable = FirebaseFunctions.instance.httpsCallable(
-          'deleteUser');
+      HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('deleteUser');
       await callable.call(<String, dynamic>{
         'uid': uid,
       });
@@ -157,19 +152,14 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
     showModalBottomSheet(
       context: context,
       shape: RoundedRectangleBorder(
-        side: BorderSide(color: Theme
-            .of(context)
-            .primaryColor),
+        side: BorderSide(color: Theme.of(context).primaryColor),
         borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
       ),
       builder: (BuildContext context) {
         return Container(
           padding: EdgeInsets.all(16.0),
           decoration: BoxDecoration(
-            color: Theme
-                .of(context)
-                .colorScheme
-                .background,
+            color: Theme.of(context).colorScheme.background,
             borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
           ),
           child: Column(
@@ -181,10 +171,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                   fontFamily: 'Poppins',
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Theme
-                      .of(context)
-                      .colorScheme
-                      .onSecondary,
+                  color: Theme.of(context).colorScheme.onSecondary,
                 ),
               ),
               SizedBox(height: 16.0),
@@ -193,10 +180,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                 style: TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 16,
-                  color: Theme
-                      .of(context)
-                      .colorScheme
-                      .onSecondary,
+                  color: Theme.of(context).colorScheme.onSecondary,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -209,12 +193,8 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                       Navigator.of(context).pop(); // Fechar o BottomSheet
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme
-                          .of(context)
-                          .colorScheme
-                          .primary,
-                      padding: EdgeInsets.symmetric(
-                          horizontal: 32, vertical: 12),
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20.0),
                       ),
@@ -224,10 +204,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                       style: TextStyle(
                         fontFamily: 'Poppins',
                         fontSize: 16,
-                        color: Theme
-                            .of(context)
-                            .colorScheme
-                            .outline,
+                        color: Theme.of(context).colorScheme.outline,
                       ),
                     ),
                   ),
@@ -238,8 +215,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red,
-                      padding: EdgeInsets.symmetric(
-                          horizontal: 32, vertical: 12),
+                      padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20.0),
                       ),
@@ -249,10 +225,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                       style: TextStyle(
                         fontFamily: 'Poppins',
                         fontSize: 16,
-                        color: Theme
-                            .of(context)
-                            .colorScheme
-                            .outline,
+                        color: Theme.of(context).colorScheme.outline,
                       ),
                     ),
                   ),
@@ -268,8 +241,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
   Future<void> _determineUserDocumentAndListen() async {
     setState(() => isLoading = true);
 
-    final authProvider = Provider.of<appProvider.AuthProvider>(
-        context, listen: false);
+    final authProvider = Provider.of<appProvider.AuthProvider>(context, listen: false);
     final user = authProvider.user;
     if (user == null) {
       setState(() => isLoading = false);
@@ -278,9 +250,8 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
 
     try {
       // Tenta como empresa
-      final empDoc = await FirebaseFirestore.instance.collection('empresas')
-          .doc(user.uid)
-          .get();
+      final empDoc =
+      await FirebaseFirestore.instance.collection('empresas').doc(user.uid).get();
       if (empDoc.exists) {
         setState(() => _companyUid = user.uid);
         _listenToUserDocument('empresas', user.uid);
@@ -288,12 +259,11 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
       }
 
       // Tenta como colaborador
-      final usrDoc = await FirebaseFirestore.instance.collection('users').doc(
-          user.uid).get();
+      final usrDoc =
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       if (usrDoc.exists) {
         final createdBy = (usrDoc.data()?['createdBy'] ?? '') as String;
-        setState(() =>
-        _companyUid = createdBy.isNotEmpty ? createdBy : user.uid);
+        setState(() => _companyUid = createdBy.isNotEmpty ? createdBy : user.uid);
         _listenToUserDocument('users', user.uid);
         return;
       }
@@ -314,8 +284,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
       if (userDoc.exists) {
         _updatePermissions(userDoc);
       } else {
-        print(
-            "Documento do usuário não encontrado na coleção '$collectionName'.");
+        print("Documento do usuário não encontrado na coleção '$collectionName'.");
       }
     });
   }
@@ -326,8 +295,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
     if (!mounted) return;
 
     setState(() {
-      hasGerenciarColaboradoresAccess =
-          userData?['gerenciarColaboradores'] ?? false;
+      hasGerenciarColaboradoresAccess = userData?['gerenciarColaboradores'] ?? false;
       isLoading = false;
     });
 
@@ -341,21 +309,15 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
           await showModalBottomSheet(
             context: context,
             shape: RoundedRectangleBorder(
-              side: BorderSide(color: Theme
-                  .of(context)
-                  .primaryColor),
+              side: BorderSide(color: Theme.of(context).primaryColor),
               borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
             ),
             builder: (BuildContext context) {
               return Container(
                 padding: EdgeInsets.all(16.0),
                 decoration: BoxDecoration(
-                  color: Theme
-                      .of(context)
-                      .colorScheme
-                      .background,
-                  borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(20.0)),
+                  color: Theme.of(context).colorScheme.background,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -366,10 +328,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                         fontFamily: 'Poppins',
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Theme
-                            .of(context)
-                            .colorScheme
-                            .onSecondary,
+                        color: Theme.of(context).colorScheme.onSecondary,
                       ),
                     ),
                     SizedBox(height: 16.0),
@@ -378,10 +337,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                       style: TextStyle(
                         fontFamily: 'Poppins',
                         fontSize: 16,
-                        color: Theme
-                            .of(context)
-                            .colorScheme
-                            .onSecondary,
+                        color: Theme.of(context).colorScheme.onSecondary,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -391,12 +347,8 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                         Navigator.of(context).pop(); // Fechar o BottomSheet
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme
-                            .of(context)
-                            .colorScheme
-                            .primary,
-                        padding: EdgeInsets.symmetric(horizontal: 32,
-                            vertical: 12),
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20.0),
                         ),
@@ -406,10 +358,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                         style: TextStyle(
                           fontFamily: 'Poppins',
                           fontSize: 16,
-                          color: Theme
-                              .of(context)
-                              .colorScheme
-                              .outline,
+                          color: Theme.of(context).colorScheme.outline,
                         ),
                       ),
                     ),
@@ -429,8 +378,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
         });
       }
     } else {
-      _hasShownPermissionRevokedDialog =
-      false; // Reseta a flag se a permissão voltar
+      _hasShownPermissionRevokedDialog = false; // Reseta a flag se a permissão voltar
     }
   }
 
@@ -462,8 +410,8 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
   @override
   Widget build(BuildContext context) {
     final companyUid = _companyUid;
-    final String userId = FirebaseAuth.instance.currentUser?.uid ??
-        ''; // Obtém o UID do usuário logado
+    final String userId =
+        FirebaseAuth.instance.currentUser?.uid ?? ''; // Obtém o UID do usuário logado
 
     double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
     double tabBarHeight = (kBottomNavigationBarHeight - (_scrollOffset / 2))
@@ -477,10 +425,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
         : NeverScrollableScrollPhysics();
 
     // ADICIONADO: Verifica se é Desktop
-    final bool isDesktop = MediaQuery
-        .of(context)
-        .size
-        .width > 1024; // <-- ADICIONADO
+    final bool isDesktop = MediaQuery.of(context).size.width > 1024; // <-- ADICIONADO
 
     return ConnectivityBanner(
       child: GestureDetector(
@@ -513,10 +458,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                                 children: [
                                   Icon(
                                     Icons.arrow_back_ios_new,
-                                    color: Theme
-                                        .of(context)
-                                        .colorScheme
-                                        .onBackground,
+                                    color: Theme.of(context).colorScheme.onBackground,
                                     size: 18,
                                   ),
                                   const SizedBox(width: 4),
@@ -525,10 +467,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                                     style: TextStyle(
                                       fontFamily: 'Poppins',
                                       fontSize: 14,
-                                      color: Theme
-                                          .of(context)
-                                          .colorScheme
-                                          .onSecondary,
+                                      color: Theme.of(context).colorScheme.onSecondary,
                                     ),
                                   ),
                                 ],
@@ -541,10 +480,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                                 fontFamily: 'Poppins',
                                 fontSize: 22,
                                 fontWeight: FontWeight.w700,
-                                color: Theme
-                                    .of(context)
-                                    .colorScheme
-                                    .onSecondary,
+                                color: Theme.of(context).colorScheme.onSecondary,
                               ),
                             ),
                           ],
@@ -554,10 +490,7 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                           children: [
                             IconButton(
                               icon: Icon(Icons.person_add_alt_1_sharp,
-                                  color: Theme
-                                      .of(context)
-                                      .colorScheme
-                                      .onBackground,
+                                  color: Theme.of(context).colorScheme.onBackground,
                                   size: 30),
                               onPressed: () async {
                                 _navigateWithBottomToTopTransition(
@@ -571,101 +504,121 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                   ),
                 ),
                 surfaceTintColor: Colors.transparent,
-                backgroundColor: Theme
-                    .of(context)
-                    .colorScheme
-                    .secondary,
+                backgroundColor: Theme.of(context).colorScheme.secondary,
               ),
             ),
           ),
-          // ADICIONADO: Envolvemos o SafeArea em um Container com maxWidth no modo desktop
+          // Corpo
           body: isDesktop
-              ? Center(
-            child: Container(
-              constraints: BoxConstraints(maxWidth: 1850),
-              child: SafeArea(
-                top: true,
-                child: (companyUid == null)
-                    ? Center(child: CircularProgressIndicator())
-                    : StreamBuilder<List<Map<String, dynamic>>>(
-                  stream: _getUserCollaborators(companyUid),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.hasError) {
-                      return Center(child: Text(
-                          'Erro ao carregar colaboradores: ${snapshot.error}'));
-                    }
-                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                      return Center(child: Text(
-                          'Nenhum colaborador encontrado'));
-                    }
+              ? Align(
+            alignment: Alignment.topCenter, // ✅ gruda no topo
+            child: ConstrainedBox(
+              constraints:
+              const BoxConstraints(maxWidth: 1500), // ✅ largura máxima
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16), // ✅ só laterais
+                child: Padding(
+                  padding:
+                  const EdgeInsets.only(top: 30),
+                  child: SafeArea(
+                    top: true,
+                    child: (companyUid == null)
+                        ? Center(child: CircularProgressIndicator())
+                        : StreamBuilder<List<Map<String, dynamic>>>(
+                      stream: _getUserCollaborators(companyUid),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return Center(
+                              child: CircularProgressIndicator());
+                        }
+                        if (snapshot.hasError) {
+                          return Center(
+                              child: Text(
+                                  'Erro ao carregar colaboradores: ${snapshot.error}'));
+                        }
+                        if (!snapshot.hasData ||
+                            snapshot.data!.isEmpty) {
+                          return Center(
+                              child: Text(
+                                  'Nenhum colaborador encontrado'));
+                        }
 
-                    final collaborators = snapshot.data!;
-                    return ListView.builder(
-                      controller: _scrollController,
-                      physics: pageViewPhysics,
-                      itemCount: collaborators.length,
-                      itemBuilder: (context, index) {
-                        final collaborator = collaborators[index];
-                        return Card(
-                          elevation: 4,
-                          margin: EdgeInsets.only(top: 20, right: 15, left: 15),
-                          // Aumentando a altura do ListTile
-                          child: ListTile(
-                            leading: _avatar(collaborator),
-                            // ADICIONADO: aumenta o padding interno
-                            contentPadding: EdgeInsets.symmetric(
-                                horizontal: 16.0, vertical: 20.0),
-                            title: Text(
-                              collaborator['name'] ?? 'Nome não disponível',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                                color: Theme
-                                    .of(context)
-                                    .colorScheme
-                                    .onSecondary,
-                              ),
-                            ),
-                            subtitle: Text(
-                              collaborator['role'] ?? 'Cargo não disponível',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontWeight: FontWeight.w400,
-                                fontSize: 14,
-                                color: Theme
-                                    .of(context)
-                                    .colorScheme
-                                    .onSecondary,
-                              ),
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: Icon(Icons.edit, color: Theme
-                                      .of(context)
-                                      .colorScheme
-                                      .onSecondary),
-                                  onPressed: () => _openEditor(collaborator),
+                        final collaborators = snapshot.data!;
+                        return ListView.builder(
+                          controller: _scrollController,
+                          physics: pageViewPhysics,
+                          itemCount: collaborators.length,
+                          itemBuilder: (context, index) {
+                            final collaborator =
+                            collaborators[index];
+                            return Card(
+                              elevation: 4,
+                              margin: EdgeInsets.only(
+                                  top: 20, right: 15, left: 15),
+                              // Aumentando a altura do ListTile
+                              child: ListTile(
+                                leading: _avatar(collaborator),
+                                // ADICIONADO: aumenta o padding interno
+                                contentPadding:
+                                EdgeInsets.symmetric(
+                                    horizontal: 16.0,
+                                    vertical: 20.0),
+                                title: Text(
+                                  collaborator['name'] ??
+                                      'Nome não disponível',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
+                                  ),
                                 ),
-                                IconButton(
-                                  icon: Icon(Icons.delete, color: Colors.red),
-                                  onPressed: () {
-                                    _showDeleteConfirmationDialog(
-                                        collaborator['uid'] ?? '');
-                                  },
+                                subtitle: Text(
+                                  collaborator['role'] ??
+                                      'Cargo não disponível',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontWeight: FontWeight.w400,
+                                    fontSize: 14,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSecondary,
+                                  ),
                                 ),
-                              ],
-                            ),
-                          ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(Icons.edit,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSecondary),
+                                      onPressed: () =>
+                                          _openEditor(
+                                              collaborator),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(Icons.delete,
+                                          color: Colors.red),
+                                      onPressed: () {
+                                        _showDeleteConfirmationDialog(
+                                            collaborator['uid'] ??
+                                                '');
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
                         );
                       },
-                    );
-                  },
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -677,15 +630,19 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                 : StreamBuilder<List<Map<String, dynamic>>>(
               stream: _getUserCollaborators(companyUid),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(child: CircularProgressIndicator());
+                if (snapshot.connectionState ==
+                    ConnectionState.waiting) {
+                  return Center(
+                      child: CircularProgressIndicator());
                 }
                 if (snapshot.hasError) {
-                  return Center(child: Text(
-                      'Erro ao carregar colaboradores: ${snapshot.error}'));
+                  return Center(
+                      child: Text(
+                          'Erro ao carregar colaboradores: ${snapshot.error}'));
                 }
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return Center(child: Text('Nenhum colaborador encontrado'));
+                  return Center(
+                      child: Text('Nenhum colaborador encontrado'));
                 }
 
                 final collaborators = snapshot.data!;
@@ -701,25 +658,25 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                       child: ListTile(
                         leading: _avatar(collaborator),
                         title: Text(
-                          collaborator['name'] ?? 'Nome não disponível',
+                          collaborator['name'] ??
+                              'Nome não disponível',
                           style: TextStyle(
                             fontFamily: 'Poppins',
                             fontWeight: FontWeight.w600,
                             fontSize: 16,
-                            color: Theme
-                                .of(context)
+                            color: Theme.of(context)
                                 .colorScheme
                                 .onSecondary,
                           ),
                         ),
                         subtitle: Text(
-                          collaborator['role'] ?? 'Cargo não disponível',
+                          collaborator['role'] ??
+                              'Cargo não disponível',
                           style: TextStyle(
                             fontFamily: 'Poppins',
                             fontWeight: FontWeight.w400,
                             fontSize: 14,
-                            color: Theme
-                                .of(context)
+                            color: Theme.of(context)
                                 .colorScheme
                                 .onSecondary,
                           ),
@@ -728,14 +685,16 @@ class _ManageCollaboratorsState extends State<ManageCollaborators> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon: Icon(Icons.edit, color: Theme
-                                  .of(context)
-                                  .colorScheme
-                                  .onSecondary),
-                              onPressed: () => _openEditor(collaborator),
+                              icon: Icon(Icons.edit,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSecondary),
+                              onPressed: () =>
+                                  _openEditor(collaborator),
                             ),
                             IconButton(
-                              icon: Icon(Icons.delete, color: Colors.red),
+                              icon: Icon(Icons.delete,
+                                  color: Colors.red),
                               onPressed: () {
                                 _showDeleteConfirmationDialog(
                                     collaborator['uid'] ?? '');

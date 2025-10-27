@@ -36,27 +36,48 @@ class _ManageProductsState extends State<ManageProducts> {
     _resolveCompanyId();
   }
 
-  void _listenPermission() {
+  void _listenPermission() async {
     final uid = context.read<AuthProvider>().user?.uid;
-    if (uid == null) return;
 
-    _sub = FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .snapshots()
-        .listen((snap) {
-      final ok = snap.data()?['gerenciarProdutos'] ?? false;
-      if (!mounted) return;
-      setState(() {
-        hasGerenciarProdutos = ok;
-        _loadingPerm = false;             // ✅ permissão resolvida
+    // Evita loading infinito caso o uid ainda não esteja pronto:
+    if (uid == null) {
+      if (mounted) setState(() => _loadingPerm = false);
+      return;
+    }
+
+    try {
+      // Descobre onde está o doc do usuário (igual ao painel)
+      final empDoc = await FirebaseFirestore.instance
+          .collection('empresas')
+          .doc(uid)
+          .get();
+
+      final String coll = empDoc.exists ? 'empresas' : 'users';
+
+      _sub?.cancel();
+      _sub = FirebaseFirestore.instance
+          .collection(coll)
+          .doc(uid)
+          .snapshots()
+          .listen((snap) {
+        final ok = (snap.data()?['gerenciarProdutos'] ?? false) as bool;
+        if (!mounted) return;
+        setState(() {
+          hasGerenciarProdutos = ok;
+          _loadingPerm = false; // ✅ permissão resolvida
+        });
+
+        if (!ok && !_hasDialog) {
+          _hasDialog = true;
+          _showRevokedDialog();
+        }
+      }, onError: (_) {
+        if (!mounted) return;
+        setState(() => _loadingPerm = false);
       });
-
-      if (!ok && !_hasDialog) {
-        _hasDialog = true;
-        _showRevokedDialog();
-      }
-    });
+    } catch (_) {
+      if (mounted) setState(() => _loadingPerm = false);
+    }
   }
 
   Future<void> _resolveCompanyId() async {
@@ -237,7 +258,112 @@ class _ManageProductsState extends State<ManageProducts> {
           ),
         ),
 
-        body: StreamBuilder<QuerySnapshot>(
+        body: desktop
+            ? Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1850),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 35),
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('empresas')
+                      .doc(_companyId!)
+                      .collection('produtos')
+                      .snapshots(),
+                  builder: (_, snap) {
+                    if (!snap.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final docs = snap.data!.docs;
+                    if (docs.isEmpty) {
+                      return const Center(child: Text('Nenhum produto cadastrado'));
+                    }
+
+                    return ListView.builder(
+                      controller: _controller,
+                      padding: const EdgeInsets.only(top: 20, left: 10, right: 10),
+                      itemCount: docs.length,
+                      itemBuilder: (_, i) {
+                        final d           = docs[i];
+                        final nome        = d['nome']        ?? '—';
+                        final descricao   = d['descricao']   ?? '';
+                        final url         = d['foto']        ?? '';     // ← já vem do Firestore
+                        final tipo        = d['tipo']        ?? '—';    // se quiser exibir depois
+
+                        return Card(
+                          color: cs.secondary,
+                          margin: const EdgeInsets.only(bottom: 20),
+                          elevation: 4,
+                          child: ListTile(
+                            /* ----------  IMAGEM  ---------- */
+                            leading: CircleAvatar(
+                              radius: desktop ? 30 : 25,
+                              backgroundColor: cs.tertiary.withOpacity(.2),
+                              backgroundImage:
+                              url.isNotEmpty ? NetworkImage(url) : null,
+                              child: url.isEmpty
+                                  ? Icon(Icons.image_not_supported,
+                                  color: cs.tertiary, size: desktop ? 30 : 24)
+                                  : null,
+                            ),
+
+                            /* ----------  TÍTULO  ---------- */
+                            title: Text(
+                              nome,
+                              style: TextStyle(
+                                fontSize: desktop ? 18 : 16,
+                                fontWeight: FontWeight.w600,
+                                color: cs.onSecondary,
+                              ),
+                            ),
+
+                            /* ----------  DESCRIÇÃO  ---------- */
+                            subtitle: descricao.isNotEmpty
+                                ? Text(
+                              descricao,
+                              maxLines: 1,                       // ← só 1 linha
+                              overflow: TextOverflow.ellipsis,   // ← … se passar
+                              style: TextStyle(
+                                fontSize: desktop ? 14 : 12,
+                                color: cs.onSecondary.withOpacity(.8),
+                              ),
+                            )
+                                : null,
+
+                            /* ----------  AÇÕES  ---------- */
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: Icon(Icons.edit,
+                                      color: cs.onSecondary, size: desktop ? 30 : 24),
+                                  onPressed: () => _pushSlide(
+                                    EditProduct(
+                                      prodId: d.id,
+                                      data: d.data() as Map<String, dynamic>,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                  onPressed: () => _askDelete(d.id),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        )
+            : StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
               .collection('empresas')
               .doc(_companyId!)
@@ -294,8 +420,8 @@ class _ManageProductsState extends State<ManageProducts> {
                     subtitle: descricao.isNotEmpty
                         ? Text(
                       descricao,
-                      maxLines: 1,                       // ← só 1 linha
-                      overflow: TextOverflow.ellipsis,   // ← … se passar
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: desktop ? 14 : 12,
                         color: cs.onSecondary.withOpacity(.8),

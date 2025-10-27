@@ -730,7 +730,7 @@ class _EditCompaniesState extends State<EditCompanies> {
           body: isDesktop
               ? Center(
             child: Container(
-              constraints: const BoxConstraints(maxWidth: 1850),
+              constraints: const BoxConstraints(maxWidth: 1500),
               child: _buildMainContent(context, uid),
             ),
           )

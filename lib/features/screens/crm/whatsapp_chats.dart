@@ -8,7 +8,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:app_io/features/screens/crm/welcome_connect_phone.dart';
-
+import 'package:flutter_svg/flutter_svg.dart';
 
 class WhatsAppChats extends StatefulWidget {
   const WhatsAppChats({Key? key}) : super(key: key);
@@ -18,24 +18,40 @@ class WhatsAppChats extends StatefulWidget {
 }
 
 enum SortOption { oldestFirst, newestFirst }
+
 SortOption _sort = SortOption.newestFirst;
+
 enum ChatTab { novos, atendendo }
 
 class TagItem {
   final String name;
   final Color color;
+
   TagItem(this.name, this.color);
 }
 
+// thin rail (menu)
+bool _sideExpanded = false;
+
+// conversa selecionada no desktop
+class _SelectedChat {
+  final String id, name, photo;
+
+  _SelectedChat(this.id, this.name, this.photo);
+}
+
+_SelectedChat? _selected;
+
 // fora da classe (ou como método estático dentro dela)
 String _initials(String raw) {
-  final parts = raw.trim().split(RegExp(r'\s+'));        // remove espaços repetidos
-  final letters = parts.where((p) => p.isNotEmpty)       // descarta vazios
-      .map((p) => p[0])                 // primeira letra
+  final parts = raw.trim().split(RegExp(r'\s+')); // remove espaços repetidos
+  final letters = parts
+      .where((p) => p.isNotEmpty) // descarta vazios
+      .map((p) => p[0]) // primeira letra
       .take(2)
       .join()
       .toUpperCase();
-  return letters.isEmpty ? '•' : letters;                // fallback se ainda estiver vazio
+  return letters.isEmpty ? '•' : letters; // fallback se ainda estiver vazio
 }
 
 class _WhatsAppChatsState extends State<WhatsAppChats> {
@@ -52,22 +68,66 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
   bool _noPhone = false;
   bool _showArchived = false;
 
-  CollectionReference<Map<String,dynamic>> chatsCol() =>
+  // helper (dentro da _WhatsAppChatsState)
+  Color get _paneBg => Theme.of(context).colorScheme.background;
+
+  // --- Desktop responsiveness ---
+  bool get _isDesktop {
+    final w = MediaQuery.maybeOf(context)?.size.width ?? 0;
+    return w >= 1100; // limiar de “modo desktop”
+  }
+
+  CollectionReference<Map<String, dynamic>> chatsCol() =>
       FirebaseFirestore.instance
-          .collection('empresas').doc(_companyId)
-          .collection('phones').doc(_phoneId)
+          .collection('empresas')
+          .doc(_companyId)
+          .collection('phones')
+          .doc(_phoneId)
           .collection('whatsappChats');
 
   Future<String> getCompanyId() async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
-    final userSnap = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .get();
+    final userSnap =
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
 
-    return (userSnap.exists && (userSnap['createdBy'] ?? '').toString().isNotEmpty)
+    return (userSnap.exists &&
+            (userSnap['createdBy'] ?? '').toString().isNotEmpty)
         ? userSnap['createdBy'] as String
         : uid;
+  }
+
+  Future<void> _openChat({
+    required String chatId,
+    required String name,
+    required String contactPhoto,
+  }) async {
+    // zera não lidas
+    await FirebaseFirestore.instance
+        .collection('empresas')
+        .doc(_companyId)
+        .collection('phones')
+        .doc(_phoneId)
+        .collection('whatsappChats')
+        .doc(chatId)
+        .set({'unreadCount': 0, 'opened': true}, SetOptions(merge: true));
+
+    if (_isDesktop) {
+      // no desktop, abre embutido
+      setState(() => _selected = _SelectedChat(chatId, name, contactPhoto));
+    } else {
+      // no mobile, comportamento idêntico ao seu
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatDetail(
+            chatId: chatId,
+            chatName: name,
+            contactPhoto: contactPhoto,
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -97,23 +157,23 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
 
   static const Map<String, (String, IconData)> _extMatchers = {
     // extensão        → (rótulo,     ícone)
-    'jpg'  : ('Imagem',     Icons.photo),
-    'jpeg' : ('Imagem',     Icons.photo),
-    'png'  : ('Imagem',     Icons.photo),
-    'gif'  : ('Imagem',     Icons.photo),
-    'webp' : ('Figurinha',  Icons.emoji_emotions),
-    'mp4'  : ('Vídeo',      Icons.videocam),
-    'mov'  : ('Vídeo',      Icons.videocam),
-    'mkv'  : ('Vídeo',      Icons.videocam),
-    'mp3'  : ('Áudio',      Icons.audiotrack),
-    'aac'  : ('Áudio',      Icons.audiotrack),
-    'm4a'  : ('Áudio',      Icons.audiotrack),
-    'ogg'  : ('Áudio',      Icons.audiotrack),
-    'opus' : ('Áudio',      Icons.audiotrack),
+    'jpg': ('Imagem', Icons.photo),
+    'jpeg': ('Imagem', Icons.photo),
+    'png': ('Imagem', Icons.photo),
+    'gif': ('Imagem', Icons.photo),
+    'webp': ('Figurinha', Icons.emoji_emotions),
+    'mp4': ('Vídeo', Icons.videocam),
+    'mov': ('Vídeo', Icons.videocam),
+    'mkv': ('Vídeo', Icons.videocam),
+    'mp3': ('Áudio', Icons.audiotrack),
+    'aac': ('Áudio', Icons.audiotrack),
+    'm4a': ('Áudio', Icons.audiotrack),
+    'ogg': ('Áudio', Icons.audiotrack),
+    'opus': ('Áudio', Icons.audiotrack),
   };
 
   // substitua o método inteiro por este:
-  ( String, IconData )? _classifyMediaMessage(String raw) {
+  (String, IconData)? _classifyMediaMessage(String raw) {
     if (raw.isEmpty) return null;
     final msg = raw.trim();
 
@@ -122,10 +182,11 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
       final semi = msg.indexOf(';');
       if (semi > 5) {
         final mime = msg.substring(5, semi).toLowerCase();
-        if (mime.startsWith('image/webp')) return ('Figurinha', Icons.emoji_emotions);
-        if (mime.startsWith('image/'))      return ('Imagem', Icons.photo);
-        if (mime.startsWith('video/'))      return ('Vídeo',  Icons.videocam);
-        if (mime.startsWith('audio/'))      return ('Áudio',  Icons.audiotrack);
+        if (mime.startsWith('image/webp'))
+          return ('Figurinha', Icons.emoji_emotions);
+        if (mime.startsWith('image/')) return ('Imagem', Icons.photo);
+        if (mime.startsWith('video/')) return ('Vídeo', Icons.videocam);
+        if (mime.startsWith('audio/')) return ('Áudio', Icons.audiotrack);
       }
     }
 
@@ -133,24 +194,29 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
     if (msg.startsWith('http')) {
       final uri = Uri.tryParse(msg);
       if (uri != null) {
-        final path  = uri.path.toLowerCase();
+        final path = uri.path.toLowerCase();
         final parts = path.split('.');
-        final String? ext = parts.length > 1 ? parts.last : null; // evita .lastOrNull
+        final String? ext =
+            parts.length > 1 ? parts.last : null; // evita .lastOrNull
         if (ext != null && _extMatchers.containsKey(ext)) {
           return _extMatchers[ext];
         }
         final qp = uri.queryParametersAll.map(
-              (k, v) => MapEntry(k.toLowerCase(), v.map((x) => Uri.decodeComponent(x).toLowerCase()).toList()),
+          (k, v) => MapEntry(k.toLowerCase(),
+              v.map((x) => Uri.decodeComponent(x).toLowerCase()).toList()),
         );
-        final mimeParam = (qp['contenttype'] ?? qp['mimetype'] ?? qp['mime'] ?? const [])
-            .cast<String?>()
-            .firstWhere((e) => e != null && e!.contains('/'), orElse: () => null);
+        final mimeParam =
+            (qp['contenttype'] ?? qp['mimetype'] ?? qp['mime'] ?? const [])
+                .cast<String?>()
+                .firstWhere((e) => e != null && e!.contains('/'),
+                    orElse: () => null);
         if (mimeParam != null) {
           final mime = mimeParam!;
-          if (mime.startsWith('image/webp')) return ('Figurinha', Icons.emoji_emotions);
-          if (mime.startsWith('image/'))      return ('Imagem', Icons.photo);
-          if (mime.startsWith('video/'))      return ('Vídeo',  Icons.videocam);
-          if (mime.startsWith('audio/'))      return ('Áudio',  Icons.audiotrack);
+          if (mime.startsWith('image/webp'))
+            return ('Figurinha', Icons.emoji_emotions);
+          if (mime.startsWith('image/')) return ('Imagem', Icons.photo);
+          if (mime.startsWith('video/')) return ('Vídeo', Icons.videocam);
+          if (mime.startsWith('audio/')) return ('Áudio', Icons.audiotrack);
         }
       }
     }
@@ -167,7 +233,8 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
         var cleaned = s.replaceAll(RegExp(r'\s'), '');
         cleaned = cleaned.substring(0, cleaned.length.clamp(0, take * 2));
         final mod = cleaned.length % 4;
-        if (mod != 0) cleaned = cleaned.padRight(cleaned.length + (4 - mod), '=');
+        if (mod != 0)
+          cleaned = cleaned.padRight(cleaned.length + (4 - mod), '=');
         return base64Decode(cleaned);
       } catch (_) {
         return null;
@@ -186,22 +253,26 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
         }
 
         // Imagens
-        if (startsWithSig([0x89, 0x50, 0x4E, 0x47])) return ('Imagem', Icons.photo); // PNG
-        if (startsWithSig([0xFF, 0xD8, 0xFF]))       return ('Imagem', Icons.photo); // JPEG
-        if (String.fromCharCodes(head).startsWith('GIF8')) return ('Imagem', Icons.photo); // GIF
+        if (startsWithSig([0x89, 0x50, 0x4E, 0x47]))
+          return ('Imagem', Icons.photo); // PNG
+        if (startsWithSig([0xFF, 0xD8, 0xFF]))
+          return ('Imagem', Icons.photo); // JPEG
+        if (String.fromCharCodes(head).startsWith('GIF8'))
+          return ('Imagem', Icons.photo); // GIF
         final ascii = String.fromCharCodes(head);
-        if (ascii.startsWith('RIFF') && ascii.contains('WEBP')) return ('Figurinha', Icons.emoji_emotions);
+        if (ascii.startsWith('RIFF') && ascii.contains('WEBP'))
+          return ('Figurinha', Icons.emoji_emotions);
 
         // Áudio: OGG/OPUS, MP3
         if (ascii.startsWith('OggS')) return ('Áudio', Icons.audiotrack);
-        if (ascii.startsWith('ID3'))  return ('Áudio', Icons.audiotrack);
+        if (ascii.startsWith('ID3')) return ('Áudio', Icons.audiotrack);
 
         // Contêiner ISO-BMFF (mp4/mov/m4a) – tem 'ftyp'
         final ftypAt = ascii.indexOf('ftyp');
         if (ftypAt >= 0 && head.length >= ftypAt + 8) {
           // major_brand são os 4 bytes após 'ftyp'
           final mbStart = ftypAt + 4;
-          final mbEnd   = mbStart + 4;
+          final mbEnd = mbStart + 4;
           final majorBrand = String.fromCharCodes(head.sublist(mbStart, mbEnd));
 
           // Heurísticas:
@@ -213,7 +284,15 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
           //  - Codecs encontrados no cabeçalho
           final lower = ascii.toLowerCase();
           const audioHints = ['mp4a', 'alac', 'ac-3', 'ec-3'];
-          const videoHints = ['avc1', 'hvc1', 'hev1', 'vp09', 'av01', 'mp4v', 'encv'];
+          const videoHints = [
+            'avc1',
+            'hvc1',
+            'hev1',
+            'vp09',
+            'av01',
+            'mp4v',
+            'encv'
+          ];
 
           final hasAudioHint = audioHints.any(lower.contains);
           final hasVideoHint = videoHints.any(lower.contains);
@@ -252,7 +331,8 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
     final uid = FirebaseAuth.instance.currentUser!.uid;
 
     final usersRef = FirebaseFirestore.instance.collection('users').doc(uid);
-    final empresasRef = FirebaseFirestore.instance.collection('empresas').doc(uid);
+    final empresasRef =
+        FirebaseFirestore.instance.collection('empresas').doc(uid);
 
     // Lê doc de users/{uid} apenas para saber se É colaborador (createdBy)
     final userSnap = await usersRef.get();
@@ -277,18 +357,15 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
     // Se não tiver defaultPhoneId, pega o primeiro phone da empresa (APENAS EM MEMÓRIA)
     if (_phoneId == null) {
       final phonesCol = FirebaseFirestore.instance
-          .collection('empresas').doc(_companyId).collection('phones');
+          .collection('empresas')
+          .doc(_companyId)
+          .collection('phones');
 
       final q = await phonesCol.limit(1).get();
       if (q.docs.isNotEmpty) {
         _phoneId = q.docs.first.id;
-        // ⚠️ Não persiste nada aqui. Esta tela é estritamente read-only.
       }
     }
-
-    // ❌ Não delete users/{uid} aqui. Se alguma Function “repõe” esse doc,
-    //    deletar pode ser justamente o gatilho de recriação.
-    // if (!isCollaborator && userSnap.exists) { await usersRef.delete(); }  ← REMOVIDO
 
     if (_phoneId == null) {
       if (mounted) setState(() => _noPhone = true);
@@ -302,8 +379,10 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
 
     _tagSub?.cancel();
     _tagSub = FirebaseFirestore.instance
-        .collection('empresas').doc(_companyId)
-        .collection('tags').orderBy('name')
+        .collection('empresas')
+        .doc(_companyId)
+        .collection('tags')
+        .orderBy('name')
         .snapshots()
         .listen((qs) {
       if (!mounted) return;
@@ -311,8 +390,9 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
         _tagMap
           ..clear()
           ..addEntries(qs.docs.map((d) => MapEntry(
-            d.id, TagItem(d['name'] ?? '', Color(d['color'] ?? 0xFF9E9E9E)),
-          )));
+                d.id,
+                TagItem(d['name'] ?? '', Color(d['color'] ?? 0xFF9E9E9E)),
+              )));
       });
       _refreshPhotosSilently();
     });
@@ -323,7 +403,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
   // 3) construir o número limpo
   Future<void> _startConversation() async {
     // ── 1. Sanitiza o número ─────────────────────────────────────────────
-    final raw = _phoneMask.getUnmaskedText();          // 11999998888
+    final raw = _phoneMask.getUnmaskedText(); // 11999998888
     if (raw.length < 10) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Número inválido')));
@@ -333,34 +413,38 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
     final chatId = '${_countryCode.replaceAll(RegExp(r'\D'), '')}$raw'; // 5511…
 
     // ── 2. Referência ao doc do chat ─────────────────────────────────────
-    final chatRef  = FirebaseFirestore.instance
-        .collection('empresas').doc(_companyId).collection('phones').doc(_phoneId).collection('whatsappChats')
+    final chatRef = FirebaseFirestore.instance
+        .collection('empresas')
+        .doc(_companyId)
+        .collection('phones')
+        .doc(_phoneId)
+        .collection('whatsappChats')
         .doc(chatId);
 
     final snap = await chatRef.get();
 
     // Variáveis que serão passadas ao ChatDetail
-    String chatName      = chatId;
-    String contactPhoto  = '';
+    String chatName = chatId;
+    String contactPhoto = '';
 
     // ── 3. Se já existe, usa name/foto do Firestore ──────────────────────
     if (snap.exists) {
       final data = snap.data() as Map<String, dynamic>;
-      chatName     = data['name']          ?? chatName;
-      contactPhoto = data['contactPhoto']  ?? '';
+      chatName = data['name'] ?? chatName;
+      contactPhoto = data['contactPhoto'] ?? '';
     } else {
       // Cria stub para novo chat
       await chatRef.set({
-        'chatId'          : chatId,
-        'name'            : chatName,
-        'lastMessage'     : '',
-        'lastMessageTime' : '',
-        'timestamp'       : FieldValue.serverTimestamp(),
-        'opened'          : false,
-        'unreadCount'     : 0,
-        'contactPhoto'    : contactPhoto,
-        'status'         : 'novo',
-        'saleValue'      : null,
+        'chatId': chatId,
+        'name': chatName,
+        'lastMessage': '',
+        'lastMessageTime': '',
+        'timestamp': FieldValue.serverTimestamp(),
+        'opened': false,
+        'unreadCount': 0,
+        'contactPhoto': contactPhoto,
+        'status': 'novo',
+        'saleValue': null,
       });
     }
 
@@ -389,9 +473,12 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
       icon: Icon(icon, color: color ?? cs.onSecondary),
       tooltip: tooltip,
       splashRadius: 22,
-      visualDensity: VisualDensity.compact,      // <<< compacto
-      padding: EdgeInsets.zero,                  // <<< sem folga extra
-      constraints: const BoxConstraints(         // <<< reduz a largura padrão (48)
+      visualDensity: VisualDensity.compact,
+      // <<< compacto
+      padding: EdgeInsets.zero,
+      // <<< sem folga extra
+      constraints: const BoxConstraints(
+        // <<< reduz a largura padrão (48)
         minWidth: 40,
         minHeight: 40,
       ),
@@ -413,7 +500,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
           // volta para as iniciais se o link 403 / expirar
           if (mounted) setState(() {});
         },
-        child: null,                           // sem fallback aqui
+        child: null, // sem fallback aqui
       );
     }
 
@@ -434,17 +521,18 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
 
   // ===================== ITEM DA LISTA DE CHATS =====================
   Widget _buildChatItem(
-      BuildContext context, {
-        required String chatId,
-        required String name,
-        required String lastMessage,
-        required String lastMessageTime,
-        required int unreadCount,
-        required String contactPhoto,
-        required List<TagItem> tags,
-      }) {
+    BuildContext context, {
+    required String chatId,
+    required String name,
+    required String lastMessage,
+    required String lastMessageTime,
+    required int unreadCount,
+    required String contactPhoto,
+    required List<TagItem> tags,
+  }) {
     final theme = Theme.of(context);
-    final mediaInfo = _classifyMediaMessage(lastMessage);   // (label, icon)? ou null
+    final mediaInfo =
+        _classifyMediaMessage(lastMessage); // (label, icon)? ou null
 
     // ---------- linha que mostra a última mensagem ----------
     late final Widget lastLine;
@@ -453,9 +541,11 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
       // onde você monta o `lastLine` quando é mídia:
       lastLine = Row(
         children: [
-          Icon(icon, size: 14, color: theme.colorScheme.onSecondary.withOpacity(.7)),
+          Icon(icon,
+              size: 14, color: theme.colorScheme.onSecondary.withOpacity(.7)),
           const SizedBox(width: 4),
-          Flexible( // <<< impede overflow
+          Flexible(
+            // <<< impede overflow
             child: Text(
               label,
               maxLines: 1,
@@ -483,26 +573,11 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
 
     // ---------- widget completo ----------
     return InkWell(
-      onTap: () async {
-        await FirebaseFirestore.instance
-            .collection('empresas').doc(_companyId).collection('phones').doc(_phoneId).collection('whatsappChats')
-            .doc(chatId)
-            .set(
-          {'unreadCount': 0},
-          SetOptions(merge: true),
-        );
-
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ChatDetail(
-              chatId: chatId,
-              chatName: name,
-              contactPhoto: contactPhoto,
-            ),
-          ),
-        );
-      },
+      onTap: () => _openChat(
+        chatId: chatId,
+        name: name,
+        contactPhoto: contactPhoto,
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
@@ -600,11 +675,13 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                 if (unreadCount > 0)
                   Container(
                     padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: _currentTab == ChatTab.novos
-                          ? theme.colorScheme.error        // bolinha vermelha nos “Novos”
-                          : theme.colorScheme.tertiary,    // badge comum em “Atendendo”
+                          ? theme
+                              .colorScheme.error // bolinha vermelha nos “Novos”
+                          : theme.colorScheme.tertiary,
+                      // badge comum em “Atendendo”
                       borderRadius: BorderRadius.circular(10),
                     ),
                     alignment: Alignment.center,
@@ -628,7 +705,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
   void _openFilterSheet() {
     if (_tagMap.isEmpty) return;
 
-    final tmp = _filterTags.toSet();      // cópia mutável
+    final tmp = _filterTags.toSet(); // cópia mutável
 
     showModalBottomSheet(
       context: context,
@@ -680,8 +757,8 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                             Brightness.dark;
 
                     void toggle() => setModalState(() {
-                      sel ? tmp.remove(e.key) : tmp.add(e.key);
-                    });
+                          sel ? tmp.remove(e.key) : tmp.add(e.key);
+                        });
 
                     return InkWell(
                       onTap: toggle,
@@ -723,10 +800,10 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                     children: [
                       TextButton(
                         style: TextButton.styleFrom(
-                          foregroundColor: cs.onSecondary,        // cor do texto
+                          foregroundColor: cs.onSecondary, // cor do texto
                         ),
-                        onPressed: () =>
-                            setModalState(() => tmp.clear()),     // desmarca visualmente
+                        onPressed: () => setModalState(() => tmp.clear()),
+                        // desmarca visualmente
                         child: const Text('Limpar'),
                       ),
                       const Spacer(),
@@ -774,17 +851,17 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
               return InkWell(
                 onTap: () => setModalState(() => _sort = option),
                 child: Container(
-                  margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 20),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  margin:
+                      const EdgeInsets.symmetric(vertical: 4, horizontal: 20),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
                     color: cs.secondary,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
                     children: [
-                      Icon(icon,
-                          color: cs.onSecondary,
-                          size: 20),
+                      Icon(icon, color: cs.onSecondary, size: 20),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(label,
@@ -811,8 +888,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
             }
 
             return Padding(
-              padding:
-              EdgeInsets.only(top: 18, bottom: 24, left: 4, right: 4),
+              padding: EdgeInsets.only(top: 18, bottom: 24, left: 4, right: 4),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -824,7 +900,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                   _item(
                     option: SortOption.newestFirst,
                     label: 'Últimas interações primeiro',
-                    icon: Icons.arrow_upward,   // 🔺
+                    icon: Icons.arrow_upward, // 🔺
                   ),
                   const SizedBox(height: 12),
                   ElevatedButton(
@@ -835,7 +911,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                     ),
                     onPressed: () {
                       // grava escolha e fecha
-                      setState(() {});   // força rebuild da lista
+                      setState(() {}); // força rebuild da lista
                       Navigator.pop(ctx);
                     },
                     child: const Text('Aplicar'),
@@ -858,367 +934,910 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
     if (_companyId == null || _phoneId == null) {
       if (_noPhone) return const WelcomeConnectPhone();
     }
+
     final theme = Theme.of(context);
-
     return Scaffold(
-      backgroundColor: theme.colorScheme.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ------------ LINHA DE ABAS ------------
-            // ------------ LINHA DE ABAS ------------
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('empresas').doc(_companyId)
-                    .collection('phones').doc(_phoneId)
-                    .collection('whatsappChats')
-                    .snapshots(),
-                builder: (context, snap) {
-                  int novosCount = 0;
-                  if (snap.hasData) {
-                    novosCount = snap.data!.docs.where((d) {
-                      final map = d.data() as Map<String, dynamic>;
-                      return (map['opened'] as bool?) != true;
-                    }).length;
-                  }
+      backgroundColor: _paneBg, // antes: theme.colorScheme.background
+      body: _isDesktop
+          ? _buildDesktop(context)
+          : SafeArea(child: _buildMobile(context)),
+    );
+  }
 
-                  return Row(
-                    children: [
-                      // Abas – rolam se faltar espaço
-                      Expanded(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          physics: const BouncingScrollPhysics(),
-                          child: Row(
-                            children: [
-                              _buildTab('Novos', ChatTab.novos, badge: novosCount),
-                              const SizedBox(width: 8),
-                              _buildTab('Atendendo', ChatTab.atendendo),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
+  Widget _buildMobile(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        // ------------ LINHA DE ABAS ------------
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('empresas')
+                .doc(_companyId)
+                .collection('phones')
+                .doc(_phoneId)
+                .collection('whatsappChats')
+                .snapshots(),
+            builder: (context, snap) {
+              int novosCount = 0;
+              if (snap.hasData) {
+                novosCount = snap.data!.docs.where((d) {
+                  final map = d.data() as Map<String, dynamic>;
+                  return (map['opened'] as bool?) != true;
+                }).length;
+              }
 
-                      // Ações – botões compactos
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _actionIcon(
-                            icon: _showArchived ? Icons.archive : Icons.archive_outlined,
-                            color: _showArchived
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context).colorScheme.onSecondary,
-                            tooltip: _showArchived ? 'Mostrar em andamento' : 'Mostrar concluídos',
-                            onPressed: () => setState(() => _showArchived = !_showArchived),
-                          ),
-                          _actionIcon(
-                            icon: _filterTags.isEmpty ? Icons.filter_alt_outlined : Icons.filter_alt,
-                            onPressed: _openFilterSheet,
-                          ),
-                          _actionIcon(
-                            icon: Icons.swap_vert,
-                            onPressed: _openSortSheet,
-                          ),
-                          _actionIcon(
-                            icon: _showUnreadOnly ? Icons.filter_list : Icons.filter_list_outlined,
-                            color: _showUnreadOnly
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context).colorScheme.onSecondary,
-                            tooltip: 'Somente não lidas',
-                            onPressed: () => setState(() => _showUnreadOnly = !_showUnreadOnly),
-                          ),
-                        ],
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-
-            // ------------ CAMPO DE BUSCA ------------
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
+              return Row(
                 children: [
+                  // Abas – rolam se faltar espaço
                   Expanded(
-                    child: Container(
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.secondary,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
                       child: Row(
                         children: [
-                          const SizedBox(width: 12),
-                          Icon(Icons.search,
-                              color:
-                              theme.colorScheme.onBackground.withOpacity(0.5)),
+                          _buildTab('Novos', ChatTab.novos, badge: novosCount),
                           const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              onChanged: (v) =>
-                                  setState(() => _searchTerm = v.trim().toLowerCase()),
-                              textAlign: TextAlign.start,
-                              decoration: InputDecoration(
-                                hintText: 'Buscar atendimento',
-                                hintStyle: TextStyle(
-                                  color: theme.colorScheme.onBackground
-                                      .withOpacity(0.5),
-                                ),
-                                isDense: true,
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.zero,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
+                          _buildTab('Atendendo', ChatTab.atendendo),
                         ],
                       ),
                     ),
                   ),
+                  const SizedBox(width: 8),
+
+                  // Ações – botões compactos
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _actionIcon(
+                        icon: _showArchived
+                            ? Icons.archive
+                            : Icons.archive_outlined,
+                        color: _showArchived
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.onSecondary,
+                        tooltip: _showArchived
+                            ? 'Mostrar em andamento'
+                            : 'Mostrar concluídos',
+                        onPressed: () =>
+                            setState(() => _showArchived = !_showArchived),
+                      ),
+                      _actionIcon(
+                        icon: _filterTags.isEmpty
+                            ? Icons.filter_alt_outlined
+                            : Icons.filter_alt,
+                        onPressed: _openFilterSheet,
+                      ),
+                      _actionIcon(
+                        icon: Icons.swap_vert,
+                        onPressed: _openSortSheet,
+                      ),
+                      _actionIcon(
+                        icon: _showUnreadOnly
+                            ? Icons.filter_list
+                            : Icons.filter_list_outlined,
+                        color: _showUnreadOnly
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.onSecondary,
+                        tooltip: 'Somente não lidas',
+                        onPressed: () =>
+                            setState(() => _showUnreadOnly = !_showUnreadOnly),
+                      ),
+                    ],
+                  ),
                 ],
+              );
+            },
+          ),
+        ),
+
+        // ------------ CAMPO DE BUSCA ------------
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.secondary,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 12),
+                      Icon(Icons.search,
+                          color:
+                              theme.colorScheme.onBackground.withOpacity(0.5)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          onChanged: (v) => setState(
+                              () => _searchTerm = v.trim().toLowerCase()),
+                          textAlign: TextAlign.start,
+                          decoration: InputDecoration(
+                            hintText: 'Buscar atendimento',
+                            hintStyle: TextStyle(
+                              color: theme.colorScheme.onBackground
+                                  .withOpacity(0.5),
+                            ),
+                            isDense: true,
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
 
-            // ------------ LISTA ------------
-            Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('empresas').doc(_companyId).collection('phones').doc(_phoneId).collection('whatsappChats')
-                    .orderBy('timestamp', descending: _sort == SortOption.newestFirst)
-                    .snapshots(),
-                builder: (ctx, snap) {
-                  if (!snap.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+        // ------------ LISTA ------------
+        Expanded(
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('empresas')
+                .doc(_companyId)
+                .collection('phones')
+                .doc(_phoneId)
+                .collection('whatsappChats')
+                .orderBy('timestamp',
+                    descending: _sort == SortOption.newestFirst)
+                .snapshots(),
+            builder: (ctx, snap) {
+              if (!snap.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-                  List<QueryDocumentSnapshot> docs = snap.data!.docs;
+              List<QueryDocumentSnapshot> docs = snap.data!.docs;
 
-                  bool _isOpened(QueryDocumentSnapshot d) {
-                    final map = d.data() as Map<String, dynamic>;
-                    return (map['opened'] as bool?) ?? false;
-                  }
+              bool _isOpened(QueryDocumentSnapshot d) {
+                final map = d.data() as Map<String, dynamic>;
+                return (map['opened'] as bool?) ?? false;
+              }
 
 // ----- filtro por ABA (só quando NÃO estamos vendo arquivados) -----
-                  if (!_showArchived) {
-                    if (_currentTab == ChatTab.novos) {
-                      docs = docs.where((d) => !_isOpened(d)).toList();
-                    } else {
-                      docs = docs.where(_isOpened).toList(); // Atendendo
-                    }
-                  }
+              if (!_showArchived) {
+                if (_currentTab == ChatTab.novos) {
+                  docs = docs.where((d) => !_isOpened(d)).toList();
+                } else {
+                  docs = docs.where(_isOpened).toList(); // Atendendo
+                }
+              }
 
 // ----- filtro por texto -----
-                  docs = docs.where((d) {
-                    final name = (d['name'] as String? ?? '').toLowerCase();
-                    return name.contains(_searchTerm);
-                  }).toList();
+              docs = docs.where((d) {
+                final name = (d['name'] as String? ?? '').toLowerCase();
+                return name.contains(_searchTerm);
+              }).toList();
 
 // ----- filtro por etiquetas -----
-                  if (_filterTags.isNotEmpty) {
-                    docs = docs.where((d) {
-                      final map     = d.data() as Map<String, dynamic>;
-                      final tagList = (map['tags'] as List?)?.cast<String>() ?? const [];
-                      return tagList.any(_filterTags.contains);
-                    }).toList();
-                  }
+              if (_filterTags.isNotEmpty) {
+                docs = docs.where((d) {
+                  final map = d.data() as Map<String, dynamic>;
+                  final tagList =
+                      (map['tags'] as List?)?.cast<String>() ?? const [];
+                  return tagList.any(_filterTags.contains);
+                }).toList();
+              }
 
 // ----- filtro “somente não-lidas” -----
-                  if (_showUnreadOnly) {
-                    docs = docs.where((d) => ((d['unreadCount'] as int?) ?? 0) > 0).toList();
-                  }
+              if (_showUnreadOnly) {
+                docs = docs
+                    .where((d) => ((d['unreadCount'] as int?) ?? 0) > 0)
+                    .toList();
+              }
 
 // ----- filtro por STATUS (aqui entra o “arquivo”) -----
-                  if (_showArchived) {
-                    // mostrar APENAS concluídos
-                    docs = docs.where((d) {
-                      final st = d['status'] as String? ?? '';
-                      return st == 'concluido_com_venda' || st == 'recusado';
-                    }).toList();
-                  } else {
-                    // esconder concluídos
-                    docs = docs.where((d) {
-                      final st = d['status'] as String? ?? 'novo';
-                      return st != 'concluido' &&
-                          st != 'concluido_com_venda' &&
-                          st != 'recusado';
-                    }).toList();
-                  }
+              if (_showArchived) {
+                // mostrar APENAS concluídos
+                docs = docs.where((d) {
+                  final st = d['status'] as String? ?? '';
+                  return st == 'concluido_com_venda' || st == 'recusado';
+                }).toList();
+              } else {
+                // esconder concluídos
+                docs = docs.where((d) {
+                  final st = d['status'] as String? ?? 'novo';
+                  return st != 'concluido' &&
+                      st != 'concluido_com_venda' &&
+                      st != 'recusado';
+                }).toList();
+              }
 
 // ----- vazio -----
-                  if (docs.isEmpty) {
-                    final msg = _showArchived
-                        ? 'Não há conversas concluídas'
-                        : (_currentTab == ChatTab.novos
+              if (docs.isEmpty) {
+                final msg = _showArchived
+                    ? 'Não há conversas concluídas'
+                    : (_currentTab == ChatTab.novos
                         ? 'Não há novos atendimentos'
                         : 'Nenhum atendimento em andamento');
 
-                    return Center(
-                      child: Text(
-                        msg,
-                        style: TextStyle(
-                          color: theme.colorScheme.onSecondary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    );
+                return Center(
+                  child: Text(
+                    msg,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSecondary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                );
+              }
+
+              return ListView.separated(
+                itemCount: docs.length,
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (ctx, i) {
+                  final data = docs[i].data() as Map<String, dynamic>;
+                  final ids = List<String>.from(data['tags'] ?? const []);
+                  final tags = ids
+                      .where(_tagMap.containsKey)
+                      .map((id) => _tagMap[id]!)
+                      .toList();
+
+                  final chatId = data['chatId'] as String? ?? '';
+                  final name = data['name'] as String? ?? chatId;
+                  final lastMessage = data['lastMessage'] as String? ?? '';
+                  final unread = data['unreadCount'] as int? ?? 0;
+                  final contactPhoto = data['contactPhoto'] as String? ?? '';
+
+                  // formata horário
+                  String lastMsgTime = '';
+                  final ts = data['timestamp'];
+                  if (ts is Timestamp) {
+                    final date = ts.toDate();
+                    final now = DateTime.now();
+
+                    final bool sameDay = date.year == now.year &&
+                        date.month == now.month &&
+                        date.day == now.day;
+
+                    if (sameDay) {
+                      // Ex.: 14:05
+                      lastMsgTime = '${date.hour.toString().padLeft(2, '0')}:'
+                          '${date.minute.toString().padLeft(2, '0')}';
+                    } else {
+                      // Ex.: 09/06
+                      lastMsgTime = '${date.day.toString().padLeft(2, '0')}/'
+                          '${date.month.toString().padLeft(2, '0')}';
+                    }
                   }
 
-                  return ListView.separated(
-                    itemCount: docs.length,
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (ctx, i) {
-                      final data = docs[i].data() as Map<String, dynamic>;
-                      final ids = List<String>.from(data['tags'] ?? const []);
-                      final tags = ids.where(_tagMap.containsKey).map((id) => _tagMap[id]!).toList();
-
-                      final chatId = data['chatId'] as String? ?? '';
-                      final name = data['name'] as String? ?? chatId;
-                      final lastMessage = data['lastMessage'] as String? ?? '';
-                      final unread = data['unreadCount'] as int? ?? 0;
-                      final contactPhoto = data['contactPhoto'] as String? ?? '';
-
-                      // formata horário
-                      String lastMsgTime = '';
-                      final ts = data['timestamp'];
-                      if (ts is Timestamp) {
-                        final date = ts.toDate();
-                        final now  = DateTime.now();
-
-                        final bool sameDay =
-                            date.year == now.year && date.month == now.month && date.day == now.day;
-
-                        if (sameDay) {
-                          // Ex.: 14:05
-                          lastMsgTime = '${date.hour.toString().padLeft(2, '0')}:'
-                              '${date.minute.toString().padLeft(2, '0')}';
-                        } else {
-                          // Ex.: 09/06
-                          lastMsgTime = '${date.day.toString().padLeft(2, '0')}/'
-                              '${date.month.toString().padLeft(2, '0')}';
-                        }
-                      }
-
-                      return _buildChatItem(
-                        context,
-                        chatId: chatId,
-                        name: name,
-                        lastMessage: lastMessage,
-                        lastMessageTime: lastMsgTime,
-                        unreadCount: unread,
-                        contactPhoto: contactPhoto,
-                        tags: tags,
-                      );
-                    },
+                  return _buildChatItem(
+                    context,
+                    chatId: chatId,
+                    name: name,
+                    lastMessage: lastMessage,
+                    lastMessageTime: lastMsgTime,
+                    unreadCount: unread,
+                    contactPhoto: contactPhoto,
+                    tags: tags,
                   );
                 },
-              ),
-            ),
+              );
+            },
+          ),
+        ),
 
-            // ==================== RODAPÉ – TELEFONE + BOTÃO CONVERSAR ====================
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  // ---------- Dropdown do país ----------
-                  Container(
+        // ==================== RODAPÉ – TELEFONE + BOTÃO CONVERSAR ====================
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              // ---------- Dropdown do país ----------
+              Container(
+                height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.secondary, // fundo próprio
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                alignment: Alignment.center,
+                child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                  value: _countryCode,
+                  alignment: Alignment.center,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSecondary,
+                  ),
+                  icon: Icon(Icons.arrow_drop_down,
+                      color: theme.colorScheme.onBackground.withOpacity(0.5)),
+                  items: const [
+                    DropdownMenuItem(
+                      value: '+55',
+                      child: Text('+55'),
+                    ),
+                    DropdownMenuItem(
+                      value: '+1',
+                      child: Text('+1'),
+                    ),
+                  ],
+                  onChanged: (v) => setState(() => _countryCode = v ?? '+55'),
+                )),
+              ),
+
+              const SizedBox(width: 8),
+
+              // ---------- Campo de telefone ----------
+              Expanded(
+                child: Container(
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.secondary,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: TextField(
+                    controller: _phoneController,
+                    inputFormatters: [_phoneMask],
+                    textAlign: TextAlign.center,
+                    keyboardType: TextInputType.phone,
+                    style: TextStyle(color: theme.colorScheme.onSecondary),
+                    decoration: InputDecoration(
+                      hintText: '(00) 0000-0000',
+                      hintStyle: TextStyle(
+                          color:
+                              theme.colorScheme.onBackground.withOpacity(0.5)),
+                      isDense: true,
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 8),
+
+              // ---------- Botão "Conversar" ----------
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: _startConversation,
+                  child: const Text(
+                    'Conversar',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        )
+      ],
+    );
+  }
+
+  Widget _buildLeftPaneDesktop(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: 420,
+      color: _paneBg,
+      child: Column(
+        children: [
+          // ------------ LINHA DE ABAS ------------
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('empresas')
+                  .doc(_companyId)
+                  .collection('phones')
+                  .doc(_phoneId)
+                  .collection('whatsappChats')
+                  .snapshots(),
+              builder: (context, snap) {
+                int novosCount = 0;
+                if (snap.hasData) {
+                  novosCount = snap.data!.docs.where((d) {
+                    final map = d.data() as Map<String, dynamic>;
+                    return (map['opened'] as bool?) != true;
+                  }).length;
+                }
+
+                return Row(
+                  children: [
+                    // Abas – rolam se faltar espaço
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        child: Row(
+                          children: [
+                            _buildTab('Novos', ChatTab.novos,
+                                badge: novosCount),
+                            const SizedBox(width: 8),
+                            _buildTab('Atendendo', ChatTab.atendendo),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+
+                    // Ações – botões compactos
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _actionIcon(
+                          icon: _showArchived
+                              ? Icons.archive
+                              : Icons.archive_outlined,
+                          color: _showArchived
+                              ? Theme.of(context).colorScheme.primary
+                              : Theme.of(context).colorScheme.onSecondary,
+                          tooltip: _showArchived
+                              ? 'Mostrar em andamento'
+                              : 'Mostrar concluídos',
+                          onPressed: () =>
+                              setState(() => _showArchived = !_showArchived),
+                        ),
+                        _actionIcon(
+                          icon: _filterTags.isEmpty
+                              ? Icons.filter_alt_outlined
+                              : Icons.filter_alt,
+                          onPressed: _openFilterSheet,
+                        ),
+                        _actionIcon(
+                          icon: Icons.swap_vert,
+                          onPressed: _openSortSheet,
+                        ),
+                        _actionIcon(
+                          icon: _showUnreadOnly
+                              ? Icons.filter_list
+                              : Icons.filter_list_outlined,
+                          color: _showUnreadOnly
+                              ? Theme.of(context).colorScheme.primary
+                              : Theme.of(context).colorScheme.onSecondary,
+                          tooltip: 'Somente não lidas',
+                          onPressed: () => setState(
+                              () => _showUnreadOnly = !_showUnreadOnly),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+
+          // ------------ CAMPO DE BUSCA ------------
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
                     height: 40,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.secondary,                      // fundo próprio
+                      color: theme.colorScheme.secondary,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 12),
+                        Icon(Icons.search,
+                            color: theme.colorScheme.onBackground
+                                .withOpacity(0.5)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            onChanged: (v) => setState(
+                                () => _searchTerm = v.trim().toLowerCase()),
+                            textAlign: TextAlign.start,
+                            decoration: InputDecoration(
+                              hintText: 'Buscar atendimento',
+                              hintStyle: TextStyle(
+                                color: theme.colorScheme.onBackground
+                                    .withOpacity(0.5),
+                              ),
+                              isDense: true,
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // ------------ LISTA ------------
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('empresas')
+                  .doc(_companyId)
+                  .collection('phones')
+                  .doc(_phoneId)
+                  .collection('whatsappChats')
+                  .orderBy('timestamp',
+                      descending: _sort == SortOption.newestFirst)
+                  .snapshots(),
+              builder: (ctx, snap) {
+                if (!snap.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                List<QueryDocumentSnapshot> docs = snap.data!.docs;
+
+                bool _isOpened(QueryDocumentSnapshot d) {
+                  final map = d.data() as Map<String, dynamic>;
+                  return (map['opened'] as bool?) ?? false;
+                }
+
+// ----- filtro por ABA (só quando NÃO estamos vendo arquivados) -----
+                if (!_showArchived) {
+                  if (_currentTab == ChatTab.novos) {
+                    docs = docs.where((d) => !_isOpened(d)).toList();
+                  } else {
+                    docs = docs.where(_isOpened).toList(); // Atendendo
+                  }
+                }
+
+// ----- filtro por texto -----
+                docs = docs.where((d) {
+                  final name = (d['name'] as String? ?? '').toLowerCase();
+                  return name.contains(_searchTerm);
+                }).toList();
+
+// ----- filtro por etiquetas -----
+                if (_filterTags.isNotEmpty) {
+                  docs = docs.where((d) {
+                    final map = d.data() as Map<String, dynamic>;
+                    final tagList =
+                        (map['tags'] as List?)?.cast<String>() ?? const [];
+                    return tagList.any(_filterTags.contains);
+                  }).toList();
+                }
+
+// ----- filtro “somente não-lidas” -----
+                if (_showUnreadOnly) {
+                  docs = docs
+                      .where((d) => ((d['unreadCount'] as int?) ?? 0) > 0)
+                      .toList();
+                }
+
+// ----- filtro por STATUS (aqui entra o “arquivo”) -----
+                if (_showArchived) {
+                  // mostrar APENAS concluídos
+                  docs = docs.where((d) {
+                    final st = d['status'] as String? ?? '';
+                    return st == 'concluido_com_venda' || st == 'recusado';
+                  }).toList();
+                } else {
+                  // esconder concluídos
+                  docs = docs.where((d) {
+                    final st = d['status'] as String? ?? 'novo';
+                    return st != 'concluido' &&
+                        st != 'concluido_com_venda' &&
+                        st != 'recusado';
+                  }).toList();
+                }
+
+// ----- vazio -----
+                if (docs.isEmpty) {
+                  final msg = _showArchived
+                      ? 'Não há conversas concluídas'
+                      : (_currentTab == ChatTab.novos
+                          ? 'Não há novos atendimentos'
+                          : 'Nenhum atendimento em andamento');
+
+                  return Center(
+                    child: Text(
+                      msg,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSecondary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  itemCount: docs.length,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (ctx, i) {
+                    final data = docs[i].data() as Map<String, dynamic>;
+                    final ids = List<String>.from(data['tags'] ?? const []);
+                    final tags = ids
+                        .where(_tagMap.containsKey)
+                        .map((id) => _tagMap[id]!)
+                        .toList();
+
+                    final chatId = data['chatId'] as String? ?? '';
+                    final name = data['name'] as String? ?? chatId;
+                    final lastMessage = data['lastMessage'] as String? ?? '';
+                    final unread = data['unreadCount'] as int? ?? 0;
+                    final contactPhoto = data['contactPhoto'] as String? ?? '';
+
+                    // formata horário
+                    String lastMsgTime = '';
+                    final ts = data['timestamp'];
+                    if (ts is Timestamp) {
+                      final date = ts.toDate();
+                      final now = DateTime.now();
+
+                      final bool sameDay = date.year == now.year &&
+                          date.month == now.month &&
+                          date.day == now.day;
+
+                      if (sameDay) {
+                        // Ex.: 14:05
+                        lastMsgTime = '${date.hour.toString().padLeft(2, '0')}:'
+                            '${date.minute.toString().padLeft(2, '0')}';
+                      } else {
+                        // Ex.: 09/06
+                        lastMsgTime = '${date.day.toString().padLeft(2, '0')}/'
+                            '${date.month.toString().padLeft(2, '0')}';
+                      }
+                    }
+
+                    return _buildChatItem(
+                      context,
+                      chatId: chatId,
+                      name: name,
+                      lastMessage: lastMessage,
+                      lastMessageTime: lastMsgTime,
+                      unreadCount: unread,
+                      contactPhoto: contactPhoto,
+                      tags: tags,
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+
+          // ==================== RODAPÉ – TELEFONE + BOTÃO CONVERSAR ====================
+          Container(
+            decoration: BoxDecoration(
+              border: BoxBorder.fromSTEB(
+                  top: BorderSide(
+                color: theme.colorScheme.onSecondary.withOpacity(.08),
+                width: 1,
+              )),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                // ---------- Dropdown do país ----------
+                Container(
+                  height: 44,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.secondary, // fundo próprio
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                    value: _countryCode,
+                    alignment: Alignment.center,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSecondary,
+                    ),
+                    icon: Icon(Icons.arrow_drop_down,
+                        color: theme.colorScheme.onBackground.withOpacity(0.5)),
+                    items: const [
+                      DropdownMenuItem(
+                        value: '+55',
+                        child: Text('+55'),
+                      ),
+                      DropdownMenuItem(
+                        value: '+1',
+                        child: Text('+1'),
+                      ),
+                    ],
+                    onChanged: (v) => setState(() => _countryCode = v ?? '+55'),
+                  )),
+                ),
+
+                const SizedBox(width: 8),
+
+                // ---------- Campo de telefone ----------
+                Expanded(
+                  child: Container(
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.secondary,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     alignment: Alignment.center,
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _countryCode,
-                        alignment: Alignment.center,
-                        style: TextStyle(
-                          color: theme.colorScheme.onSecondary,
-                        ),
-                        icon: Icon(Icons.arrow_drop_down,
-                            color: theme.colorScheme.onBackground.withOpacity(0.5)),
-                        items: const [
-                          DropdownMenuItem(
-                            value: '+55',
-                            child: Text('+55'),
-                          ),
-                          DropdownMenuItem(
-                            value: '+1',
-                            child: Text('+1'),
-                          ),
-                        ],
-                        onChanged: (v) => setState(() => _countryCode = v ?? '+55'),
-                      )
-                    ),
-                  ),
-
-                  const SizedBox(width: 8),
-
-                  // ---------- Campo de telefone ----------
-                  Expanded(
-                    child: Container(
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.secondary,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      alignment: Alignment.center,
-                      child: TextField(
-                        controller: _phoneController,
-                        inputFormatters: [_phoneMask],
-                        textAlign: TextAlign.center,
-                        keyboardType: TextInputType.phone,
-                        style: TextStyle(color: theme.colorScheme.onSecondary),
-                        decoration: InputDecoration(
-                          hintText: '(00) 0000-0000',
-                          hintStyle: TextStyle(
-                              color: theme.colorScheme.onBackground.withOpacity(0.5)),
-                          isDense: true,
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                    child: TextField(
+                      controller: _phoneController,
+                      inputFormatters: [_phoneMask],
+                      textAlign: TextAlign.center,
+                      keyboardType: TextInputType.phone,
+                      style: TextStyle(color: theme.colorScheme.onSecondary),
+                      decoration: InputDecoration(
+                        hintText: '(00) 0000-0000',
+                        hintStyle: TextStyle(
+                            color: theme.colorScheme.onBackground
+                                .withOpacity(0.5)),
+                        isDense: true,
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
                       ),
                     ),
                   ),
+                ),
 
-                  const SizedBox(width: 8),
+                const SizedBox(width: 8),
 
-                  // ---------- Botão "Conversar" ----------
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.colorScheme.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      onPressed: _startConversation,
-                      child: const Text('Conversar',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                      ),
+                // ---------- Botão "Conversar" ----------
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: _startConversation,
+                    child: const Text(
+                      'Conversar',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w700),
                     ),
                   ),
-                ],
-              ),
-            )
-          ],
+                ),
+              ],
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRightPaneDesktop(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    if (_selected == null) {
+      // tela vazia quando nada selecionado (igual WhatsApp Desktop)
+      return Container(
+        color: _paneBg,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.chat_bubble_outline,
+                  size: 64, color: cs.onSurface.withOpacity(.3)),
+              const SizedBox(height: 16),
+              Text('Selecione uma conversa',
+                  style: TextStyle(
+                      fontSize: 18, color: cs.onSurface.withOpacity(.6))),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // conversa aberta
+    return ChatDetail(
+      chatId: _selected!.id,
+      chatName: _selected!.name,
+      contactPhoto: _selected!.photo,
+    );
+  }
+
+  Widget _softSeparator(BuildContext ctx) => Container(
+    width: 1,
+    color: Theme.of(ctx).colorScheme.onSecondary.withOpacity(0.08),
+  );
+
+  Widget _buildOverlayMenu(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+      left: 56,
+      // abre "por cima" da lista, à direita da rail
+      top: 0,
+      bottom: 0,
+      width: _sideExpanded ? 280 : 0,
+      child: IgnorePointer(
+        ignoring: !_sideExpanded,
+        child: Material(
+          color: cs.surface,
+          elevation: 12,
+          child: SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.close),
+                  title: const Text('Fechar'),
+                  onTap: () => setState(() => _sideExpanded = false),
+                ),
+                const Divider(height: 1),
+                SwitchListTile(
+                  value: _showArchived,
+                  onChanged: (v) => setState(() => _showArchived = v),
+                  secondary: const Icon(Icons.archive_outlined),
+                  title: const Text('Mostrar concluídos'),
+                ),
+                SwitchListTile(
+                  value: _showUnreadOnly,
+                  onChanged: (v) => setState(() => _showUnreadOnly = v),
+                  secondary: const Icon(Icons.mark_chat_unread_outlined),
+                  title: const Text('Somente não lidas'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.filter_alt_outlined),
+                  title: const Text('Filtrar por etiquetas'),
+                  onTap: () {
+                    _openFilterSheet();
+                    setState(() => _sideExpanded = false);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.swap_vert),
+                  title: const Text('Ordenar'),
+                  onTap: () {
+                    _openSortSheet();
+                    setState(() => _sideExpanded = false);
+                  },
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 
+  Widget _vHairline(BuildContext ctx) => Container(
+        width: 1,
+        color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.08),
+      );
+
+  Widget _buildDesktop(BuildContext context) {
+    return Stack(
+      children: [
+        Row(
+          children: [
+            // REMOVER o hairline da esquerda
+            _buildLeftPaneDesktop(context),
+            _softSeparator(context), // separação suave
+            Expanded(child: _buildRightPaneDesktop(context)),
+          ],
+        ),
+        _buildOverlayMenu(context),
+      ],
+    );
+  }
+
   // ========================= TAB WIDGET =========================
   Widget _buildTab(String label, ChatTab tab, {int badge = 0}) {
-    final theme    = Theme.of(context);
+    final theme = Theme.of(context);
     final selected = _currentTab == tab;
 
     return GestureDetector(
@@ -1226,18 +1845,20 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? theme.colorScheme.primary
+          color: selected
+              ? theme.colorScheme.primary
               : theme.colorScheme.secondary,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,           // <= não ocupar espaço extra
+          mainAxisSize: MainAxisSize.min, // <= não ocupar espaço extra
           children: [
             Text(
               label,
               style: TextStyle(
                 fontSize: 14,
-                color: selected ? theme.colorScheme.onSurface
+                color: selected
+                    ? theme.colorScheme.onSurface
                     : theme.colorScheme.onSecondary,
               ),
             ),

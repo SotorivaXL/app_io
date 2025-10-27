@@ -1,6 +1,6 @@
 const {onRequest} = require("firebase-functions/v2/https");
 const {onSchedule} = require('firebase-functions/v2/scheduler');
-const {onDocumentCreated, onDocumentUpdated} = require('firebase-functions/v2/firestore');
+const { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } = require('firebase-functions/v2/firestore');
 const logger = require("firebase-functions/logger");
 const functions = require("firebase-functions/v2");
 const admin = require('firebase-admin');
@@ -13,29 +13,18 @@ const auth = admin.auth();
 const app = express();
 app.use(cors({origin: true}));
 const {defineSecret} = require('firebase-functions/params');
-const {SQSClient, SendMessageCommand} = require("@aws-sdk/client-sqs");
+const {SQSClient, SendMessageCommand, ReceiveMessageCommand, DeleteMessageBatchCommand,} = require("@aws-sdk/client-sqs");
 const crypto = require('crypto');
 const normInstanceId = (s) => String(s || '').trim().toUpperCase(); // evita variação de caixa/espaço
-const hashInstanceId = (s) =>
-    crypto.createHash('sha256').update(normInstanceId(s), 'utf8').digest('hex');
-const ZAPI_ENC_KEY = defineSecret('ZAPI_ENC_KEY'); // chave AES-256 (base64, 32 bytes)
+const hashInstanceId = (s) => crypto.createHash('sha256').update(normInstanceId(s), 'utf8').digest('hex');
+const ZAPI_ENC_KEY = defineSecret('ZAPI_ENC_KEY');
 const ENCRYPTION_KEY = defineSecret('ENCRYPTION_KEY');
-
-function buildSqsClient() {
-    return new SQSClient({
-        region: process.env.AWS_REGION || "us-east-2",
-        credentials: {
-            accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-        },
-    });
-}
-
-// ===== Z-API host fallback + invocador único (ESPAÇO GLOBAL) =====
-const ZAPI_HOSTS = [
-    'https://api-v2.z-api.io',
-    'https://api.z-api.io',
-];
+const AWS_ACCESS_KEY_ID        = defineSecret('AWS_ACCESS_KEY_ID');
+const AWS_SECRET_ACCESS_KEY    = defineSecret('AWS_SECRET_ACCESS_KEY');
+const AWS_REGION               = defineSecret('AWS_REGION');
+const AWS_SQS_COMPANY_QUEUE_URL= defineSecret('AWS_SQS_COMPANY_QUEUE_URL');
+const AWS_SQS_REPORTS_QUEUE_URL = defineSecret('AWS_SQS_REPORTS_QUEUE_URL');
+const ZAPI_HOSTS = ['https://api-v2.z-api.io', 'https://api.z-api.io',];
 
 async function callZ(instanceId, token, path, payload, headers = {}, timeout = 15000) {
     let lastErr = null;
@@ -2205,4 +2194,580 @@ async function persistSystemEventMessage({
 }
 
 
-// FIM // FUNCTIONS CHATBOTS
+// FIM FUNCTIONS CHATBOTS
+
+/* ---- helpers de leitura de secret/env ---- */
+function val(secretParam, envName, def = undefined) {
+    try {
+        const v = secretParam?.value?.();
+        if (v) return v;
+    } catch {}
+    const env = process.env[envName];
+    return (env !== undefined && env !== null && env !== '') ? env : def;
+}
+
+function buildSqsClient() {
+    const region = val(AWS_REGION, 'AWS_REGION', 'us-east-2');
+    const key    = val(AWS_ACCESS_KEY_ID, 'AWS_ACCESS_KEY_ID', null);
+    const secret = val(AWS_SECRET_ACCESS_KEY, 'AWS_SECRET_ACCESS_KEY', null);
+    const cfg = { region };
+    if (key && secret) cfg.credentials = { accessKeyId: key, secretAccessKey: secret };
+    return new SQSClient(cfg);
+}
+
+function resolveCompanyQueueUrl() {
+    return val(AWS_SQS_COMPANY_QUEUE_URL, 'AWS_SQS_COMPANY_QUEUE_URL') || null;
+}
+
+function isFifoQueue(url = '') {
+    return /\.fifo(\?|$)/i.test(String(url));
+}
+
+function safeSerialize(obj) {
+    try { return JSON.parse(JSON.stringify(obj ?? {})); }
+    catch { return {}; }
+}
+
+/* >>> Ajuste aqui: mapeia o nome a partir de "NomeEmpresa" <<< */
+function sanitizeCompanyData(raw) {
+    const d = safeSerialize(raw);
+    const out = {
+        // pega "NomeEmpresa" (c/ fallback nos outros campos que você já usava)
+        name: d.NomeEmpresa ?? d.name ?? d.razaoSocial ?? null,
+        tradeName: d.fantasia ?? null,
+        cnpj: d.cnpj ?? null,
+        email: d.email ?? null,
+        phone: d.phone ?? d.whatsapp ?? null,
+        createdAt: d.createdAt?._seconds ? new Date(d.createdAt._seconds * 1000).toISOString() : null,
+        updatedAt: d.updatedAt?._seconds ? new Date(d.updatedAt._seconds * 1000).toISOString() : null,
+    };
+    Object.keys(out).forEach(k => (out[k] == null) && delete out[k]);
+    return out;
+}
+
+function diffChangedFields(before = {}, after = {}) {
+    const a = safeSerialize(after);
+    const b = safeSerialize(before);
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    const changed = [];
+    for (const k of keys) {
+        const va = JSON.stringify(a[k]);
+        const vb = JSON.stringify(b[k]);
+        if (va !== vb) changed.push(k);
+    }
+    return changed;
+}
+
+async function publishCompanyChangeToSqs(payload) {
+    const QUEUE_URL = resolveCompanyQueueUrl();
+    if (!QUEUE_URL) throw new Error('AWS_SQS_COMPANY_QUEUE_URL não configurada');
+
+    const sqs = buildSqsClient();
+    const params = {
+        QueueUrl: QUEUE_URL,
+        MessageBody: JSON.stringify(payload),
+    };
+
+    if (isFifoQueue(QUEUE_URL)) {
+        // dedupe simples por (empresa, evento, minuto)
+        const dedupe = `${payload.companyId}:${payload.event}:${Math.floor(payload.ts / 60000)}`;
+        params.MessageGroupId = 'companies';
+        params.MessageDeduplicationId = dedupe;
+    }
+
+    const cmd = new SendMessageCommand(params);
+    return await sqs.send(cmd);
+}
+
+async function handleCompanyWrite({ beforeSnap, afterSnap, companyId, event }) {
+    const after  = afterSnap?.exists ? afterSnap.data() : null;
+    const before = beforeSnap?.exists ? beforeSnap.data() : null;
+
+    const payload = {
+        source: 'firebase',
+        entity: 'company',
+        event,                                // 'create' | 'update' | 'delete' | 'snapshot'
+        companyId,
+        ts: Date.now(),
+        data: sanitizeCompanyData(after || before || {}),
+        changedFields: event === 'update' ? diffChangedFields(before, after) : [],
+    };
+
+    // margem contra 256KB do SQS
+    const bodySize = Buffer.byteLength(JSON.stringify(payload), 'utf8');
+    if (bodySize > 240 * 1024) {
+        payload.data = sanitizeCompanyData(after || before || {});
+    }
+
+    const result = await publishCompanyChangeToSqs(payload);
+    logger.info('[SQS:companies] published', { companyId, event, messageId: result?.MessageId });
+    return result;
+}
+
+/* =================== TRIGGERS (create/update/delete) =================== */
+exports.onCompanyCreated = onDocumentCreated(
+    {
+        document: 'empresas/{companyId}',
+        secrets: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_SQS_COMPANY_QUEUE_URL],
+    },
+    async (event) => {
+        try {
+            await handleCompanyWrite({
+                beforeSnap: null,
+                afterSnap: event.data,
+                companyId: event.params.companyId,
+                event: 'create',
+            });
+        } catch (e) {
+            logger.error('onCompanyCreated → SQS publish failed', e);
+        }
+    }
+);
+
+exports.onCompanyUpdated = onDocumentUpdated(
+    {
+        document: 'empresas/{companyId}',
+        secrets: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_SQS_COMPANY_QUEUE_URL],
+    },
+    async (event) => {
+        try {
+            await handleCompanyWrite({
+                beforeSnap: event.data.before,
+                afterSnap: event.data.after,
+                companyId: event.params.companyId,
+                event: 'update',
+            });
+        } catch (e) {
+            logger.error('onCompanyUpdated → SQS publish failed', e);
+        }
+    }
+);
+
+exports.onCompanyDeleted = onDocumentDeleted(
+    {
+        document: 'empresas/{companyId}',
+        secrets: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_SQS_COMPANY_QUEUE_URL],
+    },
+    async (event) => {
+        try {
+            await handleCompanyWrite({
+                beforeSnap: event.data,
+                afterSnap: null,
+                companyId: event.params.companyId,
+                event: 'delete',
+            });
+        } catch (e) {
+            logger.error('onCompanyDeleted → SQS publish failed', e);
+        }
+    }
+);
+
+/* =================== REPLAY ON-DEMAND (opcional) =================== */
+exports.replayAllCompaniesToSqs = onRequest(
+    { secrets: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_SQS_COMPANY_QUEUE_URL] },
+    async (req, res) => {
+        res.set('Access-Control-Allow-Origin', '*');
+        if (req.method === 'OPTIONS') return res.status(204).send('');
+        if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
+
+        const expected = val(REPLAY_SECRET, 'REPLAY_SECRET'); // se existir, exigir
+        if (expected && req.query.secret !== expected) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        try {
+            const pageSize = Math.min(Number(req.query.pageSize || 400), 1000);
+            let last = null;
+            let sent = 0;
+            let pages = 0;
+
+            while (true) {
+                let q = db.collection('empresas').orderBy(admin.firestore.FieldPath.documentId()).limit(pageSize);
+                if (last) q = q.startAfter(last);
+                const snap = await q.get();
+                if (snap.empty) break;
+
+                pages++;
+                last = snap.docs[snap.docs.length - 1];
+
+                await Promise.all(
+                    snap.docs.map(doc =>
+                        handleCompanyWrite({
+                            beforeSnap: null,
+                            afterSnap: doc,      // trata como upsert no worker
+                            companyId: doc.id,
+                            event: 'create',
+                        }).catch(e => {
+                            logger.error('[SQS:replay] item failed', { id: doc.id, err: e?.message });
+                            return null;
+                        })
+                    )
+                );
+
+                sent += snap.size;
+            }
+
+            return res.json({ status: 'ok', pages, sent });
+        } catch (e) {
+            logger.error('[SQS:replay] failed', e);
+            return res.status(500).json({ error: e?.message || 'internal' });
+        }
+    }
+);
+
+exports.seedCompaniesOnce = onSchedule(
+    {
+        schedule: 'every 15 minutes',
+        timeZone: 'America/Sao_Paulo',
+        secrets: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_SQS_COMPANY_QUEUE_URL],
+    },
+    async () => {
+        const flagRef = db.collection('meta').doc('sqsCompaniesSeed');
+        const flag = await flagRef.get();
+        if (flag.exists && flag.data()?.seededAt) {
+            logger.info('[SQS:seed] já realizado — skipping');
+            return;
+        }
+
+        logger.info('[SQS:seed] iniciando envio completo de empresas (1x)…');
+
+        try {
+            const pageSize = 800;
+            let last = null;
+
+            while (true) {
+                let q = db.collection('empresas').orderBy(admin.firestore.FieldPath.documentId()).limit(pageSize);
+                if (last) q = q.startAfter(last);
+                const snap = await q.get();
+                if (snap.empty) break;
+
+                last = snap.docs[snap.docs.length - 1];
+
+                await Promise.all(
+                    snap.docs.map(doc =>
+                        handleCompanyWrite({
+                            beforeSnap: null,
+                            afterSnap: doc,
+                            companyId: doc.id,
+                            event: 'create',     // seu worker faz upsert
+                        }).catch(e => {
+                            logger.error('[SQS:seed] item failed', { id: doc.id, err: e?.message });
+                            return null;
+                        })
+                    )
+                );
+            }
+
+            await flagRef.set({ seededAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+            logger.info('[SQS:seed] concluído e marcado como executado.');
+        } catch (e) {
+            logger.error('[SQS:seed] erro', e);
+        }
+    }
+);
+
+// === helpers: reaproveitando buildSqsClient/isFifoQueue/safeSerialize que você já tem ===
+function resolveReportsQueueUrl() {
+    // tenta Secret param e cai para process.env
+    return (()=>{
+        try { return AWS_SQS_REPORTS_QUEUE_URL.value(); } catch {}
+        return process.env.AWS_SQS_REPORTS_QUEUE_URL || null;
+    })();
+}
+
+async function publishReportUrlToSqs(payload) {
+    const QUEUE_URL = resolveReportsQueueUrl();
+    if (!QUEUE_URL) throw new Error('AWS_SQS_REPORTS_QUEUE_URL não configurada');
+
+    const sqs = buildSqsClient();
+    const params = {
+        QueueUrl: QUEUE_URL,
+        MessageBody: JSON.stringify(payload),
+    };
+
+    if (isFifoQueue(QUEUE_URL)) {
+        // agrupa por empresa e cliente; dedupe por (empresa,cliente,mes)
+        const key = `${payload.empresaAppId}:${payload.clienteId}:${payload.mesReferenciaSql}`;
+        params.MessageGroupId = `reports-${payload.empresaAppId || 'na'}`;
+        params.MessageDeduplicationId = key;
+    }
+
+    const cmd = new SendMessageCommand(params);
+    return await sqs.send(cmd);
+}
+
+// === NOVO ENDPOINT HTTP: publica na fila exclusiva de relatórios, SEM criptografia ===
+exports.sendReportUrlToSqs = onRequest({invoker: 'public', secrets: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_SQS_REPORTS_QUEUE_URL],
+}, async (req, res) => {
+    // CORS básico
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') return res.status(204).send('');
+    if (req.method !== 'POST')   return res.status(405).send('Method Not Allowed');
+
+    try {
+        const body = req.body || {};
+        const {
+            empresaAppId,     // string
+            clienteId,        // number | string numérica
+            mesReferenciaSql, // "YYYY-MM-DD" (1º dia do mês)
+            arquivoUrl,       // "/assets/clientes/<Cliente>/relatorios/10-2025.pdf"
+            arquivoNome       // opcional ("10-2025.pdf")
+        } = body;
+
+        // validações mínimas
+        if (!empresaAppId || !clienteId || !mesReferenciaSql || !arquivoUrl) {
+            return res.status(400).json({ error: 'Campos obrigatórios: empresaAppId, clienteId, mesReferenciaSql, arquivoUrl' });
+        }
+
+        const payload = {
+            source: 'crm',
+            entity: 'report_url',
+            event:  'create',
+            ts: Date.now(),
+            empresaAppId: String(empresaAppId),
+            clienteId: Number(clienteId),
+            mesReferenciaSql: String(mesReferenciaSql),
+            arquivoUrl: String(arquivoUrl),
+            arquivoNome: arquivoNome ? String(arquivoNome) : null,
+        };
+
+        const result = await publishReportUrlToSqs(payload);
+        console.log('[SQS:reports] published', { messageId: result?.MessageId, empresaAppId, clienteId });
+
+        return res.status(200).json({ status: 'ok', messageId: result?.MessageId });
+    } catch (e) {
+        console.error('[SQS:reports] fail', e);
+        return res.status(500).json({ error: e?.message || 'internal' });
+    }
+});
+
+// === PROCESSAR FILA DE RELATÓRIOS (SQS → Firestore) ===
+exports.processReportsQueue = onSchedule(
+    {
+        schedule: 'every 1 minutes',
+        timeZone: 'America/Sao_Paulo',
+        secrets: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_SQS_REPORTS_QUEUE_URL],
+        region: 'us-central1',
+    },
+    async () => {
+        const region = val(AWS_REGION, 'AWS_REGION', 'us-east-2');
+        const queueUrl = val(AWS_SQS_REPORTS_QUEUE_URL, 'AWS_SQS_REPORTS_QUEUE_URL', null);
+        if (!queueUrl) {
+            logger.error('[SQS:reports] AWS_SQS_REPORTS_QUEUE_URL ausente');
+            return;
+        }
+
+        const sqs = buildSqsClient();
+        const batchSize = 10;
+        const waitSeconds = 10;
+        let processed = 0, deleted = 0, failed = 0;
+
+        const receive = async () => {
+            const cmd = new ReceiveMessageCommand({
+                QueueUrl: queueUrl,
+                MaxNumberOfMessages: batchSize,
+                WaitTimeSeconds: waitSeconds,
+                VisibilityTimeout: 60,
+            });
+            return await sqs.send(cmd);
+        };
+
+        // helper para YYYY-MM a partir de "YYYY-MM-DD"
+        const toYm = (sqlDate) => {
+            const d = new Date(sqlDate);
+            if (isNaN(d.getTime())) return null;
+            const y = d.getUTCFullYear();
+            const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+            return `${y}-${m}`;
+        };
+
+        while (true) {
+            const resp = await receive();
+            const msgs = resp.Messages || [];
+            if (!msgs.length) break;
+
+            const toDelete = [];
+            for (const m of msgs) {
+                const receipt = m.ReceiptHandle;
+                try {
+                    const body = JSON.parse(m.Body || '{}');
+
+                    // payload esperado (o mesmo que você publicou)
+                    const empresaAppId     = String(body.empresaAppId || '').trim();
+                    const clienteId        = Number(body.clienteId || 0) || 0;
+                    const mesReferenciaSql = String(body.mesReferenciaSql || '').trim(); // "YYYY-MM-DD"
+                    const arquivoUrl       = String(body.arquivoUrl || '').trim();
+                    const arquivoNome      = body.arquivoNome ? String(body.arquivoNome) : null;
+
+                    if (!empresaAppId || !clienteId || !mesReferenciaSql || !arquivoUrl) {
+                        throw new Error('Mensagem inválida: campos obrigatórios ausentes');
+                    }
+
+                    const ym = toYm(mesReferenciaSql); // "YYYY-MM"
+                    if (!ym) throw new Error('mesReferenciaSql inválido');
+
+                    // caminho: empresas/{empresaAppId}/relatorios/{YYYY-MM}
+                    const docRef = db
+                        .collection('empresas').doc(empresaAppId)
+                        .collection('relatorios').doc(ym);
+
+                    await docRef.set({
+                        arquivoUrl,
+                        arquivoNome: arquivoNome || null,
+                        mesReferencia: mesReferenciaSql,        // manter compatível com a outra function
+                        clienteId,
+                        origem: 'crm-sqs',
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    }, { merge: true });
+
+                    processed++;
+                    if (receipt) {
+                        toDelete.push({ Id: m.MessageId?.slice(0, 80) || String(Date.now()), ReceiptHandle: receipt });
+                    }
+                } catch (e) {
+                    failed++;
+                    logger.error('[SQS:reports] falha processando mensagem', { err: e?.message, body: m.Body });
+                    // não deleta: mensagem volta após VisibilityTimeout
+                }
+            }
+
+            if (toDelete.length) {
+                const chunks = [];
+                for (let i = 0; i < toDelete.length; i += 10) chunks.push(toDelete.slice(i, i + 10));
+                for (const part of chunks) {
+                    try {
+                        const del = new DeleteMessageBatchCommand({ QueueUrl: queueUrl, Entries: part });
+                        const resDel = await sqs.send(del);
+                        deleted += (resDel.Successful || []).length;
+                    } catch (e) {
+                        logger.error('[SQS:reports] deleteMessageBatch falhou', { err: e?.message });
+                    }
+                }
+            }
+        }
+
+        logger.info('[SQS:reports] tick concluído', { processed, deleted, failed, region, queueUrl });
+    }
+);
+
+exports.drainReportsQueue = onRequest({
+    secrets: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_SQS_REPORTS_QUEUE_URL],
+}, async (req, res) => {
+    try {
+        // Reaproveita a lógica da processReportsQueue, mas rodando uma única passada
+        // para facilitar testes manuais (POST no navegador/Postman).
+        const region = val(AWS_REGION, 'AWS_REGION', 'us-east-2');
+        const queueUrl = val(AWS_SQS_REPORTS_QUEUE_URL, 'AWS_SQS_REPORTS_QUEUE_URL', null);
+        if (!queueUrl) return res.status(500).json({ error: 'AWS_SQS_REPORTS_QUEUE_URL ausente' });
+
+        const sqs = buildSqsClient();
+        const cmd = new ReceiveMessageCommand({
+            QueueUrl: queueUrl,
+            MaxNumberOfMessages: 10,
+            WaitTimeSeconds: 5,
+            VisibilityTimeout: 60,
+        });
+        const resp = await sqs.send(cmd);
+        const msgs = resp.Messages || [];
+        if (!msgs.length) return res.json({ status: 'ok', processed: 0 });
+
+        const toDelete = [];
+        let processed = 0, failed = 0;
+
+        const toYm = (sqlDate) => {
+            const d = new Date(sqlDate);
+            if (isNaN(d.getTime())) return null;
+            const y = d.getUTCFullYear();
+            const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+            return `${y}-${m}`;
+        };
+
+        for (const m of msgs) {
+            try {
+                const body = JSON.parse(m.Body || '{}');
+                const empresaAppId     = String(body.empresaAppId || '').trim();
+                const clienteId        = Number(body.clienteId || 0) || 0;
+                const mesReferenciaSql = String(body.mesReferenciaSql || '').trim();
+                const arquivoUrl       = String(body.arquivoUrl || '').trim();
+                const arquivoNome      = body.arquivoNome ? String(body.arquivoNome) : null;
+                const ym = toYm(mesReferenciaSql);
+
+                if (!empresaAppId || !clienteId || !mesReferenciaSql || !arquivoUrl || !ym) {
+                    throw new Error('Mensagem inválida');
+                }
+
+                const docRef = db
+                    .collection('empresas').doc(empresaAppId)
+                    .collection('relatorios').doc(ym);
+
+                await docRef.set({
+                    arquivoUrl,
+                    arquivoNome: arquivoNome || null,
+                    mesReferencia: mesReferenciaSql,
+                    clienteId,
+                    origem: 'crm-sqs',
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                }, { merge: true });
+
+                processed++;
+                if (m.ReceiptHandle) toDelete.push({ Id: m.MessageId?.slice(0,80) || String(Date.now()), ReceiptHandle: m.ReceiptHandle });
+            } catch (e) {
+                failed++;
+                logger.error('[SQS:reports] drain error', { err: e?.message, body: m.Body });
+            }
+        }
+
+        if (toDelete.length) {
+            const del = new DeleteMessageBatchCommand({ QueueUrl: queueUrl, Entries: toDelete });
+            await sqs.send(del);
+        }
+
+        return res.json({ status: 'ok', processed, failed });
+    } catch (e) {
+        logger.error('[SQS:reports] drain fatal', e);
+        return res.status(500).json({ error: e?.message || 'internal' });
+    }
+});
+
+// Proxy de capas do Storage → retorna bytes com CORS liberado
+exports.proxyReportCover = onRequest(
+    { invoker: 'public', region: 'us-central1' }, // ajuste a região se necessário
+    async (req, res) => {
+        // CORS básico
+        res.set('Access-Control-Allow-Origin', '*');
+        res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.set('Access-Control-Allow-Headers', 'Content-Type');
+        if (req.method === 'OPTIONS') return res.status(204).send('');
+
+        try {
+            const url = (req.query.url || '').toString();
+            if (!url) {
+                return res.status(400).json({ error: 'Parâmetro ?url= obrigatório' });
+            }
+
+            // Baixa do Storage no servidor (evita CORS do navegador)
+            const resp = await axios.get(url, { responseType: 'arraybuffer', timeout: 15000 });
+
+            // Encaminha os bytes com headers corretos
+            const ct = resp.headers['content-type'] || 'image/png';
+            res.set('Content-Type', ct);
+            res.set('Cache-Control', 'public, max-age=31536000, immutable');
+            // (opcional) ETag → navegador reaproveita cache condicional
+            if (resp.headers.etag) res.set('ETag', resp.headers.etag);
+
+            return res.status(200).send(Buffer.from(resp.data));
+        } catch (e) {
+            // Se a URL expirou/invalidou, responda 404 (ou 502 se preferir)
+            const status = e?.response?.status || 502;
+            return res.status(status).json({
+                error: 'proxy_fetch_failed',
+                status,
+                detail: e?.message || 'fetch error',
+            });
+        }
+    }
+);

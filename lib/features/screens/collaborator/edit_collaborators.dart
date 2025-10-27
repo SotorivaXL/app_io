@@ -566,7 +566,7 @@ class _EditCollaboratorsState extends State<EditCollaborators> {
           body: isDesktop
               ? Center(
             child: Container(
-              constraints: const BoxConstraints(maxWidth: 1850),
+              constraints: const BoxConstraints(maxWidth: 1500),
               child: SafeArea(top: true, child: SingleChildScrollView(child: _buildMainContent(uid))),
             ),
           )

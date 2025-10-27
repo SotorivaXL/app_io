@@ -15,6 +15,8 @@ import 'package:app_io/features/screens/crm/whatsapp_chats.dart';
 import 'package:app_io/features/screens/indicators/dash_principal_reports.dart';
 import 'package:responsive_navigation_bar/responsive_navigation_bar.dart';
 
+import '../../../features/screens/documents/documents.dart';
+
 class TabSpec {
   final String label;
   final IconData icon;
@@ -69,6 +71,16 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
 
   bool _initialPageSet = false; // garante que só setamos o inicial uma vez
 
+  int _notifCount = 3; // exemplo do badge roxo do print (troque quando ligar às suas notificações)
+
+  // altura fixa da barra de digitação do chat (ajuste se sua ChatDetail usar outro valor)
+  double _kComposerBarHeight = 64.0;
+
+  Widget _hHairline(BuildContext ctx) => Container(
+    height: 1,
+    color: Theme.of(ctx).colorScheme.onSecondary.withOpacity(0.08),
+  );
+
   @override
   void initState() {
     super.initState();
@@ -76,6 +88,103 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     _checkBirthday();
     _listenToPermissionsChanges();
     _showTutorialIfFirstTime();
+  }
+
+  PreferredSizeWidget _buildWebTopBar({double height = 90}) {
+    final cs = Theme.of(context).colorScheme;
+
+    TextButton _tabBtn({
+      required IconData icon,
+      required String label,
+      required bool selected,
+      required VoidCallback onTap,
+    }) {
+      return TextButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 25, color: cs.onSecondary),
+        label: Text(label, style: TextStyle(color: cs.onSecondary)),
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          minimumSize: const Size(0, 0), // deixa o botão se adaptar ao height
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          backgroundColor: selected ? cs.onSecondary.withOpacity(.08) : Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        ),
+      );
+    }
+
+    // altura total considerando o notch do navegador (em mobile web, por ex.)
+    final topSafe = MediaQuery.of(context).padding.top;
+    final barHeight = height; // se quiser considerar safe: height + topSafe
+
+    return PreferredSize(
+      preferredSize: Size.fromHeight(barHeight),
+      child: AppBar(
+        toolbarHeight: barHeight,
+        backgroundColor: cs.background,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        automaticallyImplyLeading: false,
+        iconTheme: IconThemeData(color: cs.onSecondary),
+        actionsIconTheme: IconThemeData(color: cs.onSecondary),
+        titleSpacing: 16,
+        title: SizedBox(
+          height: barHeight,
+          child: Row(
+            children: [
+              Image.asset('assets/images/icons/logoDark.png', height: 24),
+              const SizedBox(width: 40),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: List.generate(_tabs.length, (i) {
+                      final t = _tabs[i];
+                      final selected = i == _currentIndex;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: _tabBtn(
+                          icon: t.icon,
+                          label: t.label,
+                          selected: selected,
+                          onTap: () {
+                            setState(() => _currentIndex = i);
+                            _pageController.jumpToPage(i);
+                          },
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Notificações',
+            onPressed: () => _showNotificationsSidebar(context),
+            icon: const Icon(Icons.notifications_outlined),
+          ),
+          IconButton(
+            tooltip: 'Central de ajuda',
+            onPressed: () {},
+            icon: const Icon(Icons.help_outline),
+          ),
+          IconButton(
+            tooltip: 'Conta',
+            onPressed: () {},
+            icon: const Icon(Icons.account_circle_outlined),
+          ),
+          const SizedBox(width: 8),
+        ],
+        // opcional: uma “sombra” bem sutil abaixo
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: cs.onSecondary.withOpacity(.08)),
+        ),
+      ),
+    );
   }
 
   void _ensureInitialOnChat(List<TabSpec> tabs) {
@@ -180,7 +289,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     // 1) HOME/CHAT — sempre primeiro à esquerda
     if ((data['modChats'] ?? true) as bool) {
       tabs.add(const TabSpec(
-        label: 'Chat',
+        label: 'Atendimentos',
         icon: Icons.home,
         page: WhatsAppChats(),
         pageType: WhatsAppChats,
@@ -196,10 +305,18 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
         pageType: IndicatorsPage,
       ));
     }
+
+    tabs.add(const TabSpec(
+      label: 'Documentos',
+      icon: Icons.edit_document,
+      page: CompanyReportsPage(),
+      pageType: CompanyReportsPage,
+    ));
+
     if ((data['modRelatorios'] ?? false) as bool) {
       tabs.add(const TabSpec(
-        label: 'Relatórios',
-        icon: Icons.edit_document,
+        label: 'Leads',
+        icon: Icons.people,
         page: ReportsPage(),
         pageType: ReportsPage,
       ));
@@ -331,97 +448,92 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
 
   @override
   Widget build(BuildContext context) {
-    final bool isDesktop = MediaQuery.of(context).size.width > 1024;
+    final cs = Theme.of(context).colorScheme;
+    final bool isDesktop = MediaQuery.of(context).size.width >= 1024;
     final bool showBottomBar =
         !isDesktop && _tabs.length >= 2 && _tabs.length <= 5;
 
+    // corpo compartilhado (PageView + listener pra animar o AppBar no mobile)
+    final Widget body = _tabs.isEmpty
+        ? const Center(child: CircularProgressIndicator())
+        : NotificationListener<ScrollNotification>(
+      onNotification: (n) {
+        if (!isDesktop && n.metrics.axis == Axis.vertical) {
+          setState(() => _scrollOffset = n.metrics.pixels);
+        }
+        return false;
+      },
+      child: PageView(
+        controller: _pageController,
+        onPageChanged: (i) {
+          if (!mounted) return;
+          setState(() => _currentIndex = i);
+        },
+        children: _tabs.map((t) => t.page).toList(),
+      ),
+    );
+
     return ConnectivityBanner(
       child: Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.background,
+        extendBody: true,
+        backgroundColor: cs.background,
         appBar: isDesktop
-            ? null
+            ? _buildWebTopBar()
             : PreferredSize(
-                preferredSize: Size.fromHeight(
-                    (100.0 - (_scrollOffset / 2)).clamp(56.0, 100.0)),
-                child: Opacity(
-                  opacity: (1.0 - (_scrollOffset / 40)).clamp(0.0, 1.0),
-                  child: AppBar(
-                    toolbarHeight:
-                        (100.0 - (_scrollOffset / 2)).clamp(56.0, 100.0),
-                    title: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _getPrefix(),
-                              style: TextStyle(
-                                fontFamily: 'BrandingSF',
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                                color:
-                                    Theme.of(context).colorScheme.onSecondary,
-                              ),
-                            ),
-                            AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 250),
-                              child: Text(
-                                _getTitle(),
-                                key: ValueKey<String>(_getTitle()),
-                                style: TextStyle(
-                                  fontFamily: 'BrandingSF',
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 30,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .surfaceVariant,
-                                ),
-                              ),
-                            ),
-                          ],
+          preferredSize: Size.fromHeight(
+            (100.0 - (_scrollOffset / 2)).clamp(56.0, 100.0),
+          ),
+          child: Opacity(
+            opacity: (1.0 - (_scrollOffset / 40)).clamp(0.0, 1.0),
+            child: AppBar(
+              toolbarHeight:
+              (100.0 - (_scrollOffset / 2)).clamp(56.0, 100.0),
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _getPrefix(),
+                        style: TextStyle(
+                          fontFamily: 'BrandingSF',
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: cs.onSecondary,
                         ),
-                      ],
-                    ),
-                    centerTitle: false,
-                    automaticallyImplyLeading: false,
-                    backgroundColor: Theme.of(context).colorScheme.secondary,
-                    foregroundColor: Theme.of(context).colorScheme.outline,
+                      ),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 250),
+                        child: Text(
+                          _getTitle(),
+                          key: ValueKey<String>(_getTitle()),
+                          style: TextStyle(
+                            fontFamily: 'BrandingSF',
+                            fontWeight: FontWeight.w700,
+                            fontSize: 30,
+                            color: cs.surfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
+                ],
               ),
-        body: Row(
-          children: [
-            if (isDesktop) _buildDesktopSidebar(),
-            Expanded(
-              child: NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    // Opcional: anime o AppBar se a página atual tiver scroll primário
-                    if (notification.metrics.axis == Axis.vertical) {
-                      setState(() {
-                        _scrollOffset = notification.metrics.pixels;
-                      });
-                    }
-                    return false;
-                  },
-                  child: _tabs.isEmpty
-                      ? const Center(child: CircularProgressIndicator())
-                      : PageView(
-                          controller: _pageController,
-                          onPageChanged: (index) {
-                            if (!mounted) return;
-                            setState(() => _currentIndex = index);
-                          },
-                          children: _tabs.map((t) => t.page).toList(),
-                        )),
+              centerTitle: false,
+              automaticallyImplyLeading: false,
+              backgroundColor: cs.secondary,
+              foregroundColor: cs.outline,
             ),
-          ],
+          ),
         ),
-        bottomNavigationBar: showBottomBar
-            ? SafeArea(
-                child: _buildBottomBar(),
-              )
-            : null,
+
+        /// sem sidebar no desktop; navegação fica toda na topbar
+        body: body,
+
+        /// bottom bar só no mobile
+        bottomNavigationBar:
+        showBottomBar ? SafeArea(child: _buildBottomBar()) : null,
       ),
     );
   }
@@ -434,7 +546,7 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
           ? const EdgeInsets.only(left: 15)
           : EdgeInsets.zero,
       width: _isSidebarExpanded ? 300 : 80,
-      color: cs.secondary,
+      color: cs.background,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -525,32 +637,37 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     }
   }
 
-  /// Mantém seu BottomNavyBar atual (cores puxadas do Theme)
   Widget _buildNavyBar() {
     final cs = Theme.of(context).colorScheme;
-    return Opacity(
-      opacity: (1.0 - (_scrollOffset / 40)).clamp(0.0, 1.0),
-      child: BottomNavyBar(
-        backgroundColor: cs.secondary,
-        showInactiveTitle: false,
-        selectedIndex: _currentIndex.clamp(0, _tabs.length - 1),
-        showElevation: true,
-        itemCornerRadius: 24,
-        iconSize: 25,
-        curve: Curves.easeIn,
-        onItemSelected: (index) {
-          if (!mounted) return;
-          setState(() => _currentIndex = index);
-          _pageController.jumpToPage(index);
-        },
-        items: _tabs
-            .map((t) => BottomNavyBarItem(
-                  icon: Icon(t.icon),
-                  title: Text(t.label),
-                  inactiveColor: cs.onSecondary,
-                  activeColor: cs.tertiary,
-                ))
-            .toList(),
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), // margem p/ flutuar
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Material(
+          color: cs.secondary,          // “pílula” da barra
+          elevation: 8,                 // leve sombra
+          child: BottomNavyBar(
+            backgroundColor: Colors.transparent,   // 👈 sem faixa de fundo
+            showInactiveTitle: false,
+            selectedIndex: _currentIndex.clamp(0, _tabs.length - 1),
+            showElevation: false,                  // sombra já vem do Material
+            itemCornerRadius: 24,
+            iconSize: 25,
+            curve: Curves.easeIn,
+            onItemSelected: (index) {
+              if (!mounted) return;
+              setState(() => _currentIndex = index);
+              _pageController.jumpToPage(index);
+            },
+            items: _tabs.map((t) => BottomNavyBarItem(
+              icon: Icon(t.icon),
+              title: Text(t.label),
+              inactiveColor: cs.onSecondary,
+              activeColor: cs.tertiary,
+            )).toList(),
+          ),
+        ),
       ),
     );
   }
@@ -570,26 +687,30 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
       backgroundGradient: pillGradient,
     )).toList();
 
-    return SafeArea(
-      top: false,
-      child: Material(
-        color: Colors.transparent,
-        child: IconTheme(
-          data: const IconThemeData(size: 28),
-          child: ResponsiveNavigationBar(
-            backgroundColor: cs.secondary,
-            backgroundOpacity: 1.0,
-            selectedIndex: _currentIndex.clamp(0, _tabs.length - 1),
-            onTabChange: (i) {
-              _pageController.animateToPage(
-                i,
-                duration: const Duration(milliseconds: 420),
-                curve: Curves.easeOutExpo,
-              );
-            },
-            showActiveButtonText: false,
-            inactiveIconColor: cs.onSecondary.withOpacity(.45),
-            navigationBarButtons: buttons,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), // margem p/ flutuar
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Material(
+          color: cs.secondary,        // corpo da barra (pílula)
+          elevation: 8,
+          child: IconTheme(
+            data: const IconThemeData(size: 28),
+            child: ResponsiveNavigationBar(
+              backgroundColor: Colors.transparent, // 👈 sem faixa de fundo
+              backgroundOpacity: 0.0,               // redundante, garante transparência
+              selectedIndex: _currentIndex.clamp(0, _tabs.length - 1),
+              onTabChange: (i) {
+                _pageController.animateToPage(
+                  i,
+                  duration: const Duration(milliseconds: 420),
+                  curve: Curves.easeOutExpo,
+                );
+              },
+              showActiveButtonText: false,
+              inactiveIconColor: cs.onSecondary.withOpacity(.45),
+              navigationBarButtons: buttons,
+            ),
           ),
         ),
       ),

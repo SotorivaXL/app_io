@@ -273,7 +273,29 @@ class _QualityCardState extends State<QualityCard> {
                           fontSize: 13,
                           color: cs.onBackground.withOpacity(.6))),
                   const SizedBox(height: 20),
-                  _quickMetrics(cs, periodWaitSec, periodTotalSec),
+
+// Desktop/Web: alinhado à esquerda; Mobile: mantém spaceBetween
+                  Builder(builder: (context) {
+                    final bool isDesktop = MediaQuery.of(context).size.width >= 1024;
+
+                    final items = <Widget>[
+                      _metric('Tempo de espera', _fmtDuration(periodWaitSec), cs),
+                      _metric('Tempo de atendimento', _fmtDuration(periodTotalSec), cs),
+                    ];
+
+                    return isDesktop
+                        ? Wrap(
+                      alignment: WrapAlignment.start,
+                      spacing: 28,   // espaço horizontal entre as métricas
+                      runSpacing: 8, // quebra bonita se faltar largura
+                      children: items,
+                    )
+                        : Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: items,
+                    );
+                  }),
+
                   const SizedBox(height: 20),
 
                   // -------- gráfico + legendas --------------------------------

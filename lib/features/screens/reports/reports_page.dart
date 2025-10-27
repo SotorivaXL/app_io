@@ -29,7 +29,6 @@ class ActiveFilter {
 final List<ActiveFilter> _activeFilters = [];
 
 class _ReportsPageState extends State<ReportsPage> {
-
   String _norm(String s) => s
       .toLowerCase()
       .replaceAll(RegExp('[áàâãä]'), 'a')
@@ -46,35 +45,39 @@ class _ReportsPageState extends State<ReportsPage> {
   bool _docMatchesSearch(Map<String, dynamic> m, String query) {
     if (query.isEmpty) return true;
 
-    final qText   = _norm(query);
+    final qText = _norm(query);
     final qDigits = _digits(query);
 
-    final name   = _norm((m['name'] ?? m['contactName'] ?? '').toString());
-    final user   = _norm((m['updatedByName'] ?? '').toString());
+    final name = _norm((m['name'] ?? m['contactName'] ?? '').toString());
+    final user = _norm((m['updatedByName'] ?? '').toString());
     final status = _norm((m['status'] ?? '').toString());
-    final last   = _norm((m['lastMsg'] ?? m['lastMessage'] ?? '').toString());
+    final last = _norm((m['lastMsg'] ?? m['lastMessage'] ?? '').toString());
 
     // ---------- TELEFONE (variações) ----------
-    final rawId  = (m['chatId'] ?? '').toString(); // pode vir "551199...@c.us"
-    final full   = _digits(rawId);                  // 5511991234567
-    final noCC   = full.startsWith('55') ? full.substring(2) : full; // remove +55
-    final noDDD  = noCC.length > 2 ? noCC.substring(2) : noCC;       // remove DDD
-    final last8  = full.length >= 8 ? full.substring(full.length - 8) : full;
-    final last9  = full.length >= 9 ? full.substring(full.length - 9) : full;
+    final rawId = (m['chatId'] ?? '').toString(); // pode vir "551199...@c.us"
+    final full = _digits(rawId); // 5511991234567
+    final noCC = full.startsWith('55') ? full.substring(2) : full; // remove +55
+    final noDDD = noCC.length > 2 ? noCC.substring(2) : noCC; // remove DDD
+    final last8 = full.length >= 8 ? full.substring(full.length - 8) : full;
+    final last9 = full.length >= 9 ? full.substring(full.length - 9) : full;
 
-    final variants = {full, noCC, noDDD, last8, last9}
-        .where((v) => v.isNotEmpty)
-        .toList();
+    final variants =
+        {full, noCC, noDDD, last8, last9}.where((v) => v.isNotEmpty).toList();
 
-    final phoneHit = qDigits.isNotEmpty && variants.any((v) => v.contains(qDigits));
+    final phoneHit =
+        qDigits.isNotEmpty && variants.any((v) => v.contains(qDigits));
 
     // ---------- texto ----------
-    final tokens   = qText.split(' ').where((t) => t.isNotEmpty).toList();
-    final textHit  = tokens.every((t) =>
-    name.contains(t) || user.contains(t) || status.contains(t) || last.contains(t));
+    final tokens = qText.split(' ').where((t) => t.isNotEmpty).toList();
+    final textHit = tokens.every((t) =>
+        name.contains(t) ||
+        user.contains(t) ||
+        status.contains(t) ||
+        last.contains(t));
 
     return textHit || phoneHit;
   }
+
 /*────────────────────────  filtros / estado  ───────────────────────*/
 
   String _search = '';
@@ -112,7 +115,7 @@ class _ReportsPageState extends State<ReportsPage> {
   }
 
   Future<(String companyId, String? phoneId)> _resolvePhoneCtx() async {
-    final fs  = FirebaseFirestore.instance;
+    final fs = FirebaseFirestore.instance;
     final uid = FirebaseAuth.instance.currentUser!.uid;
 
     String companyId = uid;
@@ -139,7 +142,8 @@ class _ReportsPageState extends State<ReportsPage> {
     // 3) se ainda null, pega o 1º phones/ e persiste como default
     if (phoneId == null) {
       final ph = await fs
-          .collection('empresas').doc(companyId)
+          .collection('empresas')
+          .doc(companyId)
           .collection('phones')
           .limit(1)
           .get();
@@ -148,10 +152,14 @@ class _ReportsPageState extends State<ReportsPage> {
         phoneId = ph.docs.first.id;
 
         if (uSnap.exists) {
-          await fs.collection('users').doc(uid)
+          await fs
+              .collection('users')
+              .doc(uid)
               .set({'defaultPhoneId': phoneId}, SetOptions(merge: true));
         } else {
-          await fs.collection('empresas').doc(companyId)
+          await fs
+              .collection('empresas')
+              .doc(companyId)
               .set({'defaultPhoneId': phoneId}, SetOptions(merge: true));
         }
       }
@@ -569,7 +577,7 @@ class _ReportsPageState extends State<ReportsPage> {
     final (companyId, phoneId) = await _resolvePhoneCtx();
 
     _companyId = companyId;
-    _phoneId   = phoneId ?? '';
+    _phoneId = phoneId ?? '';
 
     if (!mounted) return;
     _setStateSafe(() => _ready = _phoneId.isNotEmpty);
@@ -614,7 +622,8 @@ class _ReportsPageState extends State<ReportsPage> {
 
     final label = '${DateFormat('dd/MM').format(range.start)} – '
         '${DateFormat('dd/MM').format(range.end)}';
-    final newFilter = ActiveFilter('Data de criação', 'arrivalAt', range, label);
+    final newFilter =
+        ActiveFilter('Data de criação', 'arrivalAt', range, label);
 
     if (!mounted) return;
     _setStateSafe(() {
@@ -638,7 +647,8 @@ class _ReportsPageState extends State<ReportsPage> {
 
     final list = qs.docs.map((d) {
       final m = d.data() as Map<String, dynamic>;
-      final name = (m['name'] ?? m['displayName'] ?? m['email'] ?? 'Sem nome') as String;
+      final name =
+          (m['name'] ?? m['displayName'] ?? m['email'] ?? 'Sem nome') as String;
       return {'id': d.id, 'name': name};
     }).toList();
 
@@ -680,7 +690,8 @@ class _ReportsPageState extends State<ReportsPage> {
     if (!mounted) return;
     _setStateSafe(() {
       _tags = snap.docs
-          .map((d) => {'id': d.id, 'name': (d.data()['name'] as String?) ?? 'Sem nome'})
+          .map((d) =>
+              {'id': d.id, 'name': (d.data()['name'] as String?) ?? 'Sem nome'})
           .toList();
     });
   }
@@ -690,8 +701,10 @@ class _ReportsPageState extends State<ReportsPage> {
     if (!_ready) return const Stream.empty();
 
     Query<Map<String, dynamic>> q = FirebaseFirestore.instance
-        .collection('empresas').doc(_companyId)
-        .collection('phones').doc(_phoneId)
+        .collection('empresas')
+        .doc(_companyId)
+        .collection('phones')
+        .doc(_phoneId)
         .collection('whatsappChats');
 
     // (removido) if (_search.isNotEmpty) { q = q.where('keywords', arrayContains: ...); }
@@ -702,8 +715,11 @@ class _ReportsPageState extends State<ReportsPage> {
       } else if (f.field == 'arrivalAt') {
         final range = f.value as DateTimeRange;
         q = q
-            .where('arrivalAt', isGreaterThanOrEqualTo: Timestamp.fromDate(range.start))
-            .where('arrivalAt', isLessThan: Timestamp.fromDate(range.end.add(const Duration(days: 1))));
+            .where('arrivalAt',
+                isGreaterThanOrEqualTo: Timestamp.fromDate(range.start))
+            .where('arrivalAt',
+                isLessThan:
+                    Timestamp.fromDate(range.end.add(const Duration(days: 1))));
       } else {
         q = q.where(f.field, isEqualTo: f.value);
       }
@@ -859,7 +875,7 @@ class _ReportsPageState extends State<ReportsPage> {
         body: Center(
           child: Text(
             'Nenhum número configurado para esta empresa.\n'
-                'Adicione um telefone em Configurações > Números.',
+            'Adicione um telefone em Configurações > Números.',
             textAlign: TextAlign.center,
           ),
         ),
@@ -867,149 +883,192 @@ class _ReportsPageState extends State<ReportsPage> {
     }
 
     return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              onChanged: (v) =>
-                  setState(() => _search = v.trim().toLowerCase()),
-              decoration: InputDecoration(
-                hintText: 'Pesquisar',
-                hintStyle: TextStyle(color: cs.onSecondary),
-                prefixIcon: Icon(Icons.search, color: cs.onSecondary),
-                filled: true,
-                fillColor: cs.secondary,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14),
-              ),
-            ),
-
-            const SizedBox(height: 15),
-
-            // ── 2. LINHA COM DROPDOWN + BOTÃO (ambos 50 %) ─────────────────────
-            Row(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1500),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 35, 16, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                /* ─── DROPDOWN “Mais filtros” ─── */
-                Expanded(
-                  child: SizedBox(
-                    height: 44,
-                    child: DropdownButton2<String>(
-                      // usamos customButton para injetar o ícone de filtro
-                      customButton: Container(
+                TextField(
+                  onChanged: (v) =>
+                      setState(() => _search = v.trim().toLowerCase()),
+                  decoration: InputDecoration(
+                    hintText: 'Pesquisar',
+                    hintStyle: TextStyle(color: cs.onSecondary),
+                    prefixIcon: Icon(Icons.search, color: cs.onSecondary),
+                    filled: true,
+                    fillColor: cs.secondary,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+                  ),
+                ),
+
+                const SizedBox(height: 15),
+
+                // ── 2. LINHA COM DROPDOWN + BOTÃO (ambos 50 %) ─────────────────────
+                Row(
+                  children: [
+                    /* ─── DROPDOWN “Mais filtros” ─── */
+                    Expanded(
+                      child: SizedBox(
                         height: 44,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: cs.secondary,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
+                        child: DropdownButton2<String>(
+                          // usamos customButton para injetar o ícone de filtro
+                          customButton: Container(
+                            height: 44,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: cs.secondary,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Icon(Icons.filter_alt_outlined,
-                                    color: cs.onSecondary, size: 20),
-                                const SizedBox(width: 6),
-                                Text(
-                                  _mainFilter ?? 'Mais filtros',
-                                  style: TextStyle(
-                                    color: cs.onSecondary,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                Row(
+                                  children: [
+                                    Icon(Icons.filter_alt_outlined,
+                                        color: cs.onSecondary, size: 20),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      _mainFilter ?? 'Mais filtros',
+                                      style: TextStyle(
+                                        color: cs.onSecondary,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const Icon(Icons.arrow_drop_down,
+                                    color: Colors.grey),
+                              ],
+                            ),
+                          ),
+
+                          value: _mainFilter,
+                          items: filterOpts
+                              .map((o) => DropdownMenuItem(
+                                    value: o,
+                                    child: Text(o,
+                                        style: TextStyle(
+                                            color: cs.onBackground
+                                                .withOpacity(.85))),
+                                  ))
+                              .toList(),
+                          underline: const SizedBox.shrink(),
+                          onChanged: (v) => setState(() {
+                            _mainFilter = v;
+                            _statusFilter = null;
+                            _attendantFilter = null;
+                          }),
+
+                          // ↓↓↓ mantém o mesmo estilo dos itens/caixa do menu
+                          dropdownStyleData: DropdownStyleData(
+                            offset: const Offset(0, 4),
+                            padding: EdgeInsets.zero,
+                            decoration: BoxDecoration(
+                              color: cs.secondary,
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: [
+                                BoxShadow(
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                  color: cs.shadow.withOpacity(.05),
                                 ),
                               ],
                             ),
-                            const Icon(Icons.arrow_drop_down, color: Colors.grey),
-                          ],
-                        ),
-                      ),
-
-                      value: _mainFilter,
-                      items: filterOpts
-                          .map((o) => DropdownMenuItem(
-                        value: o,
-                        child: Text(o,
-                            style: TextStyle(
-                                color: cs.onBackground.withOpacity(.85))),
-                      ))
-                          .toList(),
-                      underline: const SizedBox.shrink(),
-                      onChanged: (v) => setState(() {
-                        _mainFilter      = v;
-                        _statusFilter    = null;
-                        _attendantFilter = null;
-                      }),
-
-                      // ↓↓↓ mantém o mesmo estilo dos itens/caixa do menu
-                      dropdownStyleData: DropdownStyleData(
-                        offset: const Offset(0, 4),
-                        padding: EdgeInsets.zero,
-                        decoration: BoxDecoration(
-                          color: cs.secondary,
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: [
-                            BoxShadow(
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                              color: cs.shadow.withOpacity(.05),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
+                    const SizedBox(width: 8),
 
-                const SizedBox(width: 8),
-
-                /* ─── BOTÃO “Exportar relatório” ─── */
-                Expanded(
-                  child: SizedBox(
-                    height: 44,
-                    child: TextButton(
-                      style: TextButton.styleFrom(
-                        backgroundColor: cs.secondary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      onPressed: _exportLeadsPdf,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.sim_card_download_outlined,
-                              color: cs.onSecondary, size: 20),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Exportar relatório',
-                            style: TextStyle(
-                              color: cs.onSecondary,
-                              fontWeight: FontWeight.w600,
+                    /* ─── BOTÃO “Exportar relatório” ─── */
+                    Expanded(
+                      child: SizedBox(
+                        height: 44,
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            backgroundColor: cs.secondary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
                             ),
                           ),
-                        ],
+                          onPressed: _exportLeadsPdf,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.sim_card_download_outlined,
+                                  color: cs.onSecondary, size: 20),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Exportar relatório',
+                                style: TextStyle(
+                                  color: cs.onSecondary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
 
-            const SizedBox(height: 10),
+                const SizedBox(height: 10),
 
-            if (_activeFilters.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              /* chips já selecionados */
-              Wrap(
-                spacing: 4,
-                runSpacing: 4,
-                children: _activeFilters.map((f) {
-                  return Builder(builder: (chipCtx) {
+                if (_activeFilters.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  /* chips já selecionados */
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: _activeFilters.map((f) {
+                      return Builder(builder: (chipCtx) {
+                        return InputChip(
+                          backgroundColor: cs.primary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: const BorderSide(
+                                color: Colors.transparent, width: 0),
+                          ),
+                          label: Text(f.label),
+                          // ↓↓↓ ajuste AQUI
+                          labelStyle: TextStyle(
+                            color: cs.onSurface, // era cs.onSecondary
+                            fontWeight: FontWeight.w500,
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4),
+                          onPressed: () {
+                            if (f.type == 'Data de criação') {
+                              _pickDateRange(filter: f, filterContext: chipCtx);
+                            } else {
+                              _showFilterMenu(
+                                  filter: f, filterContext: chipCtx);
+                            }
+                          },
+                          onDeleted: () =>
+                              setState(() => _activeFilters.remove(f)),
+                          deleteIcon: const Icon(Icons.close, size: 18),
+                          deleteIconColor: cs.onSurface,
+                          // para combinar com o texto
+                          pressElevation: 0,
+                        );
+                      });
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                if (_mainFilter == 'Status' ||
+                    _mainFilter == 'Atendente' ||
+                    _mainFilter == 'Etiquetas')
+                  Builder(builder: (chipCtx) {
                     return InputChip(
                       backgroundColor: cs.primary,
                       shape: RoundedRectangleBorder(
@@ -1017,327 +1076,327 @@ class _ReportsPageState extends State<ReportsPage> {
                         side: const BorderSide(
                             color: Colors.transparent, width: 0),
                       ),
-                      label: Text(f.label),
-                      // ↓↓↓ ajuste AQUI
+                      label: Text('$_mainFilter: Selecione'),
+                      // ↓↓↓ texto agora usa onPrimary
                       labelStyle: TextStyle(
-                        color: cs.onSurface, // era cs.onSecondary
+                        color: cs.onSurface,
+                        fontSize: 14,
                         fontWeight: FontWeight.w500,
                       ),
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 4),
-                      onPressed: () {
-                        if (f.type == 'Data de criação') {
-                          _pickDateRange(filter: f, filterContext: chipCtx);
-                        } else {
-                          _showFilterMenu(filter: f, filterContext: chipCtx);
-                        }
-                      },
-                      onDeleted: () => setState(() => _activeFilters.remove(f)),
+                      onPressed: () =>
+                          _showFilterMenu(filter: null, filterContext: chipCtx),
+                      onDeleted: () => setState(() => _mainFilter = null),
                       deleteIcon: const Icon(Icons.close, size: 18),
                       deleteIconColor: cs.onSurface,
-                      // para combinar com o texto
+                      // opcional, combina com o texto
                       pressElevation: 0,
                     );
-                  });
-                }).toList(),
-              ),
-              const SizedBox(height: 16),
-            ],
-            if (_mainFilter == 'Status' ||
-                _mainFilter == 'Atendente' ||
-                _mainFilter == 'Etiquetas')
-              Builder(builder: (chipCtx) {
-                return InputChip(
-                  backgroundColor: cs.primary,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: const BorderSide(color: Colors.transparent, width: 0),
-                  ),
-                  label: Text('$_mainFilter: Selecione'),
-                  // ↓↓↓ texto agora usa onPrimary
-                  labelStyle: TextStyle(
-                    color: cs.onSurface,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  onPressed: () =>
-                      _showFilterMenu(filter: null, filterContext: chipCtx),
-                  onDeleted: () => setState(() => _mainFilter = null),
-                  deleteIcon: const Icon(Icons.close, size: 18),
-                  deleteIconColor: cs.onSurface,
-                  // opcional, combina com o texto
-                  pressElevation: 0,
-                );
-              }),
-            if (_mainFilter == 'Data de criação')
-              Builder(builder: (chipCtx) {
-                return InputChip(
-                  backgroundColor: cs.primary,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: const BorderSide(color: Colors.transparent),
-                  ),
-                  label: const Text('Data de criação: Selecione'),
-                  labelStyle: TextStyle(color: cs.onSurface),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  onPressed: () =>
-                      _pickDateRange(filter: null, filterContext: chipCtx),
-                  onDeleted: () => setState(() => _mainFilter = null),
-                  deleteIcon: const Icon(Icons.close, size: 18),
-                  deleteIconColor: cs.onSurface,
-                  pressElevation: 0,
-                );
-              }),
-            const SizedBox(height: 20),
-
-            /*─────────────  LISTA  ─────────────*/
-            Expanded(
-              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: _tagsStream(),
-                builder: (_, tagSnap) {
-                  if (tagSnap.hasError) {
-                    return Center(
-                      child: Text(
-                        'Erro ao carregar etiquetas: ${tagSnap.error}',
-                        style: const TextStyle(color: Colors.red),
-                        textAlign: TextAlign.center,
+                  }),
+                if (_mainFilter == 'Data de criação')
+                  Builder(builder: (chipCtx) {
+                    return InputChip(
+                      backgroundColor: cs.primary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: const BorderSide(color: Colors.transparent),
                       ),
+                      label: const Text('Data de criação: Selecione'),
+                      labelStyle: TextStyle(color: cs.onSurface),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 4),
+                      onPressed: () =>
+                          _pickDateRange(filter: null, filterContext: chipCtx),
+                      onDeleted: () => setState(() => _mainFilter = null),
+                      deleteIcon: const Icon(Icons.close, size: 18),
+                      deleteIconColor: cs.onSurface,
+                      pressElevation: 0,
                     );
-                  }
-                  if (!tagSnap.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+                  }),
+                const SizedBox(height: 20),
 
-                  final tagsMap = {
-                    for (var doc in tagSnap.data!.docs) doc.id: doc.data()
-                  };
-
-                  return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                    stream: _chatsStream(),
-                    builder: (_, snap) {
-                      if (snap.hasError) {
+                /*─────────────  LISTA  ─────────────*/
+                Expanded(
+                  child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: _tagsStream(),
+                    builder: (_, tagSnap) {
+                      if (tagSnap.hasError) {
                         return Center(
                           child: Text(
-                            'Erro: ${snap.error}',
+                            'Erro ao carregar etiquetas: ${tagSnap.error}',
                             style: const TextStyle(color: Colors.red),
                             textAlign: TextAlign.center,
                           ),
                         );
                       }
-                      if (!snap.hasData) {
+                      if (!tagSnap.hasData) {
                         return const Center(child: CircularProgressIndicator());
                       }
 
-                      final docs = (snap.data!.docs.toList()
-                        ..sort((a, b) {
-                          final ma = a.data(), mb = b.data();
-                          final aa = (ma['updatedAt'] as Timestamp?) ?? (ma['createdAt'] as Timestamp?) ?? Timestamp(0,0);
-                          final bb = (mb['updatedAt'] as Timestamp?) ?? (mb['createdAt'] as Timestamp?) ?? Timestamp(0,0);
-                          return bb.compareTo(aa);
-                        }))
-                      // <<< AQUI: filtro de busca local
-                          .where((d) => _docMatchesSearch(d.data(), _search))
-                          .toList();
+                      final tagsMap = {
+                        for (var doc in tagSnap.data!.docs) doc.id: doc.data()
+                      };
 
-                      if (docs.isEmpty) {
-                        return const Center(
-                            child: Text('Nenhum atendimento encontrado'));
-                      }
-
-                      return ListView.separated(
-                        itemCount: docs.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (_, i) {
-                          final d = docs[i].data();
-                          final rawChatId = d['chatId'] as String? ?? '';
-                          final phoneNumber = rawChatId.contains('@')
-                              ? rawChatId.split('@')[0]
-                              : rawChatId;
-// extrai só dígitos
-                          final digits =
-                              phoneNumber.replaceAll(RegExp(r'\D'), '');
-                          String formattedPhone = phoneNumber;
-
-// se for Brasil (+55)
-                          if (digits.startsWith('55') && digits.length > 4) {
-                            final country = '55';
-                            final rest = digits.substring(2);
-                            final ddd = rest.substring(0, 2);
-                            final local = rest.substring(2);
-                            if (local.length <= 4) {
-                              // muito curto, sem hífen
-                              formattedPhone = '+$country $ddd $local';
-                            } else {
-                              final p1 = local.substring(0, local.length - 4);
-                              final p2 = local.substring(local.length - 4);
-                              formattedPhone = '+$country $ddd $p1-$p2';
-                            }
-                          } else if (digits.length > 10) {
-                            final country =
-                                digits.substring(0, digits.length - 10);
-                            final ddd = digits.substring(
-                                digits.length - 10, digits.length - 8);
-                            final rest = digits.substring(digits.length - 8);
-                            final p1 = rest.substring(0, rest.length - 4);
-                            final p2 = rest.substring(rest.length - 4);
-                            formattedPhone = '+$country $ddd $p1-$p2';
-                          }
-
-                          final contact =
-                              d['name'] ?? d['contactName'] ?? 'Contato';
-                          final lastMsg = d['lastMsg'] ?? '';
-
-                          final status = d['status'] ?? '';
-                          final userName = d['updatedByName'] ?? '';
-                          final startedAt =
-                              (d['createdAt'] as Timestamp?)?.toDate();
-                          final finishedAt =
-                              (d['finishedAt'] as Timestamp?)?.toDate();
-                          final updatedAt = d['updatedAt'] as Timestamp?;
-                          final waitSec = d['waitTimeSec'] as int? ?? 0;
-
-                          String firstReplyText;
-                          if (updatedAt == null) {
-                            firstReplyText = 'Ainda não respondido';
-                          } else if (waitSec >= 3600) {
-                            final h = waitSec ~/ 3600;
-                            final m = (waitSec % 3600) ~/ 60;
-                            firstReplyText = m > 0 ? '${h}h ${m}m' : '${h}h';
-                          } else if (waitSec >= 60) {
-                            final m = waitSec ~/ 60;
-                            final s = waitSec % 60;
-                            firstReplyText = s > 0 ? '${m}m ${s}s' : '${m}m';
-                          } else {
-                            firstReplyText = '${waitSec}s';
-                          }
-                          final updatedById = d['updatedBy'] as String?;
-
-                          // pega tags (List<dynamic>) e converte pra List<String>
-                          final rawTags = d['tags'] as List<dynamic>? ?? [];
-                          final tagIds =
-                              rawTags.map((e) => e.toString()).toList();
-
-                          // gera widgets de tag com tratamento de color String ou int
-                          final tagWidgets = tagIds.map((tagId) {
-                            final tag = tagsMap[tagId];
-                            if (tag == null) return const SizedBox.shrink();
-
-                            final rawColor = tag['color'];
-                            Color color;
-                            if (rawColor is String) {
-                              // "#RRGGBB" ou "RRGGBB"
-                              var hex = rawColor.startsWith('#')
-                                  ? rawColor.substring(1)
-                                  : rawColor;
-                              color = Color(int.parse('0xFF$hex'));
-                            } else if (rawColor is int) {
-                              color = Color(rawColor);
-                            } else {
-                              color = cs.primary; // fallback
-                            }
-
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 1),
-                              margin:
-                                  const EdgeInsets.only(right: 4, bottom: 4),
-                              decoration: BoxDecoration(
-                                color: color,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
+                      return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        stream: _chatsStream(),
+                        builder: (_, snap) {
+                          if (snap.hasError) {
+                            return Center(
                               child: Text(
-                                tag['name'] as String,
-                                style: const TextStyle(
-                                    color: Colors.white, fontSize: 10),
+                                'Erro: ${snap.error}',
+                                style: const TextStyle(color: Colors.red),
+                                textAlign: TextAlign.center,
                               ),
                             );
-                          }).toList();
+                          }
+                          if (!snap.hasData) {
+                            return const Center(
+                                child: CircularProgressIndicator());
+                          }
 
-                          return Material(
-                            color: cs.secondary,
-                            borderRadius: BorderRadius.circular(12),
-                            child: Theme(
-                              data: Theme.of(context).copyWith(
-                                // remove splash, highlight e hover do ExpansionTile
-                                splashColor: Colors.transparent,
-                                highlightColor: Colors.transparent,
-                                hoverColor: Colors.transparent,
-                                splashFactory: NoSplash.splashFactory,
-                                listTileTheme: const ListTileThemeData(
-                                  dense: true,
-                                  visualDensity: VisualDensity(vertical: -1),
-                                ),
-                              ),
-                              child: ExpansionTile(
-                                tilePadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 0),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                // título e subtítulo na mesma linha (opção 1)
-                                title: Text(
-                                  contact,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    color: cs.onBackground.withOpacity(0.9),
+                          final docs = (snap.data!.docs.toList()
+                                ..sort((a, b) {
+                                  final ma = a.data(), mb = b.data();
+                                  final aa = (ma['updatedAt'] as Timestamp?) ??
+                                      (ma['createdAt'] as Timestamp?) ??
+                                      Timestamp(0, 0);
+                                  final bb = (mb['updatedAt'] as Timestamp?) ??
+                                      (mb['createdAt'] as Timestamp?) ??
+                                      Timestamp(0, 0);
+                                  return bb.compareTo(aa);
+                                }))
+                              // <<< AQUI: filtro de busca local
+                              .where(
+                                  (d) => _docMatchesSearch(d.data(), _search))
+                              .toList();
+
+                          if (docs.isEmpty) {
+                            return const Center(
+                                child: Text('Nenhum atendimento encontrado'));
+                          }
+
+                          return ListView.separated(
+                            itemCount: docs.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 8),
+                            itemBuilder: (_, i) {
+                              final d = docs[i].data();
+                              final rawChatId = d['chatId'] as String? ?? '';
+                              final phoneNumber = rawChatId.contains('@')
+                                  ? rawChatId.split('@')[0]
+                                  : rawChatId;
+// extrai só dígitos
+                              final digits =
+                                  phoneNumber.replaceAll(RegExp(r'\D'), '');
+                              String formattedPhone = phoneNumber;
+
+// se for Brasil (+55)
+                              if (digits.startsWith('55') &&
+                                  digits.length > 4) {
+                                final country = '55';
+                                final rest = digits.substring(2);
+                                final ddd = rest.substring(0, 2);
+                                final local = rest.substring(2);
+                                if (local.length <= 4) {
+                                  // muito curto, sem hífen
+                                  formattedPhone = '+$country $ddd $local';
+                                } else {
+                                  final p1 =
+                                      local.substring(0, local.length - 4);
+                                  final p2 = local.substring(local.length - 4);
+                                  formattedPhone = '+$country $ddd $p1-$p2';
+                                }
+                              } else if (digits.length > 10) {
+                                final country =
+                                    digits.substring(0, digits.length - 10);
+                                final ddd = digits.substring(
+                                    digits.length - 10, digits.length - 8);
+                                final rest =
+                                    digits.substring(digits.length - 8);
+                                final p1 = rest.substring(0, rest.length - 4);
+                                final p2 = rest.substring(rest.length - 4);
+                                formattedPhone = '+$country $ddd $p1-$p2';
+                              }
+
+                              final contact =
+                                  d['name'] ?? d['contactName'] ?? 'Contato';
+                              final lastMsg = d['lastMsg'] ?? '';
+
+                              final status = d['status'] ?? '';
+                              final userName = d['updatedByName'] ?? '';
+                              final startedAt =
+                                  (d['createdAt'] as Timestamp?)?.toDate();
+                              final finishedAt =
+                                  (d['finishedAt'] as Timestamp?)?.toDate();
+                              final updatedAt = d['updatedAt'] as Timestamp?;
+                              final waitSec = d['waitTimeSec'] as int? ?? 0;
+
+                              String firstReplyText;
+                              if (updatedAt == null) {
+                                firstReplyText = 'Ainda não respondido';
+                              } else if (waitSec >= 3600) {
+                                final h = waitSec ~/ 3600;
+                                final m = (waitSec % 3600) ~/ 60;
+                                firstReplyText =
+                                    m > 0 ? '${h}h ${m}m' : '${h}h';
+                              } else if (waitSec >= 60) {
+                                final m = waitSec ~/ 60;
+                                final s = waitSec % 60;
+                                firstReplyText =
+                                    s > 0 ? '${m}m ${s}s' : '${m}m';
+                              } else {
+                                firstReplyText = '${waitSec}s';
+                              }
+                              final updatedById = d['updatedBy'] as String?;
+
+                              // pega tags (List<dynamic>) e converte pra List<String>
+                              final rawTags = d['tags'] as List<dynamic>? ?? [];
+                              final tagIds =
+                                  rawTags.map((e) => e.toString()).toList();
+
+                              // gera widgets de tag com tratamento de color String ou int
+                              final tagWidgets = tagIds.map((tagId) {
+                                final tag = tagsMap[tagId];
+                                if (tag == null) return const SizedBox.shrink();
+
+                                final rawColor = tag['color'];
+                                Color color;
+                                if (rawColor is String) {
+                                  // "#RRGGBB" ou "RRGGBB"
+                                  var hex = rawColor.startsWith('#')
+                                      ? rawColor.substring(1)
+                                      : rawColor;
+                                  color = Color(int.parse('0xFF$hex'));
+                                } else if (rawColor is int) {
+                                  color = Color(rawColor);
+                                } else {
+                                  color = cs.primary; // fallback
+                                }
+
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 1),
+                                  margin: const EdgeInsets.only(
+                                      right: 4, bottom: 4),
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    borderRadius: BorderRadius.circular(4),
                                   ),
-                                ),
-                                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                                children: [
-                                  _kv('Telefone', formattedPhone.isNotEmpty ? formattedPhone : 'Não informado'),
-                                  _kv('Status', status),
+                                  child: Text(
+                                    tag['name'] as String,
+                                    style: const TextStyle(
+                                        color: Colors.white, fontSize: 10),
+                                  ),
+                                );
+                              }).toList();
 
-                                  if (tagWidgets.isEmpty)
-                                    _kv('Etiquetas', 'Sem etiquetas')
-                                  else
-                                    Padding(
-                                      padding: const EdgeInsets.only(bottom: 4),
-                                      child: Row(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          const Text(
-                                            'Etiquetas: ',
-                                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                                          ),
-                                          Expanded(child: Wrap(children: tagWidgets)),
-                                        ],
+                              return Material(
+                                color: cs.secondary,
+                                borderRadius: BorderRadius.circular(12),
+                                child: Theme(
+                                  data: Theme.of(context).copyWith(
+                                    // remove splash, highlight e hover do ExpansionTile
+                                    splashColor: Colors.transparent,
+                                    highlightColor: Colors.transparent,
+                                    hoverColor: Colors.transparent,
+                                    splashFactory: NoSplash.splashFactory,
+                                    listTileTheme: const ListTileThemeData(
+                                      dense: true,
+                                      visualDensity:
+                                          VisualDensity(vertical: -1),
+                                    ),
+                                  ),
+                                  child: ExpansionTile(
+                                    tilePadding: const EdgeInsets.symmetric(
+                                        horizontal: 15, vertical: 0),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    // título e subtítulo na mesma linha (opção 1)
+                                    title: Text(
+                                      contact,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: cs.onBackground.withOpacity(0.9),
                                       ),
                                     ),
+                                    childrenPadding:
+                                        const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                                    children: [
+                                      _kv(
+                                          'Telefone',
+                                          formattedPhone.isNotEmpty
+                                              ? formattedPhone
+                                              : 'Não informado'),
+                                      _kv('Status', status),
 
-                                  // ---- ATENDENTE (sem FutureBuilder) ----
-                                  Builder(
-                                    builder: (_) {
-                                      // monta um map id->nome a partir dos atendentes (users + empresa)
-                                      final attendantsMap = {
-                                        for (final a in _attendants) a['id']!: a['name']!,
-                                      };
+                                      if (tagWidgets.isEmpty)
+                                        _kv('Etiquetas', 'Sem etiquetas')
+                                      else
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(bottom: 4),
+                                          child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              const Text(
+                                                'Etiquetas: ',
+                                                style: TextStyle(
+                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: 13),
+                                              ),
+                                              Expanded(
+                                                  child: Wrap(
+                                                      children: tagWidgets)),
+                                            ],
+                                          ),
+                                        ),
 
-                                      final attendantLabel = updatedById == null
-                                          ? 'Atendimento não iniciado'
-                                          : (attendantsMap[updatedById] ??
-                                          (userName is String && userName.isNotEmpty ? userName : 'Desconhecido'));
+                                      // ---- ATENDENTE (sem FutureBuilder) ----
+                                      Builder(
+                                        builder: (_) {
+                                          // monta um map id->nome a partir dos atendentes (users + empresa)
+                                          final attendantsMap = {
+                                            for (final a in _attendants)
+                                              a['id']!: a['name']!,
+                                          };
 
-                                      return _kv('Atendente', attendantLabel);
-                                    },
+                                          final attendantLabel = updatedById ==
+                                                  null
+                                              ? 'Atendimento não iniciado'
+                                              : (attendantsMap[updatedById] ??
+                                                  (userName is String &&
+                                                          userName.isNotEmpty
+                                                      ? userName
+                                                      : 'Desconhecido'));
+
+                                          return _kv(
+                                              'Atendente', attendantLabel);
+                                        },
+                                      ),
+
+                                      if (startedAt != null)
+                                        _kv('Início', _fmt.format(startedAt)),
+                                      if (finishedAt != null)
+                                        _kv('Conclusão',
+                                            _fmt.format(finishedAt)),
+                                      _kv('Primeira resposta', firstReplyText),
+                                    ],
                                   ),
-
-                                  if (startedAt != null) _kv('Início', _fmt.format(startedAt)),
-                                  if (finishedAt != null) _kv('Conclusão', _fmt.format(finishedAt)),
-                                  _kv('Primeira resposta', firstReplyText),
-                                ],
-                              ),
-                            ),
+                                ),
+                              );
+                            },
                           );
                         },
                       );
                     },
-                  );
-                },
-              ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

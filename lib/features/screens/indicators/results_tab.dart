@@ -20,23 +20,22 @@ class AtendimentosTab extends StatefulWidget {
 
 class _AtendimentosTabState extends State<AtendimentosTab> {
   /* ───────────────────────── estado local ─────────────────────────── */
-  late DateTime _from, _to;                       // período exibido
-  final _fmt = DateFormat('d/M');                 // p/ cabeçalho do filtro
+  late DateTime _from, _to;
+  final GlobalKey _rangeKey = GlobalKey();
+  final _fmt = DateFormat('d/M'); // p/ cabeçalho do filtro
   final _currency = NumberFormat.currency(symbol: 'R\$'); // total vendas
 
   @override
   void initState() {
     super.initState();
     _from = widget.from;
-    _to   = widget.to;
+    _to = widget.to;
   }
 
   /* ───────────────────────── utilidades ───────────────────────────── */
-  /// Resolve companyId/phoneId para user OU empresa.
-  /// Retorna (companyId, phoneId) onde phoneId pode ser null.
   Future<(String companyId, String? phoneId)> _resolvePhoneCtx() async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
-    final fs  = FirebaseFirestore.instance;
+    final fs = FirebaseFirestore.instance;
 
     String companyId = uid;
     String? phoneId;
@@ -45,8 +44,9 @@ class _AtendimentosTabState extends State<AtendimentosTab> {
     final uSnap = await fs.collection('users').doc(uid).get();
     if (uSnap.exists) {
       final u = uSnap.data() ?? {};
-      companyId =
-      (u['createdBy'] as String?)?.isNotEmpty == true ? u['createdBy'] as String : uid;
+      companyId = (u['createdBy'] as String?)?.isNotEmpty == true
+          ? u['createdBy'] as String
+          : uid;
       phoneId = u['defaultPhoneId'] as String?;
     }
 
@@ -61,7 +61,8 @@ class _AtendimentosTabState extends State<AtendimentosTab> {
     // 3) pega o primeiro doc em empresas/{companyId}/phones e persiste como default
     if (phoneId == null) {
       final ph = await fs
-          .collection('empresas').doc(companyId)
+          .collection('empresas')
+          .doc(companyId)
           .collection('phones')
           .limit(1)
           .get();
@@ -70,10 +71,14 @@ class _AtendimentosTabState extends State<AtendimentosTab> {
         phoneId = ph.docs.first.id;
 
         if (uSnap.exists) {
-          await fs.collection('users').doc(uid)
+          await fs
+              .collection('users')
+              .doc(uid)
               .set({'defaultPhoneId': phoneId}, SetOptions(merge: true));
         } else {
-          await fs.collection('empresas').doc(companyId)
+          await fs
+              .collection('empresas')
+              .doc(companyId)
               .set({'defaultPhoneId': phoneId}, SetOptions(merge: true));
         }
       }
@@ -82,23 +87,113 @@ class _AtendimentosTabState extends State<AtendimentosTab> {
     return (companyId, phoneId);
   }
 
+  Future<void> _pickRangeAnchored() async {
+    final cs = Theme.of(context).colorScheme;
+    final box = _rangeKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+
+    final screen = MediaQuery.of(context).size;
+    final offset = box.localToGlobal(Offset.zero);
+    final size = box.size;
+
+    const double popupW = 360; // quadrado/compacto
+    const double popupH = 360;
+    const double margin = 12;
+
+    double left = offset.dx;
+    double top = offset.dy + size.height + 8; // abre abaixo
+
+    if (left + popupW > screen.width - margin) {
+      left = screen.width - margin - popupW;
+    }
+    if (top + popupH > screen.height - margin) {
+      top = (offset.dy - popupH - 8)
+          .clamp(margin, screen.height - popupH - margin);
+    }
+
+    final picked = await showDialog<DateTimeRange>(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withOpacity(.2),
+      builder: (ctx) {
+        return Stack(
+          children: [
+            Positioned(
+              left: left,
+              top: top,
+              child: Material(
+                elevation: 10,
+                borderRadius: BorderRadius.circular(12),
+                clipBehavior: Clip.antiAlias,
+                child: SizedBox(
+                  width: popupW,
+                  height: popupH,
+                  child: Theme(
+                    data: Theme.of(ctx).copyWith(
+                      colorScheme: ColorScheme.light(
+                        primary: cs.primary,
+                        onPrimary: Colors.white,
+                        surface: cs.secondary,
+                        onSurface: cs.onBackground,
+                      ),
+                      datePickerTheme: const DatePickerThemeData(
+                        rangeSelectionBackgroundColor: Color(0x220090EE),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero, // “quadradinho”
+                        ),
+                      ),
+                    ),
+                    child: DateRangePickerDialog(
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now(),
+                      initialDateRange: DateTimeRange(start: _from, end: _to),
+
+                      // compacto/moderno
+                      initialEntryMode: DatePickerEntryMode.calendarOnly,
+                      helpText: '',
+                      cancelText: 'Cancelar',
+                      confirmText: 'Aplicar',
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _from = picked.start;
+        _to = picked.end;
+      });
+    }
+  }
+
   /* ─────────────────── date-range picker ──────────────────────────── */
   Future<void> _pickRange() async {
-    final cs = Theme.of(context).colorScheme;
+    // desktop/web → popover ancorado
+    if (MediaQuery.of(context).size.width >= 1024) {
+      await _pickRangeAnchored();
+      return;
+    }
 
+    // mobile → mantém full-screen padrão
+    final cs = Theme.of(context).colorScheme;
     final range = await showDateRangePicker(
-      context        : context,
-      firstDate      : DateTime(2020),
-      lastDate       : DateTime.now(),
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
       initialDateRange: DateTimeRange(start: _from, end: _to),
-      locale         : const Locale('pt', 'BR'),
-      builder        : (_, child) => Theme(
+      locale: const Locale('pt', 'BR'),
+      builder: (_, child) => Theme(
         data: Theme.of(context).copyWith(
           colorScheme: ColorScheme.light(
-            primary   : cs.primary,
-            onPrimary : Colors.white,
-            surface   : cs.secondary,
-            onSurface : cs.onBackground,
+            primary: cs.primary,
+            onPrimary: Colors.white,
+            surface: cs.secondary,
+            onSurface: cs.onBackground,
           ),
           datePickerTheme: const DatePickerThemeData(
             rangeSelectionBackgroundColor: Color(0x220090EE),
@@ -111,7 +206,7 @@ class _AtendimentosTabState extends State<AtendimentosTab> {
     if (range != null) {
       setState(() {
         _from = range.start;
-        _to   = range.end;
+        _to = range.end;
       });
     }
   }
@@ -126,21 +221,21 @@ class _AtendimentosTabState extends State<AtendimentosTab> {
     final history$ = FirebaseFirestore.instance
         .collectionGroup('history')
         .where('empresaId', isEqualTo: companyId)
-        .where('phoneId',   isEqualTo: phoneId)
+        .where('phoneId', isEqualTo: phoneId)
         .where('changedAt', isGreaterThanOrEqualTo: _from)
         .where('changedAt', isLessThan: endExclusive)
-        .where('status', whereIn: ['concluido_com_venda', 'recusado'])
-        .snapshots();
+        .where('status',
+            whereIn: ['concluido_com_venda', 'recusado']).snapshots();
 
     await for (final qs in history$) {
       final Map<String, int> productCount = {};
-      final Map<String, int> reasonCount  = {};
-      var totalWon  = 0;
+      final Map<String, int> reasonCount = {};
+      var totalWon = 0;
       var totalLost = 0;
-      var sumSale   = 0.0;
+      var sumSale = 0.0;
 
       for (final d in qs.docs) {
-        final data   = d.data() as Map<String, dynamic>;
+        final data = d.data() as Map<String, dynamic>;
         final status = data['status'] as String? ?? '';
 
         if (status == 'concluido_com_venda') {
@@ -157,11 +252,11 @@ class _AtendimentosTabState extends State<AtendimentosTab> {
       }
 
       yield _RankStats(
-        productCount : productCount,
-        reasonCount  : reasonCount,
-        wonTotal     : totalWon,
-        lostTotal    : totalLost,
-        sumSale      : sumSale,
+        productCount: productCount,
+        reasonCount: reasonCount,
+        wonTotal: totalWon,
+        lostTotal: totalLost,
+        sumSale: sumSale,
       );
     }
   }
@@ -169,15 +264,17 @@ class _AtendimentosTabState extends State<AtendimentosTab> {
   /* ──────────────────── construção de um ranking ─────────────────── */
   Widget _rankingCard({
     required String titleText,
-    required int    total,
+    required int total,
     required Map<String, int> items,
     double? somatorio,
     Color? barColor,
   }) {
     final cs = Theme.of(context).colorScheme;
     final bool isWonCard = titleText.toLowerCase().contains('atingid');
-    final Color totalColor = isWonCard ? Colors.green.shade700 : Colors.red.shade700;
-    final Color itemColor = barColor ?? (isWonCard ? Colors.green.shade700 : Colors.red.shade700);
+    final Color totalColor =
+        isWonCard ? Colors.green.shade700 : Colors.red.shade700;
+    final Color itemColor =
+        barColor ?? (isWonCard ? Colors.green.shade700 : Colors.red.shade700);
 
     // ➊ decide a mensagem padrão com base no título
     String _emptyMsg() {
@@ -206,7 +303,8 @@ class _AtendimentosTabState extends State<AtendimentosTab> {
         ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,   // ← garante centralização
+          mainAxisAlignment: MainAxisAlignment.center,
+          // ← garante centralização
           children: [
             /* cabeçalho */
             Row(
@@ -276,12 +374,12 @@ class _AtendimentosTabState extends State<AtendimentosTab> {
   /* linha - barra de progresso + legenda + quantidade */
   Widget _progressRow({
     required String label,
-    required int    count,
-    required int    total,
-    required Color  color,
+    required int count,
+    required int total,
+    required Color color,
   }) {
     final pct = count / total;
-    final cs  = Theme.of(context).colorScheme;
+    final cs = Theme.of(context).colorScheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,7 +420,7 @@ class _AtendimentosTabState extends State<AtendimentosTab> {
                     ),
                   ),
                   FractionallySizedBox(
-                    widthFactor: pct,                  // 0–1
+                    widthFactor: pct, // 0–1
                     child: Container(
                       height: 14,
                       decoration: BoxDecoration(
@@ -368,97 +466,120 @@ class _AtendimentosTabState extends State<AtendimentosTab> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
+    bool _isDesktop() => MediaQuery.of(context).size.width >= 1024;
+    EdgeInsets _sideGutters() {
+      final w = MediaQuery.of(context).size.width;
+      if (w >= 1440)
+        return const EdgeInsets.symmetric(horizontal: 32, vertical: 16);
+      if (w >= 1024)
+        return const EdgeInsets.symmetric(horizontal: 24, vertical: 16);
+      return const EdgeInsets.symmetric(horizontal: 16, vertical: 12);
+    }
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        children: [
-          /* seletor de período ------------------------------------------------ */
-          GestureDetector(
-            onTap: _pickRange,
-            child: Container(
-              height: 44,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                color: cs.secondary,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    '${_fmt.format(_from)}  –  ${_fmt.format(_to)}',
-                    style: TextStyle(
-                      color: cs.onBackground.withOpacity(.8),
-                      fontWeight: FontWeight.w500,
-                    ),
+      padding: _sideGutters(),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1500),
+          child: Column(
+            children: [
+              // ── seletor de período (mantém o visual atual) ──
+              GestureDetector(
+                onTap: _pickRange,
+                child: Container(
+                  key: _rangeKey,
+                  // <— âncora do popover
+                  height: 44,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    color: cs.secondary,
                   ),
-                  Icon(Icons.calendar_month, color: cs.primary),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          /* stream de dados --------------------------------------------------- */
-          Expanded(
-            child: FutureBuilder<(String, String?)>(
-              future: _resolvePhoneCtx(),
-              builder: (_, idSnap) {
-                if (!idSnap.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final (companyId, phoneId) = idSnap.data!;
-                if (phoneId == null) {
-                  return Center(
-                    child: Text('Nenhum número configurado.', style: TextStyle(color: cs.onBackground)),
-                  );
-                }
-
-                return StreamBuilder<_RankStats>(
-                  stream: _statsStream(companyId, phoneId),
-                  builder: (_, snap) {
-                    if (snap.hasError) {
-                      return Center(
-                        child: Text(
-                          'Erro Firestore:\n${snap.error}',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.red),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${_fmt.format(_from)}  –  ${_fmt.format(_to)}',
+                        style: TextStyle(
+                          color: cs.onBackground.withOpacity(.8),
+                          fontWeight: FontWeight.w500,
                         ),
-                      );
-                    }
-                    if (!snap.hasData) {
+                      ),
+                      Icon(Icons.calendar_month, color: cs.primary),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // ── conteúdo com dados ──
+              Expanded(
+                child: FutureBuilder<(String, String?)>(
+                  future: _resolvePhoneCtx(),
+                  builder: (_, idSnap) {
+                    if (!idSnap.hasData) {
                       return const Center(child: CircularProgressIndicator());
                     }
+                    final (companyId, phoneId) = idSnap.data!;
+                    if (phoneId == null) {
+                      return Center(
+                        child: Text('Nenhum número configurado.',
+                            style: TextStyle(color: cs.onBackground)),
+                      );
+                    }
 
-                    final stats = snap.data!;
-                    // ... mantém o restante da UI exatamente como está ...
-                    return SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _rankingCard(
-                            titleText : 'Objetivos atingidos',
-                            total     : stats.wonTotal,
-                            items     : stats.productCount,
-                            somatorio : stats.sumSale,
+                    return StreamBuilder<_RankStats>(
+                      stream: _statsStream(companyId, phoneId),
+                      builder: (_, snap) {
+                        if (snap.hasError) {
+                          return Center(
+                            child: Text(
+                              'Erro Firestore:\n${snap.error}',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.red),
+                            ),
+                          );
+                        }
+                        if (!snap.hasData) {
+                          return const Center(
+                              child: CircularProgressIndicator());
+                        }
+
+                        final stats = snap.data!;
+                        return SingleChildScrollView(
+                          child: Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 1500),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _rankingCard(
+                                    titleText: 'Objetivos atingidos',
+                                    total: stats.wonTotal,
+                                    items: stats.productCount,
+                                    somatorio: stats.sumSale,
+                                  ),
+                                  const SizedBox(height: 20),
+                                  _rankingCard(
+                                    titleText: 'Objetivos perdidos',
+                                    total: stats.lostTotal,
+                                    items: stats.reasonCount,
+                                  ),
+                                  const SizedBox(height: 20),
+                                ],
+                              ),
+                            ),
                           ),
-                          const SizedBox(height: 20),
-                          _rankingCard(
-                            titleText : 'Objetivos perdidos',
-                            total     : stats.lostTotal,
-                            items     : stats.reasonCount,
-                          ),
-                          const SizedBox(height: 20),
-                        ],
-                      ),
+                        );
+                      },
                     );
                   },
-                );
-              },
-            ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -476,7 +597,7 @@ class _RankStats {
 
   final Map<String, int> productCount;
   final Map<String, int> reasonCount;
-  final int    wonTotal;
-  final int    lostTotal;
+  final int wonTotal;
+  final int lostTotal;
   final double sumSale;
 }

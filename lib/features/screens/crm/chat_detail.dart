@@ -974,15 +974,22 @@ class _ChatDetailState extends State<ChatDetail> {
 
       /* -------- ações -------- */
       actions: [
-        IconButton(
-          icon: const Icon(Icons.sell_outlined),
-          tooltip: 'Etiquetas',
-          onPressed: _openTagManager,
-        ),
-        IconButton(
-          icon: const Icon(Icons.check_circle_outline),
-          tooltip: 'Concluir',
-          onPressed: _confirmFinishFlow, // ← chama só o fluxo de conclusão
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.sell_outlined),
+                tooltip: 'Etiquetas',
+                onPressed: _openTagManager,
+              ),
+              IconButton(
+                icon: const Icon(Icons.check_circle_outline),
+                tooltip: 'Concluir',
+                onPressed: _confirmFinishFlow, // ← chama só o fluxo de conclusão
+              ),
+            ],
+          ),
         ),
       ],
     );

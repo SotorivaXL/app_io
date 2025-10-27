@@ -216,7 +216,9 @@ class _RequestMettingState extends State<RequestMetting> {
       QuerySnapshot meetingConflict = await FirebaseFirestore.instance
           .collection('requests')
           .where('tipoSolicitacao', isEqualTo: 'Reunião')
-          .where('dataReuniao', isGreaterThan: Timestamp.fromDate(_selectedDate!.subtract(Duration(hours: 1))))
+          .where('dataReuniao',
+          isGreaterThan:
+          Timestamp.fromDate(_selectedDate!.subtract(Duration(hours: 1))))
           .where('dataReuniao', isLessThanOrEqualTo: selectedTimestamp)
           .get();
 
@@ -289,14 +291,17 @@ class _RequestMettingState extends State<RequestMetting> {
       final selectedYear = _selectedDate!.year;
       final selectedMonth = _selectedDate!.month;
       final startOfSelectedMonth = DateTime(selectedYear, selectedMonth, 1);
-      final endOfSelectedMonth = DateTime(selectedYear, selectedMonth + 1, 0, 23, 59, 59);
+      final endOfSelectedMonth =
+      DateTime(selectedYear, selectedMonth + 1, 0, 23, 59, 59);
 
       final sameMonthMeetings = await FirebaseFirestore.instance
           .collection('requests')
           .where('tipoSolicitacao', isEqualTo: 'Reunião')
           .where('nomeEmpresa', isEqualTo: nomeEmpresa)
-          .where('dataReuniao', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfSelectedMonth))
-          .where('dataReuniao', isLessThanOrEqualTo: Timestamp.fromDate(endOfSelectedMonth))
+          .where('dataReuniao',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(startOfSelectedMonth))
+          .where('dataReuniao',
+          isLessThanOrEqualTo: Timestamp.fromDate(endOfSelectedMonth))
           .get();
 
       if (sameMonthMeetings.docs.isNotEmpty) {
@@ -324,13 +329,17 @@ class _RequestMettingState extends State<RequestMetting> {
         return;
       }
 
-
       // Verifica se o horário selecionado está fora dos intervalos permitidos
       // Intervalos permitidos: 08:30-12:00 e 14:00-18:00
       final DateTime meetingTime = _selectedDate!;
-      bool isWithinMorningInterval = (meetingTime.hour > 8 || (meetingTime.hour == 8 && meetingTime.minute >= 30)) && meetingTime.hour < 12;
-      bool isWithinAfternoonInterval = meetingTime.hour >= 14 && meetingTime.hour < 18;
-      bool isTimeOutsideAllowed = !(isWithinMorningInterval || isWithinAfternoonInterval);
+      bool isWithinMorningInterval =
+          (meetingTime.hour > 8 ||
+              (meetingTime.hour == 8 && meetingTime.minute >= 30)) &&
+              meetingTime.hour < 12;
+      bool isWithinAfternoonInterval =
+          meetingTime.hour >= 14 && meetingTime.hour < 18;
+      bool isTimeOutsideAllowed =
+      !(isWithinMorningInterval || isWithinAfternoonInterval);
 
       // Verifica se o usuário já adicionou uma solicitação no mês passado
       final DateTime now = DateTime.now();
@@ -340,13 +349,18 @@ class _RequestMettingState extends State<RequestMetting> {
         previousMonth = 12;
         previousMonthYear--;
       }
-      final DateTime startOfPreviousMonth = DateTime(previousMonthYear, previousMonth, 1);
-      final DateTime endOfPreviousMonth = DateTime(previousMonthYear, previousMonth + 1, 0);
+      final DateTime startOfPreviousMonth =
+      DateTime(previousMonthYear, previousMonth, 1);
+      final DateTime endOfPreviousMonth =
+      DateTime(previousMonthYear, previousMonth + 1, 0);
 
-      QuerySnapshot lastMonthRequestQuery = await FirebaseFirestore.instance.collection('requests')
+      QuerySnapshot lastMonthRequestQuery = await FirebaseFirestore.instance
+          .collection('requests')
           .where('userId', isEqualTo: currentUserId)
-          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfPreviousMonth))
-          .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endOfPreviousMonth))
+          .where('createdAt',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(startOfPreviousMonth))
+          .where('createdAt',
+          isLessThanOrEqualTo: Timestamp.fromDate(endOfPreviousMonth))
           .get();
       bool hasRequestLastMonth = lastMonthRequestQuery.docs.isNotEmpty;
 
@@ -367,7 +381,9 @@ class _RequestMettingState extends State<RequestMetting> {
         );
       } else {
         // Salva a solicitação no Firestore (caso as condições não sejam atendidas)
-        await FirebaseFirestore.instance.collection('requests').add(meetingDataFirestore);
+        await FirebaseFirestore.instance
+            .collection('requests')
+            .add(meetingDataFirestore);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -411,7 +427,8 @@ class _RequestMettingState extends State<RequestMetting> {
 
   Future<void> sendMeetingRequestToSQS(Map<String, dynamic> meetingData) async {
     // Substitua pela URL da sua Cloud Function
-    final String cloudFunctionUrl = 'https://sendmeetingrequesttosqs-5a3yl3wsma-uc.a.run.app';
+    final String cloudFunctionUrl =
+        'https://sendmeetingrequesttosqs-5a3yl3wsma-uc.a.run.app';
     try {
       final response = await http.post(
         Uri.parse(cloudFunctionUrl),
@@ -537,7 +554,226 @@ class _RequestMettingState extends State<RequestMetting> {
         ),
         body: GestureDetector(
           onTap: () => FocusScope.of(context).unfocus(),
-          child: SingleChildScrollView(
+          child: isDesktop
+              ? Align(
+            alignment: Alignment.topCenter, // ✅ gruda no topo (desktop)
+            child: ConstrainedBox(
+              constraints:
+              const BoxConstraints(maxWidth: 1500), // ✅ largura máx.
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16), // ✅ apenas laterais
+                child: Padding(
+                  padding:
+                  const EdgeInsets.only(top: 35), // ✅ topo fixo 35px
+                  child: SingleChildScrollView(
+                    controller: _scrollController,
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        spacing: 10,
+                        children: [
+                          // Campo do motivo da reunião
+                          TextFormField(
+                            controller: _motivoController,
+                            focusNode: _motivoFocus,
+                            autofocus: false,
+                            maxLength: 40,
+                            decoration: InputDecoration(
+                              hintText: 'Digite o motivo da reunião',
+                              hintStyle: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w500,
+                                fontSize: 16,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSecondary,
+                              ),
+                              filled: true,
+                              fillColor: Theme.of(context)
+                                  .colorScheme
+                                  .secondary,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide.none,
+                              ),
+                              prefixIcon: Icon(
+                                Icons.meeting_room,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .tertiary,
+                                size: 20,
+                              ),
+                              contentPadding:
+                              const EdgeInsets.symmetric(
+                                  vertical: 25),
+                            ),
+                            onTap: () {
+                              _motivoFocus.canRequestFocus = true;
+                              _motivoFocus.requestFocus();
+                            },
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Por favor, insira o motivo da reunião';
+                              }
+                              return null;
+                            },
+                          ),
+
+                          // Campo de assunto
+                          TextFormField(
+                            controller: _assuntoController,
+                            focusNode: _assuntoFocus,
+                            autofocus: false,
+                            maxLength: 100,
+                            decoration: InputDecoration(
+                              hintText: 'Digite o assunto da reunião',
+                              hintStyle: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w500,
+                                fontSize: 16,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSecondary,
+                              ),
+                              filled: true,
+                              fillColor: Theme.of(context)
+                                  .colorScheme
+                                  .secondary,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide.none,
+                              ),
+                              prefixIcon: Icon(
+                                Icons.subject,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .tertiary,
+                                size: 20,
+                              ),
+                              contentPadding:
+                              const EdgeInsets.symmetric(
+                                  vertical: 25),
+                            ),
+                            onTap: () {
+                              _assuntoFocus.canRequestFocus = true;
+                              _assuntoFocus.requestFocus();
+                            },
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Por favor, insira o assunto da reunião';
+                              }
+                              return null;
+                            },
+                          ),
+
+                          // Campo de seleção de data e horário
+                          InkWell(
+                            onTap: () => _selectDateTime(context),
+                            child: InputDecorator(
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor: Theme.of(context)
+                                    .colorScheme
+                                    .secondary,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
+                                ),
+                                prefixIcon: Icon(
+                                  Icons.date_range,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .tertiary,
+                                  size: 20,
+                                ),
+                                contentPadding:
+                                const EdgeInsets.symmetric(
+                                    vertical: 25),
+                              ),
+                              child: Row(
+                                mainAxisAlignment:
+                                MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    _selectedDate == null
+                                        ? 'Selecione data e horário'
+                                        : DateFormat('dd/MM/yyyy HH:mm')
+                                        .format(_selectedDate!),
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 16,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Botão para salvar a solicitação
+                          ElevatedButton.icon(
+                            onPressed: _isLoading ? null : _submitForm,
+                            icon: _isLoading
+                                ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.0,
+                                valueColor:
+                                AlwaysStoppedAnimation<Color>(
+                                  Theme.of(context)
+                                      .colorScheme
+                                      .outline,
+                                ),
+                              ),
+                            )
+                                : Icon(
+                              Icons.add_task,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .outline,
+                              size: 25,
+                            ),
+                            label: Text(
+                              _isLoading
+                                  ? 'Processando...'
+                                  : 'Solicitar reunião',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outline,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              padding:
+                              const EdgeInsetsDirectional.fromSTEB(
+                                  30, 15, 30, 15),
+                              backgroundColor:
+                              Theme.of(context).colorScheme.primary,
+                              elevation: 3,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(25),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          )
+              : SingleChildScrollView(
             controller: _scrollController,
             padding: const EdgeInsets.all(16.0),
             child: Form(
@@ -545,8 +781,7 @@ class _RequestMettingState extends State<RequestMetting> {
               child: Column(
                 spacing: 10,
                 children: [
-                  // Campo do motivo da reunião
-                  // Para o campo de motivo da reunião:
+                  // Campo do motivo da reunião (MOBILE mantém original)
                   TextFormField(
                     controller: _motivoController,
                     focusNode: _motivoFocus,
@@ -558,25 +793,27 @@ class _RequestMettingState extends State<RequestMetting> {
                         fontFamily: 'Poppins',
                         fontWeight: FontWeight.w500,
                         fontSize: 16,
-                        color: Theme.of(context).colorScheme.onSecondary,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSecondary,
                       ),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.secondary,
+                      fillColor:
+                      Theme.of(context).colorScheme.secondary,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: BorderSide.none,
                       ),
                       prefixIcon: Icon(
                         Icons.meeting_room,
-                        color: Theme.of(context).colorScheme.tertiary,
+                        color:
+                        Theme.of(context).colorScheme.tertiary,
                         size: 20,
                       ),
-                      contentPadding: isDesktop
-                          ? const EdgeInsets.symmetric(vertical: 25)
-                          : const EdgeInsets.symmetric(vertical: 15),
+                      contentPadding:
+                      const EdgeInsets.symmetric(vertical: 15),
                     ),
                     onTap: () {
-                      // Permite o foco somente se o usuário tocar diretamente
                       _motivoFocus.canRequestFocus = true;
                       _motivoFocus.requestFocus();
                     },
@@ -588,7 +825,7 @@ class _RequestMettingState extends State<RequestMetting> {
                     },
                   ),
 
-                  // Para o campo de assunto da reunião:
+                  // Campo de assunto (MOBILE mantém original)
                   TextFormField(
                     controller: _assuntoController,
                     focusNode: _assuntoFocus,
@@ -600,22 +837,25 @@ class _RequestMettingState extends State<RequestMetting> {
                         fontFamily: 'Poppins',
                         fontWeight: FontWeight.w500,
                         fontSize: 16,
-                        color: Theme.of(context).colorScheme.onSecondary,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSecondary,
                       ),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.secondary,
+                      fillColor:
+                      Theme.of(context).colorScheme.secondary,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: BorderSide.none,
                       ),
                       prefixIcon: Icon(
                         Icons.subject,
-                        color: Theme.of(context).colorScheme.tertiary,
+                        color:
+                        Theme.of(context).colorScheme.tertiary,
                         size: 20,
                       ),
-                      contentPadding: isDesktop
-                          ? const EdgeInsets.symmetric(vertical: 25)
-                          : const EdgeInsets.symmetric(vertical: 15),
+                      contentPadding:
+                      const EdgeInsets.symmetric(vertical: 15),
                     ),
                     onTap: () {
                       _assuntoFocus.canRequestFocus = true;
@@ -628,28 +868,32 @@ class _RequestMettingState extends State<RequestMetting> {
                       return null;
                     },
                   ),
-                  // Campo de seleção de data e horário
+
+                  // Campo de seleção de data e horário (MOBILE mantém original)
                   InkWell(
                     onTap: () => _selectDateTime(context),
                     child: InputDecorator(
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: Theme.of(context).colorScheme.secondary,
+                        fillColor:
+                        Theme.of(context).colorScheme.secondary,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide: BorderSide.none,
                         ),
                         prefixIcon: Icon(
                           Icons.date_range,
-                          color: Theme.of(context).colorScheme.tertiary,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .tertiary,
                           size: 20,
                         ),
-                        contentPadding: isDesktop
-                            ? const EdgeInsets.symmetric(vertical: 25)
-                            : const EdgeInsets.symmetric(vertical: 15),
+                        contentPadding:
+                        const EdgeInsets.symmetric(vertical: 15),
                       ),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        mainAxisAlignment:
+                        MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
                             _selectedDate == null
@@ -660,46 +904,60 @@ class _RequestMettingState extends State<RequestMetting> {
                               fontFamily: 'Poppins',
                               fontWeight: FontWeight.w500,
                               fontSize: 16,
-                              color: Theme.of(context).colorScheme.onSecondary,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSecondary,
                             ),
                           ),
                         ],
                       ),
                     ),
                   ),
+
                   const SizedBox(height: 24),
-                  // Botão para salvar a solicitação
+
+                  // Botão para salvar a solicitação (MOBILE mantém original)
                   ElevatedButton.icon(
                     onPressed: _isLoading ? null : _submitForm,
                     icon: _isLoading
                         ? SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.0,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Theme.of(context).colorScheme.outline,
-                              ),
-                            ),
-                          )
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.0,
+                        valueColor:
+                        AlwaysStoppedAnimation<Color>(
+                          Theme.of(context)
+                              .colorScheme
+                              .outline,
+                        ),
+                      ),
+                    )
                         : Icon(
-                            Icons.add_task,
-                            color: Theme.of(context).colorScheme.outline,
-                            size: 25,
-                          ),
+                      Icons.add_task,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .outline,
+                      size: 25,
+                    ),
                     label: Text(
-                      _isLoading ? 'Processando...' : 'Solicitar reunião',
+                      _isLoading
+                          ? 'Processando...'
+                          : 'Solicitar reunião',
                       style: TextStyle(
                         fontFamily: 'Poppins',
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.outline,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outline,
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      padding:
-                          const EdgeInsetsDirectional.fromSTEB(30, 15, 30, 15),
-                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      padding: const EdgeInsetsDirectional.fromSTEB(
+                          30, 15, 30, 15),
+                      backgroundColor:
+                      Theme.of(context).colorScheme.primary,
                       elevation: 3,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(25),
