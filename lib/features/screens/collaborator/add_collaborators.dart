@@ -36,6 +36,7 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
   late Color _randomColor;
 
   // Inicializa o mapa para armazenar os direitos de acesso
+  // Inicializa o mapa para armazenar os direitos de acesso
   Map<String, bool> accessRights = {
     // MÓDULOS
     'modChats': true,
@@ -45,16 +46,10 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
     'modRelatorios': false, // opcional
 
     // PERMISSÕES INTERNAS (Painel)
-    'gerenciarParceiros': false,
     'gerenciarColaboradores': false,
-    'criarForm': false,
     'criarCampanha': false,
     'gerenciarProdutos': false,
 
-    // OUTROS (se usados em outras telas)
-    'leads': false,
-    'copiarTelefones': false,
-    'executarAPIs': false,
   };
 
   void _setPerm(String key, bool value) {
@@ -62,17 +57,14 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
       accessRights[key] = value;
 
       if (key == 'modPainel' && value == false) {
-        accessRights['gerenciarParceiros'] = false;
+        // Desmarca apenas as permissões que permanecem no Painel
         accessRights['gerenciarColaboradores'] = false;
-        accessRights['criarForm'] = false;
         accessRights['criarCampanha'] = false;
-        accessRights['gerenciarProdutos'] = false; // <-- NOVO
+        accessRights['gerenciarProdutos'] = false;
       }
 
       const subPerms = [
-        'gerenciarParceiros',
         'gerenciarColaboradores',
-        'criarForm',
         'criarCampanha',
         'gerenciarProdutos',
       ];
@@ -182,12 +174,17 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
     }) {
       final cs = Theme.of(context).colorScheme;
       return CheckboxListTile(
-        title: Text(label, style: TextStyle(
-          fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 14,
-          color: cs.onSecondary,
-        )),
+        title: Text(
+          label,
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontWeight: FontWeight.w500,
+            fontSize: 14,
+            color: cs.onSecondary,
+          ),
+        ),
         value: accessRights[keyName] ?? false,
-        onChanged: (v) => _setPerm(keyName, v ?? false), // ⬅️ aqui
+        onChanged: (v) => _setPerm(keyName, v ?? false),
         controlAffinity: ListTileControlAffinity.leading,
         activeColor: cs.tertiary,
         checkColor: cs.outline,
@@ -199,32 +196,31 @@ class _AddCollaboratorsState extends State<AddCollaborators> {
 
     Widget section(String title) => Padding(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-      child: Text(title, style: TextStyle(
-        fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.w600,
-        color: cs.onSecondary,
-      )),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          color: cs.onSecondary,
+        ),
+      ),
     );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         section('Acesso aos módulos'),
-        cb(keyName: 'modChats',        label: 'Chats'),
-        cb(keyName: 'modIndicadores',  label: 'Indicadores'),
-        cb(keyName: 'modPainel',       label: 'Configurações'),
-        cb(keyName: 'modRelatorios',   label: 'Relatórios'), // se usar
+        cb(keyName: 'modChats',       label: 'Chats'),
+        cb(keyName: 'modIndicadores', label: 'Indicadores'),
+        cb(keyName: 'modPainel',      label: 'Configurações'),
+        cb(keyName: 'modRelatorios',  label: 'Relatórios'), // se usar
 
         section('Permissões internas (Painel)'),
-        cb(keyName: 'gerenciarParceiros',     label: 'Gerenciar Parceiros'),
         cb(keyName: 'gerenciarColaboradores', label: 'Gerenciar Colaboradores'),
-        cb(keyName: 'criarForm',              label: 'Criar Formulário'),
         cb(keyName: 'criarCampanha',          label: 'Criar Campanha'),
         cb(keyName: 'gerenciarProdutos',      label: 'Gerenciar Produtos'),
 
-        section('Outros'),
-        cb(keyName: 'leads',            label: 'Leads'),
-        cb(keyName: 'copiarTelefones',  label: 'Copiar telefones dos Leads'),
-        cb(keyName: 'executarAPIs',     label: 'Executar APIs'),
       ],
     );
   }

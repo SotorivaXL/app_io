@@ -9,6 +9,7 @@ const cors = require('cors');
 const express = require("express");
 admin.initializeApp();
 const db = admin.firestore();
+db.settings({ ignoreUndefinedProperties: true });
 const auth = admin.auth();
 const app = express();
 app.use(cors({origin: true}));
@@ -626,20 +627,103 @@ const INBOUND_TYPES = [
     "TextReceived",            // algumas contas enviam assim
 ];
 
+function normalizeDigits(s) {
+    return String(s || '').replace(/\D/g, '');
+}
+
+// gera variações BR e também com/sem 55
+function buildPhoneCandidates(phoneDigits) {
+    const digits = normalizeDigits(phoneDigits);
+    const candidates = new Set();
+    if (!digits) return [];
+
+    // bruto
+    candidates.add(digits);
+
+    // com/sem 55
+    if (digits.startsWith('55')) {
+        candidates.add(digits.slice(2)); // sem 55
+    } else if (digits.length >= 10 && digits.length <= 11) {
+        candidates.add('55' + digits);   // com 55
+    }
+
+    // aplicar regra do "9" após DDD (para qualquer versão que tenha 55+DDD...)
+    const snapshot = [...candidates];
+    for (const d of snapshot) {
+        const dd = normalizeDigits(d);
+
+        // tenta tanto com 55 quanto sem 55, mas a regra BR mais confiável é com 55 + DDD
+        const with55 = dd.startsWith('55') ? dd : (dd.length >= 10 && dd.length <= 11 ? '55' + dd : null);
+        if (!with55) continue;
+
+        // 55 + DDD (2) + resto (8 ou 9)
+        if (with55.length >= 12) {
+            const base = with55.slice(0, 4); // 55 + DDD
+            const rest = with55.slice(4);
+
+            // se 9 dígitos e começa com 9 → tenta sem 9
+            if (rest.length === 9 && rest[0] === '9') {
+                candidates.add(base + rest.slice(1));
+                candidates.add((base + rest.slice(1)).slice(2)); // também sem 55
+            }
+
+            // se 8 dígitos → tenta com 9
+            if (rest.length === 8) {
+                candidates.add(base + '9' + rest);
+                candidates.add((base + '9' + rest).slice(2)); // também sem 55
+            }
+        }
+    }
+
+    return [...candidates];
+}
+
 // ───── lookup a partir do número que chega no webhook ─────
 async function getPhoneCtxByNumber(phoneDigits) {
-    const snap = await db
-        .collectionGroup('phones')
-        .where('phoneId', '==', phoneDigits)     // ✅  NÃO usa documentId()
-        .limit(1)
-        .get();
+    const variants = buildPhoneCandidates(phoneDigits);
 
-    if (snap.empty) throw new Error(`Número ${phoneDigits} não cadastrado`);
+    for (const candidate of variants) {
+        const snap = await db
+            .collectionGroup('phones')
+            .where('phoneId', '==', candidate)     // NÃO usa documentId()
+            .limit(1)
+            .get();
 
-    const phoneDoc  = snap.docs[0];
-    const empresaId = phoneDoc.ref.path.split('/')[1]; // empresas/{empresaId}/phones/…
+        if (!snap.empty) {
+            const phoneDoc  = snap.docs[0];
+            const empresaId = phoneDoc.ref.path.split('/')[1]; // empresas/{empresaId}/phones/…
+            return { empresaId, phoneDoc };
+        }
+    }
 
-    return { empresaId, phoneDoc };
+    throw new Error(`Número ${phoneDigits} não cadastrado`);
+}
+
+// ───── resolve o chatId (reaproveita chat existente) ─────
+async function resolveChatIdForNumber({ empresaId, phoneId, phoneDigits }) {
+    const digits = String(phoneDigits || '').replace(/\D/g, '');
+    const candidates = buildPhoneCandidates(digits);
+
+    const base = db
+        .collection('empresas').doc(empresaId)
+        .collection('phones').doc(phoneId)
+        .collection('whatsappChats');
+
+    // 1) Prioriza chats já no padrão "<número>@s.whatsapp.net"
+    for (const cand of candidates) {
+        const jidId = `${cand}@s.whatsapp.net`;
+        const snap = await base.doc(jidId).get();
+        if (snap.exists) return jidId;
+    }
+
+    // 2) Depois tenta chats antigos só com dígitos ("55469910...")
+    for (const cand of candidates) {
+        const snap = await base.doc(cand).get();
+        if (snap.exists) return cand;
+    }
+
+    // 3) Se não existe, criaremos um NOVO chatId padrão com @s.whatsapp.net
+    return `${digits}@s.whatsapp.net`;
 }
 
 // SUBSTITUA a função atual
@@ -675,140 +759,133 @@ function getChatRefs(empresaId, phoneId, chatId) {
 
 exports.zApiWebhook = onRequest(async (req, res) => {
     try {
-        logger.info("Recebido webhook da Z-API:", req.body);
+        res.set('Access-Control-Allow-Origin', '*');
+        res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.set('Access-Control-Allow-Headers', 'Content-Type');
+        if (req.method === 'OPTIONS') return res.status(204).send('');
+
         const data = req.body;
 
-        /** ───────────────────────────────────────────────────────────
-         *  0. Helpers locais
-         *  ────────────────────────────────────────────────────────── */
-        const digits = (n) => (n || '').toString().replace(/\D/g, '');
+        /** ───────────────────────────────
+         *  ignore callbacks / sanity checks
+         *  ─────────────────────────────── */
+        if (!data || typeof data !== 'object') return res.status(200).send('OK');
+        if (!data.phone && !data.participantPhone) return res.status(200).send('OK');
 
-        /** ═════════ 1. ACK de leitura ══════════════════════════════ */
-        if (data?.ack === 'read' && data.id) {
-            const digits = (n) => (n || '').toString().replace(/\D/g, '');
-            const clientDigits    = digits(data.phone);            // número do cliente
-            const serverDigits    = digits(data.connectedPhone);   // seu número-empresa
-            const zapiId          = data.id;
+        const INBOUND_TYPES = new Set([
+            'ReceivedCallback',
+            'ReceivedCallbackChat',
+            'ReceivedCallbackAudio',
+            'ReceivedCallbackImage',
+            'ReceivedCallbackVideo',
+            'ReceivedCallbackSticker',
+        ]);
 
-            let empresaId, phoneDoc;
-            try {
-                if (serverDigits) {
-                    ({ empresaId, phoneDoc } = await getPhoneCtxByNumber(serverDigits));
-                } else {
-                    ({ empresaId, phoneDoc } = await getPhoneCtxByInstance(data.instanceId));
-                }
-            } catch (e) {
-                logger.error('ACK read: não foi possível identificar phoneDoc', e);
-                return res.status(200).send('ACK ignorado (sem contexto)');
-            }
+        if (!INBOUND_TYPES.has(data.type)) return res.status(200).send('OK');
 
-            const phoneId = phoneDoc.id; // ex.: 554691395827 (SEU número)
-            const { chatDocRef, msgsColRef } = getChatRefs(
-                empresaId,
-                phoneId,
-                clientDigits + '@s.whatsapp.net',
-            );
+        // normaliza números
+        const remoteDigits = String(data.participantPhone || data.phone || '').replace(/\D/g, '');
+        const serverDigits = String(data.connectedPhone || data.instanceId || '').replace(/\D/g, '');
 
-            const snap  = await msgsColRef.where('zapiId','==', zapiId).get();
-            const batch = admin.firestore().batch();
-            snap.docs.forEach(d => batch.set(d.ref, { read: true, status: 'read' }, { merge: true }));
-            await batch.commit();
+        if (!remoteDigits) return res.status(200).send('OK');
 
-            return res.status(200).send('ACK de leitura processado');
+        // tenta achar phoneDoc pelo instanceId, se falhar cai pra busca por número do server
+        let empresaId, phoneDoc;
+        try {
+            ({ empresaId, phoneDoc } = await getPhoneCtxByInstance(String(data.instanceId || '')));
+        } catch (e) {
+            if (!serverDigits) throw e;
+            ({ empresaId, phoneDoc } = await getPhoneCtxByNumber(serverDigits));
         }
 
-        /* ───── 2. Callback de mensagem recebida ───── */
-        if (INBOUND_TYPES.includes(String(data?.type))) {
-            const digits = (n) => (n || '').toString().replace(/\D/g, '');
-            const remoteDigits = digits(data.phone);
-            const serverDigits = digits(data.connectedPhone);
-            const chatId       = remoteDigits + '@s.whatsapp.net';
+        const phoneId = phoneDoc.id;
 
-            let empresaId, phoneDoc;
-            try {
-                ({ empresaId, phoneDoc } = await getPhoneCtxByInstance(data.instanceId));
-            } catch (e) {
-                if (!serverDigits) throw e;
-                ({ empresaId, phoneDoc } = await getPhoneCtxByNumber(serverDigits));
+        // resolve o chatId real (reaproveita se já existir, com ou sem 9, com ou sem @)
+        const chatId = await resolveChatIdForNumber({
+            empresaId,
+            phoneId,
+            phoneDigits: remoteDigits,
+        });
+
+        const chatName = data.chatName || data.senderName || remoteDigits;
+        const incomingPhoto = String(data.senderPhoto || data.photo || '').trim();
+        const photoPatch = incomingPhoto
+            ? { contactPhoto: incomingPhoto, photoUpdatedAt: admin.firestore.FieldValue.serverTimestamp() }
+            : {};
+
+        // tipo + conteúdo
+        let messageContent = '';
+        let messageType    = 'text';
+        if      (data.text?.message)       { messageContent = data.text.message;       }
+        else if (data.audio?.audioUrl)     { messageContent = data.audio.audioUrl;     messageType = 'audio'; }
+        else if (data.image?.imageUrl)     { messageContent = data.image.imageUrl;     messageType = 'image'; }
+        else if (data.video?.videoUrl)     { messageContent = data.video.videoUrl;     messageType = 'video'; }
+        else if (data.sticker?.stickerUrl) { messageContent = data.sticker.stickerUrl; messageType = 'sticker'; }
+
+        const { chatDocRef, msgsColRef } = getChatRefs(empresaId, phoneId, chatId);
+
+        // 1) grava a mensagem recebida
+        await msgsColRef.doc().set({
+            content    : messageContent,
+            type       : messageType,
+            timestamp  : admin.firestore.FieldValue.serverTimestamp(),
+            fromMe     : data.fromMe === true,
+            sender     : data.participantPhone || data.phone,
+            senderName : data.senderName || '',
+            senderPhoto: data.senderPhoto || data.photo || '',
+            zapiId     : data.id || null,
+            read       : false,
+            status     : 'novo',
+            saleValue  : null,
+        });
+
+        // 2) atualiza o chat (em transação MINIMAL)
+        await admin.firestore().runTransaction(async (tx) => {
+            const snap = await tx.get(chatDocRef);
+            const cur  = snap.exists ? snap.data() : {};
+            const curStatus = cur?.status ?? 'novo';
+            const preserve = ['atendendo'];
+            const newStatus = preserve.includes(curStatus) ? curStatus : 'novo';
+
+            // histórico se estava finalizado
+            if (['concluido_com_venda', 'recusado'].includes(curStatus)) {
+                await chatDocRef.collection('history').add({
+                    status    : curStatus,
+                    saleValue : cur.saleValue ?? null,
+                    changedAt : admin.firestore.FieldValue.serverTimestamp(),
+                    updatedBy : 'system',
+                });
             }
 
-            const phoneId  = phoneDoc.id;
-            const chatName = data.chatName || data.senderName || remoteDigits;
-
-            // tipo + conteúdo
-            let messageContent = '';
-            let messageType    = 'text';
-            if      (data.text?.message)       { messageContent = data.text.message;       }
-            else if (data.audio?.audioUrl)     { messageContent = data.audio.audioUrl;     messageType = 'audio'; }
-            else if (data.image?.imageUrl)     { messageContent = data.image.imageUrl;     messageType = 'image'; }
-            else if (data.video?.videoUrl)     { messageContent = data.video.videoUrl;     messageType = 'video'; }
-            else if (data.sticker?.stickerUrl) { messageContent = data.sticker.stickerUrl; messageType = 'sticker'; }
-
-            const { chatDocRef, msgsColRef } = getChatRefs(empresaId, phoneId, chatId);
-
-            // 1) grava a mensagem recebida
-            await msgsColRef.doc().set({
-                content   : messageContent,
+            tx.set(chatDocRef, {
+                chatId,
+                arrivalAt : cur.arrivalAt ?? admin.firestore.FieldValue.serverTimestamp(),
+                name      : chatName,
+                ...photoPatch,
+                lastMessage     : messageContent,
+                lastMessageTime : new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }),
                 type      : messageType,
                 timestamp : admin.firestore.FieldValue.serverTimestamp(),
-                fromMe    : data.fromMe === true,
-                sender    : data.participantPhone || data.phone,
-                senderName: data.senderName || '',
-                senderPhoto: data.senderPhoto || data.photo || '',
-                zapiId    : data.id || null,
-                read      : false,
-                status    : 'novo',
-                saleValue : null,
+                status    : newStatus,
+                saleValue : newStatus === 'novo' ? null : (cur.saleValue ?? null),
+                ...(data.fromMe ? {} : { unreadCount: admin.firestore.FieldValue.increment(1) }),
+            }, { merge: true });
+        });
+
+        // 3) bot fora da transação
+        try {
+            logger.info('[zApiWebhook] chamando maybeHandleByBot', {
+                empresaId, phoneId, chatId, messageType, contentPreview: String(messageContent || '').slice(0, 120)
             });
-
-            // 2) atualiza o chat (em transação MINIMAL)
-            await admin.firestore().runTransaction(async (tx) => {
-                const snap = await tx.get(chatDocRef);
-                const cur  = snap.exists ? snap.data() : {};
-                const curStatus = cur?.status ?? 'novo';
-                const preserve = ['atendendo'];
-                const newStatus = preserve.includes(curStatus) ? curStatus : 'novo';
-
-                // histórico se estava finalizado
-                if (['concluido_com_venda', 'recusado'].includes(curStatus)) {
-                    await chatDocRef.collection('history').add({
-                        status   : curStatus,
-                        saleValue: cur.saleValue ?? null,
-                        changedAt: admin.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: 'system',
-                    });
-                }
-
-                tx.set(chatDocRef, {
-                    chatId,
-                    arrivalAt : cur.arrivalAt ?? admin.firestore.FieldValue.serverTimestamp(),
-                    name         : chatName,
-                    contactPhoto : data.senderPhoto || data.photo || '',
-                    lastMessage  : messageContent,
-                    lastMessageTime : new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
-                    type       : messageType,
-                    timestamp  : admin.firestore.FieldValue.serverTimestamp(),
-                    status     : newStatus,
-                    saleValue  : newStatus === 'novo' ? null : cur.saleValue ?? null,
-                    ...(data.fromMe ? {} : { unreadCount: admin.firestore.FieldValue.increment(1) }),
-                }, { merge: true });
-            });
-
-            // 3) *** roda o bot FORA da transação ***
-            try {
-                logger.info('[zApiWebhook] chamando maybeHandleByBot', {
-                    empresaId, phoneId, chatId, messageType, contentPreview: String(messageContent||'').slice(0,120)
-                });
-                await maybeHandleByBot({ empresaId, phoneDoc, chatId, messageContent });
-            } catch (e) {
-                logger.error('Bot handler falhou', e);
-            }
+            await maybeHandleByBot({ empresaId, phoneDoc, chatId, messageContent });
+        } catch (e) {
+            logger.error('Bot handler falhou', e);
         }
 
         return res.status(200).send('OK');
     } catch (error) {
         logger.error('Erro no webhook Z-API:', error);
-        /** devolvemos 200 mesmo em erro para não bloquear a Z-API */
+        // devolvemos 200 mesmo em erro para não bloquear a Z-API
         return res.status(200).send('Erro interno, mas ACK enviado');
     }
 });
@@ -827,7 +904,12 @@ exports.sendMessage = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req, res) =>
     if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
 
     try {
-        const { empresaId, phoneId, chatId, message, fileType, fileData, clientMessageId } = req.body;
+        const { empresaId, phoneId, chatId, message, caption, fileType, fileData, clientMessageId } = req.body;
+
+        const finalCaption = (typeof caption === 'string' ? caption : (typeof message === 'string' ? message : '')).trim();
+
+        const viewOnce = req.body.viewOnce === true;
+
 
         const { phoneDocRef, chatDocRef, msgsColRef } = getChatRefs(empresaId, phoneId, chatId);
 
@@ -895,7 +977,12 @@ exports.sendMessage = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req, res) =>
             if (imageData && !/^data:image\//i.test(imageData)) {
                 imageData = "data:image/jpeg;base64," + imageData;
             }
-            payload = { phone: phoneDigits, image: imageData, message: message || "" };
+            payload = {
+                phone: phoneDigits,
+                image: imageData,
+                caption: finalCaption,     // ✅ Z-API
+                viewOnce: viewOnce,        // ✅ opcional
+            };
 
         } else if (fileType === "audio") {
             endpoint = "/send-audio";
@@ -909,7 +996,33 @@ exports.sendMessage = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req, res) =>
         } else if (fileType === "video") {
             endpoint = "/send-video";
             kind = "video";
-            payload = { phone: phoneDigits, video: fileData || "", message: message || "" };
+
+            let videoData = fileData || "";
+            // ✅ padroniza base64 no formato que a Z-API costuma aceitar melhor
+            if (videoData && !/^data:video\//i.test(videoData)) {
+                videoData = "data:video/mp4;base64," + videoData;
+            }
+
+            payload = {
+                phone: phoneDigits,
+                video: videoData,
+                caption: finalCaption,     // ✅ Z-API
+                viewOnce: viewOnce,        // ✅ opcional
+            };
+
+        } else if (fileType === "file" || fileType === "document") {
+            endpoint = "/send-document";
+            kind = "file";
+
+            const fileName = req.body.fileName || "arquivo";
+            let docData = fileData || "";
+
+            // data uri genérico (serve pra pdf/docx/xlsx etc)
+            if (docData && !/^data:/i.test(docData)) {
+                docData = "data:application/octet-stream;base64," + docData;
+            }
+
+            payload = { phone: phoneDigits, document: docData, fileName, caption: finalCaption };
 
         } else {
             endpoint = "/send-text";
@@ -938,6 +1051,76 @@ exports.sendMessage = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req, res) =>
         const zMsgId =
             zData.messageId || zData.msgId || zData.id || zData.zaapId || null;
 
+        let contentToStore = (kind === 'text') ? (message || '') : '';
+        let mediaMeta = null;
+
+        if (kind !== 'text') {
+            // Para vídeo/áudio/documento: SEMPRE Storage
+            // Para imagem você pode decidir por tamanho, mas pode padronizar também
+            const upload = await uploadBase64ToStorage({
+                empresaId,
+                phoneId,
+                chatId,
+                uniqueId,
+                kind,
+                data: fileType === 'video'
+                    ? (payload.video)         // já está "data:video/mp4;base64,..."
+                    : fileType === 'audio'
+                        ? (payload.audio)
+                        : (fileType === 'file' || fileType === 'document')
+                            ? (payload.document)
+                            : (payload.image),
+                fileName: req.body.fileName || null,
+                defaultMime:
+                    fileType === 'video' ? 'video/mp4' :
+                        fileType === 'audio' ? 'audio/mp4' :
+                            (fileType === 'file' || fileType === 'document') ? 'application/octet-stream' :
+                                'image/jpeg'
+            });
+
+            contentToStore = upload.url;
+
+            let thumbUrl = null;
+            let thumbMeta = null;
+
+            if (req.body.thumbData) {
+                let t = String(req.body.thumbData || '');
+                // se vier só base64, prefixa data-uri
+                if (t && !/^data:image\//i.test(t)) {
+                    const mime = String(req.body.thumbMime || 'image/jpeg');
+                    t = `data:${mime};base64,${t}`;
+                }
+
+                const thumbUp = await uploadBase64ToStorage({
+                    empresaId,
+                    phoneId,
+                    chatId,
+                    uniqueId,
+                    kind: 'video_thumb',
+                    data: t,
+                    fileName: 'thumb.jpg',
+                    defaultMime: String(req.body.thumbMime || 'image/jpeg'),
+                });
+
+                thumbUrl = thumbUp.url;
+                thumbMeta = {
+                    thumbUrl: thumbUp.url,
+                    thumbMime: thumbUp.contentType,
+                    thumbSizeBytes: thumbUp.sizeBytes,
+                    thumbStoragePath: thumbUp.path,
+                };
+            }
+
+            mediaMeta = {
+                url: upload.url,
+                mime: upload.contentType,
+                sizeBytes: upload.sizeBytes,
+                fileName: upload.fileName,
+                storagePath: upload.path,
+                ...(thumbMeta ? thumbMeta : {}),
+            };
+        }
+
         // Monta doc Firestore
         const firestoreData = {
             timestamp       : admin.firestore.FieldValue.serverTimestamp(),
@@ -945,18 +1128,24 @@ exports.sendMessage = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req, res) =>
             sender          : zData.sender || null,
             clientMessageId : uniqueId,
             zapiId          : zMsgId,
-            status          : 'sent',         // delivered/read virão via webhook
+            status          : 'sent',
             read            : false,
             type            : kind,
-            content         : (kind === 'text') ? (message || '') : (fileData || ''),
-            ...(kind !== 'text' ? { caption: message || '' } : {})
+            content         : contentToStore, // URL (mídia) ou texto
         };
+
+        if (kind !== 'text') {
+            firestoreData.caption = finalCaption;
+            firestoreData.media   = mediaMeta;
+        }
 
         await msgsColRef.add(firestoreData);
 
         await chatDocRef.set({
             chatId,
-            lastMessage: (kind !== "text" && message) ? message : firestoreData.content,
+            lastMessage: kind === 'text'
+                ? (message || '')
+                : (finalCaption ? finalCaption : (kind === 'video' ? '📹 Vídeo' : kind === 'audio' ? '🎤 Áudio' : '📎 Arquivo')),
             lastMessageTime: admin.firestore.FieldValue.serverTimestamp(),
             type: kind,
             timestamp: admin.firestore.FieldValue.serverTimestamp(),
@@ -964,12 +1153,19 @@ exports.sendMessage = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req, res) =>
 
         return res.status(200).send(zData);
     } catch (error) {
-        logger.error("Erro ao enviar mensagem", {
-            status: error?.status || error?.response?.status,
-            body: error?.data || error?.response?.data || error?.message
+        const status = error?.status || error?.response?.status || 500;
+        const data = error?.data || error?.response?.data;
+
+        logger.error("sendMessage failed", {
+            status,
+            message: String(error?.message || error),
+            code: error?.code || null,
+            dataPreview: typeof data === 'string'
+                ? data.slice(0, 500)
+                : (data ? JSON.stringify(data).slice(0, 500) : null),
         });
-        return res.status(error?.status || error?.response?.status || 500)
-            .send(error?.data || error?.response?.data || error.toString());
+
+        return res.status(status).send(data || String(error));
     }
 });
 
@@ -1026,16 +1222,18 @@ exports.createChat_v2 = onRequest(
         } = req.body || {};
 
         /* 2) Valida presença */
-        if (!rawPhone)
+        if (!rawPhone) {
             return res.status(400).json({ error: "Parâmetro phone ausente" });
+        }
 
-        /* 3) Sanitiza */
-        const phone = rawPhone.replace(/\D/g, '');
-        if (!/^\d{10,15}$/.test(phone))
+        /* 3) Sanitiza (só dígitos) */
+        const phoneDigits = String(rawPhone).replace(/\D/g, '');
+        if (!/^\d{10,15}$/.test(phoneDigits)) {
             return res.status(400).json({ error: "Parâmetro 'phone' inválido" });
+        }
 
         /* 4) Busca credenciais do número da empresa */
-        const { phoneDocRef } = getChatRefs(empresaId, phoneId, phoneId); // ← ADICIONE ESTA LINHA
+        const { phoneDocRef } = getChatRefs(empresaId, phoneId, phoneId);
         const phoneData = (await phoneDocRef.get()).data() || {};
         const ZAPI_ID           = decryptIfNeeded(phoneData.instanceId)  || process.env.ZAPI_ID;
         const ZAPI_TOKEN        = decryptIfNeeded(phoneData.token)       || process.env.ZAPI_TOKEN;
@@ -1046,15 +1244,92 @@ exports.createChat_v2 = onRequest(
         }
 
         try {
-            const url = `https://api.z-api.io/instances/${ZAPI_ID}/token/${ZAPI_TOKEN}/createChat`;
-            const headers = { 'Content-Type': 'application/json', 'Client-Token': ZAPI_CLIENT_TOKEN };
+            // ✅ 0) resolve o chatId correto (reaproveita chat existente com/sem 9)
+            const resolvedChatId = await resolveChatIdForNumber({
+                empresaId,
+                phoneId,
+                phoneDigits, // número digitado (pode vir com 9 extra)
+            });
 
-            const zRes = await axios.post(url, { phone }, { headers });
-            logger.info('Status Z-API:', zRes.status, zRes.data);
+            // dígitos canônicos que vamos usar na Z-API (sem @ e sem variações)
+            const canonicalDigits = String(resolvedChatId)
+                .replace('@s.whatsapp.net', '')
+                .replace(/\D/g, '');
 
-            return res.status(200).json({ status: 'success', data: zRes.data });
+            // ✅ 1) se já existe chat no Firestore, NÃO cria outro — só devolve ele pro app abrir histórico
+            const { chatDocRef } = getChatRefs(empresaId, phoneId, resolvedChatId);
+            const existingSnap = await chatDocRef.get();
+
+            if (existingSnap.exists) {
+                const existing = existingSnap.data() || {};
+                return res.status(200).json({
+                    status: 'success',
+                    existing: true,
+                    phoneDigits: canonicalDigits,
+                    contactName: existing.name || existing.chatName || canonicalDigits,
+                    contactPhoto: existing.contactPhoto || '',
+                    chatId: resolvedChatId, // ✅ o doc que já existe
+                });
+            }
+
+            // daqui pra baixo: chat não existe ainda → pode chamar Z-API pra buscar nome/foto
+            const baseUrl = 'https://api.z-api.io/instances';
+            const headers = {
+                'Content-Type': 'application/json',
+                'Client-Token': ZAPI_CLIENT_TOKEN,
+            };
+
+            // 2) cria o chat na Z-API (use o canonicalDigits)
+            const createUrl = `${baseUrl}/${encodeURIComponent(ZAPI_ID)}/token/${encodeURIComponent(ZAPI_TOKEN)}/createChat`;
+            const zRes = await axios.post(createUrl, { phone: canonicalDigits }, { headers });
+            logger.info('Status Z-API /createChat:', zRes.status, zRes.data);
+
+            const zData = zRes.data || {};
+
+            // 3) tenta buscar foto do contato (use canonicalDigits)
+            let contactPhoto = '';
+            try {
+                const photoUrl = `${baseUrl}/${encodeURIComponent(ZAPI_ID)}/token/${encodeURIComponent(ZAPI_TOKEN)}/contacts/profile-picture/${canonicalDigits}`;
+                const photoRes = await axios.get(photoUrl, { headers, timeout: 15000 });
+
+                contactPhoto = String(
+                    photoRes?.data?.profilePic ??
+                    photoRes?.data?.profilePicture ??
+                    photoRes?.data?.profile_picture ??
+                    ''
+                ).trim();
+            } catch (errPhoto) {
+                logger.warn('createChat_v2: falha ao buscar foto do contato', {
+                    status: errPhoto?.response?.status,
+                    data: errPhoto?.response?.data || errPhoto?.message,
+                });
+            }
+
+            // 4) nome (fallback)
+            let contactName = canonicalDigits;
+            const rawName =
+                zData.contactName ||
+                zData.pushname    ||
+                zData.chatName    ||
+                zData.name        ||
+                null;
+
+            if (rawName && typeof rawName === 'string' && rawName.trim()) {
+                contactName = rawName.trim();
+            }
+
+            // ✅ 5) chatId FINAL deve ser o resolvedChatId (não o phoneDigits digitado)
+            return res.status(200).json({
+                status: 'success',
+                existing: false,
+                data: zData,
+                phoneDigits: canonicalDigits,
+                contactName,
+                contactPhoto,
+                chatId: resolvedChatId,
+            });
         } catch (err) {
-            logger.error('Z-API erro', err.response?.status, err.response?.data);
+            logger.error('Z-API erro em createChat_v2', err.response?.status, err.response?.data);
             return res.status(err.response?.status || 500).json({
                 status: 'error',
                 message: err.response?.data || err.message,
@@ -1193,7 +1468,7 @@ exports.getConnectionStatus = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req,
 const MAX_PHOTO_AGE_HOURS = 4;                      // ↺ a cada 4 h
 const MAX_PHOTO_AGE_MS    = MAX_PHOTO_AGE_HOURS * 3600 * 1_000;
 
-exports.updateContactPhotos = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req,res)=>{
+exports.updateContactPhotos = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req, res) => {
     /* ──────────────────────────── 1. CORS ───────────────────────────── */
     res.set('Access-Control-Allow-Origin',  '*');
     res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -1212,11 +1487,14 @@ exports.updateContactPhotos = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req,
         if (!phoneSnap.exists) throw new Error('Documento do phone não encontrado');
 
         const { instanceId, token, clientToken } = phoneSnap.data() || {};
+
+        // Se no seu Firestore estiver em plaintext, decryptIfNeeded devolve como está.
         const plain = {
-            instanceId : (instanceId),
-            token      : (token),
-            clientToken: (clientToken),
+            instanceId: decryptIfNeeded(instanceId, 'instanceId'),
+            token: decryptIfNeeded(token, 'token'),
+            clientToken: decryptIfNeeded(clientToken, 'clientToken'),
         };
+
         if (!plain.instanceId || !plain.token || !plain.clientToken) {
             throw new Error('Credenciais Z-API ausentes no documento phone');
         }
@@ -1226,43 +1504,66 @@ exports.updateContactPhotos = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req,
             .collection(`empresas/${empresaId}/phones/${phoneId}/whatsappChats`)
             .get();
 
+        const enc = encodeURIComponent;
         const toUpdate = [];
 
         for (const chatDoc of chatsSnap.docs) {
-            const chatData    = chatDoc.data() || {};
-            const phoneDigits = chatDoc.id.replace(/\D/g, '');   // 55…
+            const chatData = chatDoc.data() || {};
+            const phoneDigits = String(chatDoc.id || '').replace(/\D/g, ''); // 55...
+
+            if (!phoneDigits) continue;
 
             /* ---- 4.1 checa “idade” do avatar ---- */
             const lastMillis = chatData.photoUpdatedAt?.toMillis?.() || 0;
-            if (Date.now() - lastMillis < MAX_PHOTO_AGE_MS) continue;   // ainda fresco
+            if (Date.now() - lastMillis < MAX_PHOTO_AGE_MS) continue; // ainda fresco
 
-            /* ---- 4.2 consulta Z‑API ---- */
-            const zUrl = `https://api.z-api.io/instances/${plain.instanceId}/token/${plain.token}/contacts/profile-picture/${phoneDigits}`;
+            /* ---- 4.2 consulta Z-API (com fallback de host) ---- */
+            let newPhoto = '';
+            let gotAnswer = false;
 
-            try {
-                const zRes = await axios.get(zUrl, { headers: { 'Client-Token': plain.clientToken } });
-                const newPhoto = zRes.data.profilePic || '';   // ajuste se response diferente
+            for (const host of ZAPI_HOSTS) {
+                const zUrl = `${host}/instances/${enc(plain.instanceId)}/token/${enc(plain.token)}/contacts/profile-picture/${phoneDigits}`;
 
-                // Sempre grava photoUpdatedAt – mesmo que o link seja o mesmo
-                const payload = newPhoto
-                    ? { contactPhoto: newPhoto, photoUpdatedAt: admin.firestore.FieldValue.serverTimestamp() }
-                    : { contactPhoto: admin.firestore.FieldValue.delete(), photoUpdatedAt: admin.firestore.FieldValue.serverTimestamp() };
+                try {
+                    const zRes = await axios.get(zUrl, {
+                        headers: { 'Client-Token': plain.clientToken },
+                        timeout: 15000,
+                    });
 
-                toUpdate.push(chatDoc.ref.set(payload, { merge: true }));
-            } catch (zErr) {
-                if (zErr.response?.status === 404) {
-                    // contato sem foto: remove campo e marca timestamp
-                    toUpdate.push(
-                        chatDoc.ref.set(
-                            { contactPhoto: admin.firestore.FieldValue.delete(),
-                                photoUpdatedAt: admin.firestore.FieldValue.serverTimestamp() },
-                            { merge: true }
-                        )
-                    );
-                } else {
-                    console.error(`updateContactPhotos · erro no nº ${phoneDigits}`, zErr.response?.data || zErr);
+                    newPhoto = String(
+                        zRes?.data?.profilePic ??
+                        zRes?.data?.profilePicture ??
+                        zRes?.data?.profile_picture ??
+                        ''
+                    ).trim();
+
+                    gotAnswer = true;
+                    break;
+                } catch (zErr) {
+                    // 404 = contato sem foto (ou sem permissão/sem imagem). NÃO apague a foto já salva.
+                    if (zErr?.response?.status === 404) {
+                        gotAnswer = true;
+                        newPhoto = '';
+                        break;
+                    }
+                    continue; // tenta próximo host
                 }
             }
+
+            if (!gotAnswer) {
+                console.error(`updateContactPhotos · falhou em todos hosts p/ nº ${phoneDigits}`);
+                continue;
+            }
+
+            /* ---- 4.3 persistência (NÃO deletar contactPhoto quando vier vazio) ---- */
+            const payload = {
+                photoUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            };
+
+            // Só atualiza o campo se veio foto nova (evita “sumir” quando a Z-API responde vazio)
+            if (newPhoto) payload.contactPhoto = newPhoto;
+
+            toUpdate.push(chatDoc.ref.set(payload, { merge: true }));
         }
 
         await Promise.all(toUpdate);
@@ -1578,12 +1879,12 @@ async function executeSendStepTask({ empresaId, phoneId, chatId, phoneDoc, chatb
 
     // Tipos sem envio direto, mas com efeito na sessão:
     if (step.type === 'end') {
-         await persistSystemEventMessage({
-               empresaId, phoneId, chatId,
-               event: 'bot_end',
-               label: 'Atendimento encerrado automaticamente',
-               extra: { stepId: step.id }
-         });
+        await persistSystemEventMessage({
+            empresaId, phoneId, chatId,
+            event: 'bot_end',
+            label: 'Atendimento encerrado automaticamente',
+            extra: { stepId: step.id }
+        });
         await sessRef.set({ status: 'ended', awaitingReply: false, currentStepId: step.id, updatedAt: nowTs() }, { merge: true });
         return;
     }
@@ -1599,24 +1900,24 @@ async function executeSendStepTask({ empresaId, phoneId, chatId, phoneDoc, chatb
         }, { merge: true });
 
 
-         await persistSystemEventMessage({
-               empresaId, phoneId, chatId,
-               event: 'handoff',
-               label: 'Atendimento transferido para um atendente',
-               extra: { stepId: step.id }
-         });
+        await persistSystemEventMessage({
+            empresaId, phoneId, chatId,
+            event: 'handoff',
+            label: 'Atendimento transferido para um atendente',
+            extra: { stepId: step.id }
+        });
 
         // se quiser, pode notificar operador aqui
         // e opcionalmente avançar para step.next se existir
         if (step.next && step.next !== 'end') {
-             await enqueue({
-                   empresaId, phoneId, chatId,
-                   stepId: step.next,
-                   type: 'send_step',
-                   runAt: nowTs(),                // << instantâneo
-                   reason: 'post-handoff-next',
-                   inline: false,
-                 });
+            await enqueue({
+                empresaId, phoneId, chatId,
+                stepId: step.next,
+                type: 'send_step',
+                runAt: nowTs(),                // << instantâneo
+                reason: 'post-handoff-next',
+                inline: false,
+            });
         }
         return;
     }
@@ -1630,14 +1931,14 @@ async function executeSendStepTask({ empresaId, phoneId, chatId, phoneDoc, chatb
         // Mensagem "simples": se não tem timeout → segue automático
         if (!waitMin || waitMin <= 0) {
             if (step.next && step.next !== 'end') {
-                 await enqueue({
-                       empresaId, phoneId, chatId,
-                       stepId: step.next,
-                       type: 'send_step',
-                       runAt: nowTs(),                // << instantâneo
-                       reason: 'auto-next',
-                       inline: false,
-                     });
+                await enqueue({
+                    empresaId, phoneId, chatId,
+                    stepId: step.next,
+                    type: 'send_step',
+                    runAt: nowTs(),                // << instantâneo
+                    reason: 'auto-next',
+                    inline: false,
+                });
             } else {
                 await sessRef.set({ status: 'ended', awaitingReply: false, currentStepId: step.id, updatedAt: nowTs() }, { merge: true });
             }
@@ -1732,7 +2033,7 @@ async function handleReply({
                 awaitingReply: true,
                 currentStepId: step.id,
                 updatedAt: nowTs(),
-                }, { merge: true });
+            }, { merge: true });
             return;
         }
 
@@ -1776,13 +2077,13 @@ async function handleReply({
             return;
         }
 
-         await enqueue({
-               empresaId, phoneId, chatId,
-               stepId: nextId,
-               type: 'send_step',
-               runAt: nowTs(),                // << instantâneo
-               reason: 'on-reply-next',
-             });
+        await enqueue({
+            empresaId, phoneId, chatId,
+            stepId: nextId,
+            type: 'send_step',
+            runAt: nowTs(),                // << instantâneo
+            reason: 'on-reply-next',
+        });
     } else {
         const endStep = findStep(chatbot.steps, nextId || 'end');
         await applyStepActionsToChat({ empresaId, phoneId, chatId, step: endStep });
@@ -1818,13 +2119,13 @@ async function handleTimeout({
     }, { merge: true });
 
     if (to && to !== 'end') {
-         await enqueue({
-               empresaId, phoneId, chatId,
-               stepId: to,
-               type: 'send_step',
-               runAt: nowTs(),                // << instantâneo (o atraso já foi o timeout)
-               reason: 'on-timeout-next',
-             });
+        await enqueue({
+            empresaId, phoneId, chatId,
+            stepId: to,
+            type: 'send_step',
+            runAt: nowTs(),                // << instantâneo (o atraso já foi o timeout)
+            reason: 'on-timeout-next',
+        });
     } else {
         const endStep = findStep(chatbot.steps, to || 'end');
         await applyStepActionsToChat({ empresaId, phoneId, chatId, step: endStep });
@@ -1856,11 +2157,11 @@ async function processQueueDoc(refOrSnap) {
 
         const cur = fresh.data();
         // tolera até 5s no futuro para o onCreate pegar imediatamente
-         const runAtMs = cur.runAt.toMillis();
-         const earlySlackMs = 5000; // 5s
-         const isSend = cur.type === 'send_step';
-         const canStart = runAtMs <= Date.now() || (isSend && (runAtMs - Date.now()) <= earlySlackMs);
-         if (cur.status !== 'pending' || !canStart) return;
+        const runAtMs = cur.runAt.toMillis();
+        const earlySlackMs = 5000; // 5s
+        const isSend = cur.type === 'send_step';
+        const canStart = runAtMs <= Date.now() || (isSend && (runAtMs - Date.now()) <= earlySlackMs);
+        if (cur.status !== 'pending' || !canStart) return;
 
         tx.update(ref, {
             status: 'processing',
@@ -1997,13 +2298,13 @@ async function maybeHandleByBot({ empresaId, phoneDoc, chatId, messageContent })
         // se não está aguardando e temos currentStepId → garante continuidade
         if (!session.awaitingReply && session.currentStepId) {
             logger.info('[BOT] resume-step', { stepId: session.currentStepId });
-             await enqueue({
-                   empresaId, phoneId, chatId,
-                   stepId: session.currentStepId,
-                   type: 'send_step',
-                   runAt: nowTs(),                // << instantâneo
-                   reason: 'resume'
-             });
+            await enqueue({
+                empresaId, phoneId, chatId,
+                stepId: session.currentStepId,
+                type: 'send_step',
+                runAt: nowTs(),                // << instantâneo
+                reason: 'resume'
+            });
         }
     } catch (e) {
         logger.error('maybeHandleByBot failed', e);
@@ -2768,6 +3069,397 @@ exports.proxyReportCover = onRequest(
                 status,
                 detail: e?.message || 'fetch error',
             });
+        }
+    }
+);
+
+function digitsFromChatIdOrPhone(chatIdOrPhone) {
+    return String(chatIdOrPhone || '')
+        .replace('@s.whatsapp.net', '')
+        .replace(/\D/g, '');
+}
+
+// true se distância de edição <= 1
+function editDistanceAtMost1(a, b) {
+    a = normalizeDigits(a);
+    b = normalizeDigits(b);
+    if (a === b) return true;
+
+    const la = a.length, lb = b.length;
+    if (Math.abs(la - lb) > 1) return false;
+
+    // mesmo tamanho: no máx 1 substituição
+    if (la === lb) {
+        let mism = 0;
+        for (let i = 0; i < la; i++) {
+            if (a[i] !== b[i] && ++mism > 1) return false;
+        }
+        return true;
+    }
+
+    // tamanhos diferentes em 1: no máx 1 inserção/remoção
+    const s = la < lb ? a : b; // menor
+    const t = la < lb ? b : a; // maior
+    let i = 0, j = 0, used = false;
+
+    while (i < s.length && j < t.length) {
+        if (s[i] === t[j]) { i++; j++; continue; }
+        if (used) return false;
+        used = true;
+        j++; // pula 1 no maior (inserção/remoção)
+    }
+    return true;
+}
+
+// score aproximado (p/ debug/seleção)
+function similarityScore(a, b) {
+    a = normalizeDigits(a);
+    b = normalizeDigits(b);
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+
+    // para nosso caso, se distância <=1, é “quase igual”
+    if (editDistanceAtMost1(a, b)) {
+        return 1 - (1 / Math.max(a.length, b.length));
+    }
+    return 0;
+}
+
+async function resolveChatIdForNumber({ empresaId, phoneId, phoneDigits }) {
+    const digits = normalizeDigits(phoneDigits);
+    const candidates = buildPhoneCandidates(digits);
+
+    const baseCol = db
+        .collection('empresas').doc(empresaId)
+        .collection('phones').doc(phoneId)
+        .collection('whatsappChats');
+
+    // 1) tenta chats no padrão "<número>@s.whatsapp.net"
+    for (const cand of candidates) {
+        const jidId = `${cand}@s.whatsapp.net`;
+        const snap = await baseCol.doc(jidId).get();
+        if (snap.exists) return jidId;
+    }
+
+    // 2) tenta chats antigos só com dígitos
+    for (const cand of candidates) {
+        const snap = await baseCol.doc(cand).get();
+        if (snap.exists) return cand;
+    }
+
+    // 3) fuzzy: olha os últimos N chats (evita varrer tudo)
+    //    (se você não tem timestamp em todos, pode cair pra .limit(N) sem orderBy)
+    let recentSnap;
+    try {
+        recentSnap = await baseCol.orderBy('timestamp', 'desc').limit(250).get();
+    } catch {
+        recentSnap = await baseCol.limit(250).get();
+    }
+
+    let bestChatId = null;
+    let bestScore = 0;
+
+    for (const d of recentSnap.docs) {
+        const docDigits = digitsFromChatIdOrPhone(d.id);
+        // compara doc com todas as variações geradas
+        for (const cand of candidates) {
+            const sc = similarityScore(cand, docDigits);
+            if (sc > bestScore) {
+                bestScore = sc;
+                bestChatId = d.id;
+            }
+        }
+    }
+
+    // "99%" → para 12~13 dígitos, isso equivale a “<=1 diferença”
+    // como nosso score é 1 - 1/maxLen quando dist<=1, o corte abaixo bate ~0.92+.
+    // então usamos a REGRA REAL: editDistanceAtMost1.
+    if (bestChatId) {
+        const bestDigits = digitsFromChatIdOrPhone(bestChatId);
+        for (const cand of candidates) {
+            if (editDistanceAtMost1(cand, bestDigits)) {
+                logger.info('[resolveChatIdForNumber] fuzzy matched', {
+                    digits, bestChatId, bestDigits, candidatesCount: candidates.length
+                });
+                return bestChatId;
+            }
+        }
+    }
+
+    // 4) não existe: cria novo padrão
+    return `${digits}@s.whatsapp.net`;
+}
+
+function parseDataUri(input) {
+    const s = String(input || '');
+    const m = /^data:([^;]+);base64,(.*)$/i.exec(s);
+    if (m) return { mime: m[1], b64: m[2] };
+    return { mime: null, b64: s };
+}
+
+function getBucketName() {
+    // 1) se você configurar no initializeApp({storageBucket}), pega daqui
+    const fromApp = admin.app().options.storageBucket;
+    if (fromApp) return fromApp;
+
+    // 2) tenta FIREBASE_CONFIG (Cloud Functions geralmente tem)
+    try {
+        const cfg = JSON.parse(process.env.FIREBASE_CONFIG || '{}');
+        if (cfg.storageBucket) return cfg.storageBucket;
+    } catch (_) {}
+
+    // 3) fallback (caso você defina via env)
+    return process.env.FIREBASE_STORAGE_BUCKET || process.env.GCLOUD_STORAGE_BUCKET || null;
+}
+
+async function uploadBase64ToStorage({ empresaId, phoneId, chatId, uniqueId, kind, data, fileName, defaultMime }) {
+    const { mime, b64 } = parseDataUri(data);
+
+    const buf = Buffer.from(b64, 'base64');
+    const contentType = mime || defaultMime || 'application/octet-stream';
+
+    const safeName = (fileName || `${kind}_${uniqueId}`).replace(/[^\w.\-]+/g, '_');
+    const ext = (contentType.split('/')[1] || 'bin').split(';')[0];
+    const finalName = safeName.includes('.') ? safeName : `${safeName}.${ext}`;
+
+    const storagePath = `whatsapp/${empresaId}/${phoneId}/${chatId}/outgoing/${uniqueId}/${finalName}`;
+
+    const bucketName = getBucketName();
+    if (!bucketName) {
+        throw new Error('STORAGE_BUCKET_NOT_FOUND: configure storageBucket no initializeApp ou FIREBASE_CONFIG');
+    }
+
+    const bucket = admin.storage().bucket(bucketName);
+    const file = bucket.file(storagePath);
+
+    // token compatível com Firebase Storage download URL
+    const token = crypto.randomUUID();
+
+    await file.save(buf, {
+        resumable: false,
+        metadata: {
+            contentType,
+            metadata: {
+                firebaseStorageDownloadTokens: token,
+            },
+        },
+    });
+
+    // download URL público (com token) - não precisa signed url
+    const encodedPath = encodeURIComponent(storagePath);
+    const url = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodedPath}?alt=media&token=${token}`;
+
+    return { url, contentType, sizeBytes: buf.length, path: storagePath, fileName: finalName };
+}
+
+exports.proxyMedia = onRequest(
+    { invoker: 'public', region: 'us-central1' },
+    async (req, res) => {
+        res.set('Access-Control-Allow-Origin', '*');
+        res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.set('Access-Control-Allow-Headers', 'Content-Type');
+        if (req.method === 'OPTIONS') return res.status(204).send('');
+
+        try {
+            const url = String(req.query.url || '').trim();
+            if (!url) return res.status(400).json({ error: 'missing_url' });
+
+            const resp = await axios.get(url, {
+                responseType: 'arraybuffer',
+                timeout: 30000,
+            });
+
+            const ct = resp.headers['content-type'] || 'application/octet-stream';
+            res.set('Content-Type', ct);
+
+            // cache leve (você pode aumentar depois)
+            res.set('Cache-Control', 'public, max-age=3600');
+
+            return res.status(200).send(Buffer.from(resp.data));
+        } catch (e) {
+            const status = e?.response?.status || 502;
+            return res.status(status).json({
+                error: 'proxy_fetch_failed',
+                status,
+                detail: e?.message || 'fetch error',
+            });
+        }
+    }
+);
+
+async function callZGet(instanceId, token, path, headers = {}, timeout = 15000) {
+    let lastErr = null;
+    const enc = encodeURIComponent;
+
+    for (const host of ZAPI_HOSTS) {
+        const baseUrl = `${host}/instances/${enc(instanceId)}/token/${enc(token)}`;
+        const url = `${baseUrl}${path}`;
+
+        try {
+            const resp = await axios.get(url, {
+                headers: { ...headers },
+                timeout,
+            });
+
+            const data = resp?.data;
+            if (data && (data.error || /Unable to find matching target resource method/i.test(String(data.message || '')))) {
+                lastErr = { host, status: 404, data };
+                continue;
+            }
+            return { host, resp };
+        } catch (e) {
+            lastErr = { host, status: e?.response?.status || 500, data: e?.response?.data || e?.message };
+            continue;
+        }
+    }
+
+    const err = new Error('Z-API GET failed on all hosts');
+    err.status = lastErr?.status || 500;
+    err.data = lastErr?.data;
+    throw err;
+}
+
+const PHOTO_TTL_HOURS = 36;
+const PHOTO_TTL_MS = PHOTO_TTL_HOURS * 3600 * 1000;
+
+async function refreshOnePhone(empresaId, phoneId) {
+    const phoneSnap = await db.doc(`empresas/${empresaId}/phones/${phoneId}`).get();
+    if (!phoneSnap.exists) return;
+
+    const phoneData = phoneSnap.data() || {};
+    const instanceId  = decryptIfNeeded(phoneData.instanceId, 'instanceId');
+    const token       = decryptIfNeeded(phoneData.token, 'token');
+    const clientToken = decryptIfNeeded(phoneData.clientToken, 'clientToken');
+    if (!instanceId || !token || !clientToken) return;
+
+    const headers = { 'Client-Token': clientToken };
+
+    const chatsSnap = await db
+        .collection(`empresas/${empresaId}/phones/${phoneId}/whatsappChats`)
+        .get();
+
+    let batch = db.batch();
+    let writes = 0;
+
+    const commitBatch = async () => {
+        if (writes === 0) return;
+        await batch.commit();
+        batch = db.batch();     // ✅ reseta
+        writes = 0;
+    };
+
+    for (const chatDoc of chatsSnap.docs) {
+        const chat = chatDoc.data() || {};
+        const lastMillis = chat.photoUpdatedAt?.toMillis?.() || 0;
+
+        // ainda está “fresco”
+        if (lastMillis && (Date.now() - lastMillis) < PHOTO_TTL_MS) continue;
+
+        const phoneDigits = String(chatDoc.id).replace(/\D/g, '');
+        if (!phoneDigits) continue;
+
+        try {
+            const { resp } = await callZGet(
+                instanceId,
+                token,
+                `/profile-picture?phone=${encodeURIComponent(phoneDigits)}`,
+                headers,
+                15000
+            );
+
+            const arr = resp.data;
+            const link = Array.isArray(arr) ? (arr[0]?.link || '') : (arr?.link || '');
+            const newPhoto = String(link || '').trim();
+
+            // ✅ só grava se veio link
+            if (newPhoto) {
+                batch.set(chatDoc.ref, {
+                    contactPhoto: newPhoto,
+                    photoUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                }, { merge: true });
+                writes++;
+            } else {
+                // se veio resposta mas sem link, NÃO marca como atualizado
+                // (pra tentar de novo no próximo cron)
+                continue;
+            }
+
+            if (writes >= 450) await commitBatch(); // ✅ commit em blocos
+        } catch (e) {
+            // erro/transiente: não marca, tenta de novo no próximo cron
+            logger.warn('refreshOnePhone: falha profile-picture', {
+                empresaId, phoneId, chatId: chatDoc.id, err: e?.message
+            });
+            continue;
+        }
+    }
+
+    await commitBatch();
+}
+
+
+exports.refreshContactPhotosScheduled = onSchedule(
+    { schedule: 'every 6 hours', timeZone: 'America/Sao_Paulo', region: 'us-central1', secrets: [ZAPI_ENC_KEY] },
+    async () => {
+        const snap = await db.collectionGroup('phones').get();
+
+        // Limite de concorrência simples
+        const limit = 5;
+        const queue = [];
+
+        for (const doc of snap.docs) {
+            const parts = doc.ref.path.split('/');
+            const empresaId = parts[1];
+            const phoneId = doc.id;
+
+            queue.push(() => refreshOnePhone(empresaId, phoneId));
+
+            if (queue.length >= limit) {
+                const chunk = queue.splice(0, limit).map(fn => fn());
+                await Promise.allSettled(chunk);
+            }
+        }
+
+        if (queue.length) {
+            await Promise.allSettled(queue.map(fn => fn()));
+        }
+    }
+);
+
+exports.refreshContactPhotosNow = onRequest(
+    { secrets: [ZAPI_ENC_KEY], cors: true },
+    async (req, res) => {
+        res.set('Access-Control-Allow-Origin', '*');
+        res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.set('Access-Control-Allow-Headers', 'Content-Type');
+        if (req.method === 'OPTIONS') return res.status(204).send('');
+
+        try {
+            const { empresaId, phoneId, force = false } = req.body || {};
+            if (!empresaId || !phoneId) {
+                return res.status(400).json({ error: 'empresaId e phoneId são obrigatórios' });
+            }
+
+            if (force) {
+                // força recálculo zerando photoUpdatedAt para todos os chats do phone
+                const snap = await db
+                    .collection(`empresas/${empresaId}/phones/${phoneId}/whatsappChats`)
+                    .get();
+
+                const batch = db.batch();
+                let n = 0;
+                snap.docs.forEach((d) => {
+                    batch.set(d.ref, { photoUpdatedAt: admin.firestore.FieldValue.delete() }, { merge: true });
+                    n++;
+                });
+                if (n) await batch.commit();
+            }
+
+            await refreshOnePhone(empresaId, phoneId);
+            return res.json({ ok: true, empresaId, phoneId, forced: !!force });
+        } catch (e) {
+            logger.error('refreshContactPhotosNow error', e);
+            return res.status(500).json({ error: e?.message || String(e) });
         }
     }
 );

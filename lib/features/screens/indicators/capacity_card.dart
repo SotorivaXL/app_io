@@ -171,31 +171,45 @@ class _CapacityCardState extends State<CapacityCard> {
             for (final d in _days) _novos[d] = _pend[d] = _fins[d] = 0;
 
             /* ---- status atual ---- */
+            /* ---- status atual ---- */
             for (final c in chatSnap.data!.docs) {
-              final st = c['status'];
-              _inc(st == 'novo' ? _novos : st == 'atendendo' ? _pend : _fins,
-                  c['timestamp'] as Timestamp?);
+              final m  = (c.data() as Map<String, dynamic>? ?? {});
+              final st = (m['status'] as String?) ?? '';                // pode não existir
+              final ts = m['timestamp'] as Timestamp?;                  // pode não existir
+
+              if (st == 'novo') {
+                _inc(_novos, ts);
+              } else if (st == 'atendendo') {
+                _inc(_pend, ts);
+              } else if (st == 'concluido_com_venda' || st == 'recusado') {
+                _inc(_fins, ts);
+              } // se vier outro valor/ausente, ignora
             }
 
-            /* ---- histórico ---- */
+/* ---- histórico ---- */
             for (final c in chatSnap.data!.docs) {
               FirebaseFirestore.instance
-                  .collection('empresas')
-                  .doc(companyId)
-                  .collection('phones')
-                  .doc(phoneId)
-                  .collection('whatsappChats')
-                  .doc(c.id)
+                  .collection('empresas').doc(companyId)
+                  .collection('phones').doc(phoneId)
+                  .collection('whatsappChats').doc(c.id)
                   .collection('history')
                   .where('changedAt',
-                  isGreaterThanOrEqualTo: widget.from,
-                  isLessThanOrEqualTo: widget.to.add(const Duration(days: 1)))
+                  isGreaterThanOrEqualTo: _day(widget.from),
+                  isLessThan: _day(widget.to).add(const Duration(days: 1)))
                   .get()
                   .then((hSnap) {
                 for (final h in hSnap.docs) {
-                  final st = h['status'];
-                  _inc(st == 'novo' ? _novos : st == 'atendendo' ? _pend : _fins,
-                      h['changedAt'] as Timestamp?);
+                  final m  = (h.data() as Map<String, dynamic>? ?? {});
+                  final st = (m['status'] as String?) ?? '';
+                  final ts = m['changedAt'] as Timestamp?;
+
+                  if (st == 'novo') {
+                    _inc(_novos, ts);
+                  } else if (st == 'atendendo') {
+                    _inc(_pend, ts);
+                  } else if (st == 'concluido_com_venda' || st == 'recusado') {
+                    _inc(_fins, ts);
+                  }
                 }
                 if (mounted) setState(() {});
               });

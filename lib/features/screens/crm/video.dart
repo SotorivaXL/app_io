@@ -6,6 +6,7 @@ import 'package:video_player/video_player.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart' as cache;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class VideoPlayerPage extends StatefulWidget {
   final String videoUrl;                // mantém compatível com seu código atual
@@ -24,6 +25,9 @@ class VideoPlayerPage extends StatefulWidget {
 }
 
 class _VideoPlayerPageState extends State<VideoPlayerPage> {
+  bool _downloading = false;
+  double _downloadProgress = 0.0; // 0..1
+  StreamSubscription? _dlSub;
   VideoPlayerController? _c;
   bool _showChrome = true;
   Timer? _hideTimer;
@@ -41,6 +45,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
 
   @override
   void dispose() {
+    _dlSub?.cancel();
     _hideTimer?.cancel();
     _c?.dispose();
     if (_tempPath != null) File(_tempPath!).delete();
@@ -52,9 +57,56 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     final src = widget.videoUrl.trim();
 
     // 1) URL → usa direto
+    // 1) URL http
     if (src.startsWith('http')) {
-      _c = VideoPlayerController.networkUrl(Uri.parse(src));
+      if (kIsWeb) {
+        // Web: streaming + buffering (não vale baixar tudo)
+        _c = VideoPlayerController.networkUrl(Uri.parse(src));
+      } else {
+        // Mobile/Desktop: baixa com progresso (cache) e toca local
+        setState(() {
+          _downloading = true;
+          _downloadProgress = 0.0;
+        });
+
+        final stream = cache.DefaultCacheManager().getFileStream(
+          src,
+          withProgress: true,
+        );
+
+        File? local;
+
+        _dlSub?.cancel();
+        _dlSub = stream.listen((event) {
+          if (event is cache.DownloadProgress) {
+            final total = event.totalSize ?? 0;
+            final downloaded = event.downloaded;
+            final p = total > 0 ? (downloaded / total) : 0.0;
+
+            if (mounted) {
+              setState(() => _downloadProgress = p.clamp(0.0, 1.0));
+            }
+          } else if (event is cache.FileInfo) {
+            local = event.file;
+          }
+        });
+
+        // aguarda a stream terminar (até vir o FileInfo)
+        await _dlSub!.asFuture<void>();
+
+        if (local == null) {
+          // fallback: tenta obter arquivo pronto
+          local = await cache.DefaultCacheManager().getSingleFile(src);
+        }
+
+        if (mounted) {
+          setState(() => _downloading = false);
+        }
+
+        _c = VideoPlayerController.file(local!);
+      }
     }
+
     // 2) data URI → decode
     else if (src.startsWith('data:')) {
       final comma = src.indexOf(',');
@@ -272,6 +324,49 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
                             child: Icon(
                                 v.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
                                 size: 54, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // overlay de download/buffering
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      ignoring: true,
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 150),
+                        opacity: (_downloading || (_c?.value.isBuffering ?? false)) ? 1 : 0,
+                        child: Container(
+                          color: Colors.black.withOpacity(.35),
+                          alignment: Alignment.center,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: 42,
+                                height: 42,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 3,
+                                  value: _downloading && _downloadProgress > 0
+                                      ? _downloadProgress
+                                      : null, // indeterminado quando não há totalSize
+                                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                _downloading
+                                    ? (_downloadProgress > 0
+                                    ? 'Baixando ${(100 * _downloadProgress).round()}%'
+                                    : 'Baixando…')
+                                    : 'Carregando…',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),

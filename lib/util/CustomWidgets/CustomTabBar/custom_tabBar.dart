@@ -87,11 +87,38 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     _pageController = PageController();
     _checkBirthday();
     _listenToPermissionsChanges();
-    _showTutorialIfFirstTime();
+    // _showTutorialIfFirstTime();
+  }
+
+  void _goHome() {
+    // tenta achar a aba de Atendimentos/Chats
+    final int chatIdx = _tabs.indexWhere((t) => t.pageType == WhatsAppChats);
+    final int homeIndex = chatIdx >= 0 ? chatIdx : 0;
+
+    if (!mounted) return;
+    setState(() => _currentIndex = homeIndex);
+
+    if (_pageController.hasClients) {
+      _pageController.jumpToPage(homeIndex);
+      // Se preferir animar:
+      // _pageController.animateToPage(
+      //   homeIndex,
+      //   duration: const Duration(milliseconds: 360),
+      //   curve: Curves.easeOut,
+      // );
+    }
   }
 
   PreferredSizeWidget _buildWebTopBar({double height = 90}) {
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    // Escolhe o logo conforme o tema atual da aplicação
+    // (para seguir o modo do navegador, deixe seu MaterialApp com themeMode: ThemeMode.system)
+    final bool isDark = theme.brightness == Brightness.dark;
+    final String logoAsset = isDark
+        ? 'assets/images/icons/logoDark.png'
+        : 'assets/images/icons/logoLight.png';
 
     TextButton _tabBtn({
       required IconData icon,
@@ -105,15 +132,16 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
         label: Text(label, style: TextStyle(color: cs.onSecondary)),
         style: TextButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          minimumSize: const Size(0, 0), // deixa o botão se adaptar ao height
+          minimumSize: const Size(0, 0),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          backgroundColor: selected ? cs.onSecondary.withOpacity(.08) : Colors.transparent,
+          backgroundColor:
+          selected ? cs.onSecondary.withOpacity(.08) : Colors.transparent,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         ),
       );
     }
 
-    // altura total considerando o notch do navegador (em mobile web, por ex.)
+    // altura total considerando o notch do navegador (se necessário)
     final topSafe = MediaQuery.of(context).padding.top;
     final barHeight = height; // se quiser considerar safe: height + topSafe
 
@@ -132,7 +160,22 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
           height: barHeight,
           child: Row(
             children: [
-              Image.asset('assets/images/icons/logoDark.png', height: 24),
+              // Logo dinâmico (claro/escuro) — agora clicável para voltar à home
+              InkWell(
+                onTap: _goHome,
+                borderRadius: BorderRadius.circular(6),
+                mouseCursor: SystemMouseCursors.click,
+                child: Tooltip(
+                  message: 'Ir para a página inicial',
+                  child: Image.asset(
+                    logoAsset,          // a mesma variável que você já usa para dark/light
+                    height: 24,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    semanticLabel: 'IO Connect',
+                  ),
+                ),
+              ),
               const SizedBox(width: 40),
               Expanded(
                 child: SingleChildScrollView(
@@ -160,25 +203,6 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
             ],
           ),
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Notificações',
-            onPressed: () => _showNotificationsSidebar(context),
-            icon: const Icon(Icons.notifications_outlined),
-          ),
-          IconButton(
-            tooltip: 'Central de ajuda',
-            onPressed: () {},
-            icon: const Icon(Icons.help_outline),
-          ),
-          IconButton(
-            tooltip: 'Conta',
-            onPressed: () {},
-            icon: const Icon(Icons.account_circle_outlined),
-          ),
-          const SizedBox(width: 8),
-        ],
-        // opcional: uma “sombra” bem sutil abaixo
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: cs.onSecondary.withOpacity(.08)),
@@ -201,27 +225,27 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     _initialPageSet = true;
   }
 
-  Future<void> _showTutorialIfFirstTime() async {
-    final prefs = await SharedPreferences.getInstance();
-    final tutorialShown = prefs.getBool('tutorial_shown') ?? false;
-
-    if (!tutorialShown) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (BuildContext context) {
-            return TutorialPopup(
-              onComplete: () async {
-                await prefs.setBool('tutorial_shown', true);
-                if (mounted) Navigator.of(context).pop();
-              },
-            );
-          },
-        );
-      });
-    }
-  }
+  // Future<void> _showTutorialIfFirstTime() async {
+  //   final prefs = await SharedPreferences.getInstance();
+  //   final tutorialShown = prefs.getBool('tutorial_shown') ?? false;
+  //
+  //   if (!tutorialShown) {
+  //     WidgetsBinding.instance.addPostFrameCallback((_) {
+  //       showDialog(
+  //         context: context,
+  //         barrierDismissible: false,
+  //         builder: (BuildContext context) {
+  //           return TutorialPopup(
+  //             onComplete: () async {
+  //               await prefs.setBool('tutorial_shown', true);
+  //               if (mounted) Navigator.of(context).pop();
+  //             },
+  //           );
+  //         },
+  //       );
+  //     });
+  //   }
+  // }
 
   void _listenToPermissionsChanges() {
     final user = FirebaseAuth.instance.currentUser;
@@ -296,6 +320,15 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
       ));
     }
 
+    if ((data['modRelatorios'] ?? false) as bool) {
+      tabs.add(const TabSpec(
+        label: 'Leads',
+        icon: Icons.people,
+        page: LeadsKanbanPage(),
+        pageType: LeadsKanbanPage,
+      ));
+    }
+
     // 2) DEMAIS MÓDULOS (no meio)
     if ((data['modIndicadores'] ?? true) as bool) {
       tabs.add(const TabSpec(
@@ -306,19 +339,12 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
       ));
     }
 
-    tabs.add(const TabSpec(
-      label: 'Documentos',
-      icon: Icons.edit_document,
-      page: CompanyReportsPage(),
-      pageType: CompanyReportsPage,
-    ));
-
-    if ((data['modRelatorios'] ?? false) as bool) {
+    if ((data['modDocumentos'] ?? false) as bool) {
       tabs.add(const TabSpec(
-        label: 'Leads',
-        icon: Icons.people,
-        page: ReportsPage(),
-        pageType: ReportsPage,
+        label: 'Documentos',
+        icon: Icons.edit_document,
+        page: CompanyReportsPage(),
+        pageType: CompanyReportsPage,
       ));
     }
 
@@ -538,7 +564,6 @@ class _CustomTabBarPageState extends State<CustomTabBarPage>
     );
   }
 
-  /// Sidebar desktop usando a mesma fonte de dados (_tabs)
   Widget _buildDesktopSidebar() {
     final cs = Theme.of(context).colorScheme;
     return Container(

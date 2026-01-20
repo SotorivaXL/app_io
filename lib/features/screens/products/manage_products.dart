@@ -267,11 +267,14 @@ class _ManageProductsState extends State<ManageProducts> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Padding(
                 padding: const EdgeInsets.only(top: 35),
-                child: StreamBuilder<QuerySnapshot>(
+                child: // DESKTOP
+                StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                   stream: FirebaseFirestore.instance
                       .collection('empresas')
                       .doc(_companyId!)
                       .collection('produtos')
+                  // opcional: ordena por createdAt se existir
+                  // .orderBy('createdAt', descending: true)
                       .snapshots(),
                   builder: (_, snap) {
                     if (!snap.hasData) {
@@ -287,63 +290,49 @@ class _ManageProductsState extends State<ManageProducts> {
                       padding: const EdgeInsets.only(top: 20, left: 10, right: 10),
                       itemCount: docs.length,
                       itemBuilder: (_, i) {
-                        final d           = docs[i];
-                        final nome        = d['nome']        ?? '—';
-                        final descricao   = d['descricao']   ?? '';
-                        final url         = d['foto']        ?? '';     // ← já vem do Firestore
-                        final tipo        = d['tipo']        ?? '—';    // se quiser exibir depois
+                        final d     = docs[i];
+                        final data  = d.data(); // Map<String, dynamic>
+
+                        // ✅ Leitura segura (não lança se o campo não existir)
+                        final nome      = (data['nome']      as String?) ?? '—';
+                        final descricao = (data['descricao'] as String?) ?? '';
+                        final url       = (data['foto']      as String?) ?? '';
+                        final tipo      = (data['tipo']      as String?) ?? '—';
 
                         return Card(
                           color: cs.secondary,
                           margin: const EdgeInsets.only(bottom: 20),
                           elevation: 4,
                           child: ListTile(
-                            /* ----------  IMAGEM  ---------- */
                             leading: CircleAvatar(
-                              radius: desktop ? 30 : 25,
+                              radius: 30,
                               backgroundColor: cs.tertiary.withOpacity(.2),
-                              backgroundImage:
-                              url.isNotEmpty ? NetworkImage(url) : null,
+                              backgroundImage: url.isNotEmpty ? NetworkImage(url) : null,
                               child: url.isEmpty
-                                  ? Icon(Icons.image_not_supported,
-                                  color: cs.tertiary, size: desktop ? 30 : 24)
+                                  ? Icon(Icons.image_not_supported, color: cs.tertiary, size: 30)
                                   : null,
                             ),
-
-                            /* ----------  TÍTULO  ---------- */
                             title: Text(
                               nome,
-                              style: TextStyle(
-                                fontSize: desktop ? 18 : 16,
-                                fontWeight: FontWeight.w600,
-                                color: cs.onSecondary,
-                              ),
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: cs.onSecondary),
                             ),
-
-                            /* ----------  DESCRIÇÃO  ---------- */
                             subtitle: descricao.isNotEmpty
                                 ? Text(
                               descricao,
-                              maxLines: 1,                       // ← só 1 linha
-                              overflow: TextOverflow.ellipsis,   // ← … se passar
-                              style: TextStyle(
-                                fontSize: desktop ? 14 : 12,
-                                color: cs.onSecondary.withOpacity(.8),
-                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 14, color: cs.onSecondary.withOpacity(.8)),
                             )
                                 : null,
-
-                            /* ----------  AÇÕES  ---------- */
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
-                                  icon: Icon(Icons.edit,
-                                      color: cs.onSecondary, size: desktop ? 30 : 24),
+                                  icon: Icon(Icons.edit, color: cs.onSecondary, size: 30),
                                   onPressed: () => _pushSlide(
                                     EditProduct(
                                       prodId: d.id,
-                                      data: d.data() as Map<String, dynamic>,
+                                      data: data, // já é Map<String, dynamic>
                                     ),
                                   ),
                                 ),
@@ -358,16 +347,18 @@ class _ManageProductsState extends State<ManageProducts> {
                       },
                     );
                   },
-                ),
+                )
               ),
             ),
           ),
         )
-            : StreamBuilder<QuerySnapshot>(
+            : // MOBILE
+        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: FirebaseFirestore.instance
               .collection('empresas')
               .doc(_companyId!)
               .collection('produtos')
+          // .orderBy('createdAt', descending: true)
               .snapshots(),
           builder: (_, snap) {
             if (!snap.hasData) {
@@ -383,63 +374,48 @@ class _ManageProductsState extends State<ManageProducts> {
               padding: const EdgeInsets.only(top: 20, left: 10, right: 10),
               itemCount: docs.length,
               itemBuilder: (_, i) {
-                final d           = docs[i];
-                final nome        = d['nome']        ?? '—';
-                final descricao   = d['descricao']   ?? '';
-                final url         = d['foto']        ?? '';     // ← já vem do Firestore
-                final tipo        = d['tipo']        ?? '—';    // se quiser exibir depois
+                final d     = docs[i];
+                final data  = d.data();
+
+                final nome      = (data['nome']      as String?) ?? '—';
+                final descricao = (data['descricao'] as String?) ?? '';
+                final url       = (data['foto']      as String?) ?? '';
+                final tipo      = (data['tipo']      as String?) ?? '—';
 
                 return Card(
                   color: cs.secondary,
                   margin: const EdgeInsets.only(bottom: 20),
                   elevation: 4,
                   child: ListTile(
-                    /* ----------  IMAGEM  ---------- */
                     leading: CircleAvatar(
-                      radius: desktop ? 30 : 25,
+                      radius: 25,
                       backgroundColor: cs.tertiary.withOpacity(.2),
-                      backgroundImage:
-                      url.isNotEmpty ? NetworkImage(url) : null,
+                      backgroundImage: url.isNotEmpty ? NetworkImage(url) : null,
                       child: url.isEmpty
-                          ? Icon(Icons.image_not_supported,
-                          color: cs.tertiary, size: desktop ? 30 : 24)
+                          ? Icon(Icons.image_not_supported, color: cs.tertiary, size: 24)
                           : null,
                     ),
-
-                    /* ----------  TÍTULO  ---------- */
                     title: Text(
                       nome,
-                      style: TextStyle(
-                        fontSize: desktop ? 18 : 16,
-                        fontWeight: FontWeight.w600,
-                        color: cs.onSecondary,
-                      ),
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSecondary),
                     ),
-
-                    /* ----------  DESCRIÇÃO  ---------- */
                     subtitle: descricao.isNotEmpty
                         ? Text(
                       descricao,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: desktop ? 14 : 12,
-                        color: cs.onSecondary.withOpacity(.8),
-                      ),
+                      style: TextStyle(fontSize: 12, color: cs.onSecondary.withOpacity(.8)),
                     )
                         : null,
-
-                    /* ----------  AÇÕES  ---------- */
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: Icon(Icons.edit,
-                              color: cs.onSecondary, size: desktop ? 30 : 24),
+                          icon: Icon(Icons.edit, color: cs.onSecondary, size: 24),
                           onPressed: () => _pushSlide(
                             EditProduct(
                               prodId: d.id,
-                              data: d.data() as Map<String, dynamic>,
+                              data: data,
                             ),
                           ),
                         ),
@@ -454,7 +430,7 @@ class _ManageProductsState extends State<ManageProducts> {
               },
             );
           },
-        ),
+        )
       ),
     );
   }

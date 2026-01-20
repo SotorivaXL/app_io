@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:app_io/features/screens/crm/welcome_connect_phone.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter/services.dart';
 
 class WhatsAppChats extends StatefulWidget {
   const WhatsAppChats({Key? key}) : super(key: key);
@@ -60,6 +61,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
   ChatTab _currentTab = ChatTab.novos;
   String _searchTerm = '';
   final TextEditingController _phoneController = TextEditingController();
+  final FocusNode _phoneFocus = FocusNode();
   String _countryCode = '+55';
   StreamSubscription? _tagSub;
   final Map<String, TagItem> _tagMap = {};
@@ -96,26 +98,61 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
         : uid;
   }
 
+  Future<Map<String, dynamic>> _callCreateChatV2({
+    required String empresaId,
+    required String phoneId,
+    required String phoneDigits, // ex: 5546991073494 (com DDI)
+  }) async {
+    final url = Uri.parse('https://createchat-v2-5a3yl3wsma-uc.a.run.app'); // <- ajuste
+
+    final r = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'empresaId': empresaId,
+        'phoneId': phoneId,
+        'phone': phoneDigits,
+      }),
+    );
+
+    final body = (r.body.isNotEmpty) ? jsonDecode(r.body) : {};
+    if (r.statusCode != 200) {
+      throw Exception('createChat_v2 ${r.statusCode}: $body');
+    }
+    return (body as Map).cast<String, dynamic>();
+  }
+
+  String _ensureJid(String chatIdOrDigits) {
+    final s = chatIdOrDigits.trim();
+    return s.contains('@') ? s : '$s@s.whatsapp.net';
+  }
+
+  String _digitsFromJid(String jid) =>
+      jid.replaceAll('@s.whatsapp.net', '').replaceAll(RegExp(r'\D'), '');
+
+
   Future<void> _openChat({
     required String chatId,
     required String name,
     required String contactPhoto,
   }) async {
-    // zera não lidas
-    await FirebaseFirestore.instance
+    final ref = FirebaseFirestore.instance
         .collection('empresas')
         .doc(_companyId)
         .collection('phones')
         .doc(_phoneId)
         .collection('whatsappChats')
-        .doc(chatId)
-        .set({'unreadCount': 0, 'opened': true}, SetOptions(merge: true));
+        .doc(chatId);
+
+    await ref.set({
+      'unreadCount': 0,
+      'opened': true,
+      'chatId': chatId, // ✅ mantém consistente
+    }, SetOptions(merge: true));
 
     if (_isDesktop) {
-      // no desktop, abre embutido
       setState(() => _selected = _SelectedChat(chatId, name, contactPhoto));
     } else {
-      // no mobile, comportamento idêntico ao seu
       if (!mounted) return;
       await Navigator.push(
         context,
@@ -147,6 +184,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
   void dispose() {
     _tagSub?.cancel();
     _phoneController.dispose();
+    _phoneFocus.dispose();
     super.dispose();
   }
 
@@ -327,6 +365,18 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
     }
   }
 
+  void _clearPhoneInput() {
+    _phoneController.clear();
+    _phoneMask.clear();
+
+    // fecha teclado e remove foco de vez
+    _phoneFocus.unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    // opcional (bem efetivo em alguns Android/Windows):
+    SystemChannels.textInput.invokeMethod('TextInput.hide');
+  }
+
   Future<void> _loadIds() async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
 
@@ -402,64 +452,103 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
 
   // 3) construir o número limpo
   Future<void> _startConversation() async {
-    // ── 1. Sanitiza o número ─────────────────────────────────────────────
-    final raw = _phoneMask.getUnmaskedText(); // 11999998888
+    if (_companyId == null || _phoneId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Carregando telefone da empresa...')),
+      );
+      return;
+    }
+
+    final raw = _phoneMask.getUnmaskedText();
     if (raw.length < 10) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Número inválido')));
       return;
     }
 
-    final chatId = '${_countryCode.replaceAll(RegExp(r'\D'), '')}$raw'; // 5511…
+    final ddi = _countryCode.replaceAll(RegExp(r'\D'), '');
+    final phoneDigits = '$ddi$raw'; // ex: 5546991073494
 
-    // ── 2. Referência ao doc do chat ─────────────────────────────────────
-    final chatRef = FirebaseFirestore.instance
-        .collection('empresas')
-        .doc(_companyId)
-        .collection('phones')
-        .doc(_phoneId)
-        .collection('whatsappChats')
-        .doc(chatId);
+    try {
+      // 1) Backend resolve (com/sem 9) e tenta buscar nome/foto
+      final resp = await _callCreateChatV2(
+        empresaId: _companyId!,
+        phoneId: _phoneId!,
+        phoneDigits: phoneDigits,
+      );
 
-    final snap = await chatRef.get();
+      final resolvedChatId = _ensureJid((resp['chatId'] ?? '').toString());
+      final resolvedDigits = _digitsFromJid(resolvedChatId);
 
-    // Variáveis que serão passadas ao ChatDetail
-    String chatName = chatId;
-    String contactPhoto = '';
+      final contactName = (resp['contactName'] ?? resolvedChatId).toString();
+      final contactPhoto = (resp['contactPhoto'] ?? '').toString();
 
-    // ── 3. Se já existe, usa name/foto do Firestore ──────────────────────
-    if (snap.exists) {
-      final data = snap.data() as Map<String, dynamic>;
-      chatName = data['name'] ?? chatName;
-      contactPhoto = data['contactPhoto'] ?? '';
-    } else {
-      // Cria stub para novo chat
-      await chatRef.set({
-        'chatId': chatId,
-        'name': chatName,
-        'lastMessage': '',
-        'lastMessageTime': '',
-        'timestamp': FieldValue.serverTimestamp(),
-        'opened': false,
-        'unreadCount': 0,
-        'contactPhoto': contactPhoto,
-        'status': 'novo',
-        'saleValue': null,
-      });
-    }
+      final chatsBase = FirebaseFirestore.instance
+          .collection('empresas')
+          .doc(_companyId)
+          .collection('phones')
+          .doc(_phoneId)
+          .collection('whatsappChats');
 
-    // ── 4. Abre a tela de detalhes ───────────────────────────────────────
-    if (!mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ChatDetail(
-          chatId: chatId,
-          chatName: chatName,
-          contactPhoto: contactPhoto,
+      final jidRef = chatsBase.doc(resolvedChatId);      // padrão correto
+      final bareRef = chatsBase.doc(resolvedDigits);     // legado sem "@"
+
+      // 2) Migra legado (sem @) -> JID, se necessário
+      final jidSnap = await jidRef.get();
+      if (!jidSnap.exists) {
+        final bareSnap = await bareRef.get();
+        if (bareSnap.exists) {
+          final data = bareSnap.data() ?? {};
+          await jidRef.set({
+            ...data,
+            'chatId': resolvedChatId,
+            'waId': resolvedDigits,
+          }, SetOptions(merge: true));
+          await bareRef.delete();
+        } else {
+          // 3) Não existe nada -> cria stub (usando o ID resolvido)
+          await jidRef.set({
+            'chatId': resolvedChatId,
+            'waId': resolvedDigits,
+            'name': contactName,
+            'lastMessage': '',
+            'lastMessageTime': '',
+            'timestamp': FieldValue.serverTimestamp(),
+            'opened': false,
+            'unreadCount': 0,
+            'contactPhoto': contactPhoto,
+            'status': 'novo',
+            'saleValue': null,
+          });
+        }
+      }
+      _clearPhoneInput();
+
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatDetail(
+            chatId: resolvedChatId,
+            chatName: contactName,
+            contactPhoto: contactPhoto,
+          ),
         ),
-      ),
-    );
+      );
+
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _phoneFocus.unfocus();
+        FocusManager.instance.primaryFocus?.unfocus();
+        SystemChannels.textInput.invokeMethod('TextInput.hide');
+      });
+    } catch (e, s) {
+      debugPrint('Conversar: erro createChat_v2: $e\n$s');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao iniciar conversa: $e')),
+      );
+    }
   }
 
   Widget _actionIcon({
@@ -474,11 +563,8 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
       tooltip: tooltip,
       splashRadius: 22,
       visualDensity: VisualDensity.compact,
-      // <<< compacto
       padding: EdgeInsets.zero,
-      // <<< sem folga extra
       constraints: const BoxConstraints(
-        // <<< reduz a largura padrão (48)
         minWidth: 40,
         minHeight: 40,
       ),
@@ -961,16 +1047,26 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                 .snapshots(),
             builder: (context, snap) {
               int novosCount = 0;
+              int atendendoUnread = 0; // <<< NOVO
+
               if (snap.hasData) {
-                novosCount = snap.data!.docs.where((d) {
+                for (final d in snap.data!.docs) {
                   final map = d.data() as Map<String, dynamic>;
-                  return (map['opened'] as bool?) != true;
-                }).length;
+                  final opened = (map['opened'] as bool?) == true;
+                  final unread = (map['unreadCount'] as int?) ?? 0;
+
+                  if (!opened) {
+                    // ainda não aberto → conta em "Novos"
+                    novosCount += 1;
+                  } else if (unread > 0) {
+                    // já em atendimento e com mensagens não lidas → soma mensagens
+                    atendendoUnread += unread; // <<< NOVO
+                  }
+                }
               }
 
               return Row(
                 children: [
-                  // Abas – rolam se faltar espaço
                   Expanded(
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
@@ -979,7 +1075,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                         children: [
                           _buildTab('Novos', ChatTab.novos, badge: novosCount),
                           const SizedBox(width: 8),
-                          _buildTab('Atendendo', ChatTab.atendendo),
+                          _buildTab('Atendendo', ChatTab.atendendo, badge: atendendoUnread), // <<< NOVO
                         ],
                       ),
                     ),
@@ -1156,17 +1252,29 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                 final msg = _showArchived
                     ? 'Não há conversas concluídas'
                     : (_currentTab == ChatTab.novos
-                        ? 'Não há novos atendimentos'
-                        : 'Nenhum atendimento em andamento');
+                    ? 'Não há novos atendimentos'
+                    : 'Nenhum atendimento em andamento');
 
                 return Center(
-                  child: Text(
-                    msg,
-                    style: TextStyle(
-                      color: theme.colorScheme.onSecondary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.chat_bubble_outline,
+                        size: 56,
+                        color: theme.colorScheme.onSecondary, // <- ícone em onSecondary
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        msg,
+                        style: TextStyle(
+                          color: theme.colorScheme.onSecondary, // <- texto em onSecondary
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
                 );
               }
@@ -1183,7 +1291,8 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                       .map((id) => _tagMap[id]!)
                       .toList();
 
-                  final chatId = data['chatId'] as String? ?? '';
+                  final doc = docs[i];
+                  final chatId = doc.id;
                   final name = data['name'] as String? ?? chatId;
                   final lastMessage = data['lastMessage'] as String? ?? '';
                   final unread = data['unreadCount'] as int? ?? 0;
@@ -1277,6 +1386,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                   alignment: Alignment.center,
                   child: TextField(
                     controller: _phoneController,
+                    focusNode: _phoneFocus,
                     inputFormatters: [_phoneMask],
                     textAlign: TextAlign.center,
                     keyboardType: TextInputType.phone,
@@ -1344,26 +1454,33 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                   .snapshots(),
               builder: (context, snap) {
                 int novosCount = 0;
+                int atendendoUnread = 0; // <<< NOVO
+
                 if (snap.hasData) {
-                  novosCount = snap.data!.docs.where((d) {
+                  for (final d in snap.data!.docs) {
                     final map = d.data() as Map<String, dynamic>;
-                    return (map['opened'] as bool?) != true;
-                  }).length;
+                    final opened = (map['opened'] as bool?) == true;
+                    final unread = (map['unreadCount'] as int?) ?? 0;
+
+                    if (!opened) {
+                      novosCount += 1;
+                    } else if (unread > 0) {
+                      atendendoUnread += unread; // <<< NOVO
+                    }
+                  }
                 }
 
                 return Row(
                   children: [
-                    // Abas – rolam se faltar espaço
                     Expanded(
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         physics: const BouncingScrollPhysics(),
                         child: Row(
                           children: [
-                            _buildTab('Novos', ChatTab.novos,
-                                badge: novosCount),
+                            _buildTab('Novos', ChatTab.novos, badge: novosCount),
                             const SizedBox(width: 8),
-                            _buildTab('Atendendo', ChatTab.atendendo),
+                            _buildTab('Atendendo', ChatTab.atendendo, badge: atendendoUnread), // <<< NOVO
                           ],
                         ),
                       ),
@@ -1540,17 +1657,29 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                   final msg = _showArchived
                       ? 'Não há conversas concluídas'
                       : (_currentTab == ChatTab.novos
-                          ? 'Não há novos atendimentos'
-                          : 'Nenhum atendimento em andamento');
+                      ? 'Não há novos atendimentos'
+                      : 'Nenhum atendimento em andamento');
 
                   return Center(
-                    child: Text(
-                      msg,
-                      style: TextStyle(
-                        color: theme.colorScheme.onSecondary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.chat_bubble_outline,
+                          size: 56,
+                          color: theme.colorScheme.onSecondary, // <- ícone em onSecondary
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          msg,
+                          style: TextStyle(
+                            color: theme.colorScheme.onSecondary, // <- texto em onSecondary
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
                     ),
                   );
                 }
@@ -1567,7 +1696,8 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                         .map((id) => _tagMap[id]!)
                         .toList();
 
-                    final chatId = data['chatId'] as String? ?? '';
+                    final doc = docs[i];
+                    final chatId = doc.id;
                     final name = data['name'] as String? ?? chatId;
                     final lastMessage = data['lastMessage'] as String? ?? '';
                     final unread = data['unreadCount'] as int? ?? 0;
@@ -1720,19 +1850,26 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
     final cs = Theme.of(context).colorScheme;
 
     if (_selected == null) {
-      // tela vazia quando nada selecionado (igual WhatsApp Desktop)
       return Container(
         color: _paneBg,
         child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.chat_bubble_outline,
-                  size: 64, color: cs.onSurface.withOpacity(.3)),
+              Icon(
+                Icons.chat_bubble_outline,
+                size: 100,
+                color: cs.onSecondary, // <- ajustado
+              ),
               const SizedBox(height: 16),
-              Text('Selecione uma conversa',
-                  style: TextStyle(
-                      fontSize: 18, color: cs.onSurface.withOpacity(.6))),
+              Text(
+                'Selecione uma conversa',
+                style: TextStyle(
+                  fontSize: 22,
+                  color: cs.onSecondary, // <- ajustado
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
         ),

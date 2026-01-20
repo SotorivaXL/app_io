@@ -121,12 +121,14 @@ class _ViewChatbotFunnelPageState extends State<ViewChatbotFunnelPage> {
               ),
             ),
             const SizedBox(width: 16),
-            Text('Visualizar Chatbot',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontWeight: FontWeight.w700,
-                  color: cs.onSecondary,
-                )),
+            Text(
+              'Visualizar Chatbot',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontWeight: FontWeight.w700,
+                color: cs.onSecondary,
+              ),
+            ),
           ],
         ),
       ),
@@ -232,14 +234,14 @@ class _EdgesPainterView extends CustomPainter {
   _EdgesPainterView({
     required this.nodes,
     required this.edges,
-    required this.outAnchors,      // ⬅️ NOVO
-    required this.anchorsVersion,  // ⬅️ NOVO
+    required this.outAnchors, // ⬅️ NOVO
+    required this.anchorsVersion, // ⬅️ NOVO
   });
 
   final Map<String, FunnelNode> nodes;
   final List<LinkEdge> edges;
   final Map<String, Map<String, Offset>> outAnchors; // ⬅️ NOVO
-  final int anchorsVersion;                           // ⬅️ NOVO
+  final int anchorsVersion; // ⬅️ NOVO
 
   static const double nodeWidth = _ViewChatbotFunnelPageState.nodeWidth;
   static const double nodeHeight = _ViewChatbotFunnelPageState.baseNodeHeight;
@@ -248,11 +250,11 @@ class _EdgesPainterView extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     for (final e in edges) {
       final from = nodes[e.fromNodeId];
-      final to   = nodes[e.toNodeId];
+      final to = nodes[e.toNodeId];
       if (from == null || to == null) continue;
 
       final start = _portCenter(from, e.fromPort, isOut: true);
-      final end   = _portCenter(to, 'in', isOut: false);
+      final end = _portCenter(to, 'in', isOut: false);
 
       final dx = (end.dx - start.dx).abs();
       final c1 = Offset(start.dx + dx * .5, start.dy);
@@ -401,17 +403,24 @@ class _NodeCardViewState extends State<_NodeCardView> {
               Container(
                 decoration: BoxDecoration(
                   color: _headerColor().withOpacity(.9),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                  borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(12)),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: Row(
                   children: [
-                    Icon(_iconFor(widget.node.type), color: Colors.white),
+                    Icon(_iconFor(widget.node.type), color: cs.onSecondary),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        widget.node.title.isEmpty ? _fallbackTitle() : widget.node.title,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                        widget.node.title.isEmpty
+                            ? _fallbackTitle()
+                            : widget.node.title,
+                        style: TextStyle(
+                          color: cs.onSecondary,
+                          fontWeight: FontWeight.w700,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -438,20 +447,21 @@ class _NodeCardViewState extends State<_NodeCardView> {
       final portBox = ctx.findRenderObject() as RenderBox?;
       if (portBox == null || !portBox.attached) return Offset.zero;
       final sz = portBox.size;
-      final centerGlobal = portBox.localToGlobal(Offset(sz.width / 2, sz.height / 2));
+      final centerGlobal =
+      portBox.localToGlobal(Offset(sz.width / 2, sz.height / 2));
       return nodeBox.globalToLocal(centerGlobal); // LOCAL dentro do nó
     }
 
     final n = widget.node;
     if (n.type == NodeType.message) {
-      widget.onReportPortLocal(n.id, 'onReply',  localOf(_replyKey));
+      widget.onReportPortLocal(n.id, 'onReply', localOf(_replyKey));
       widget.onReportPortLocal(n.id, 'onTimeout', localOf(_timeoutKey));
     } else if (n.type == NodeType.menu) {
       final List opts = (n.data['options'] as List?) ?? [];
       for (final o in opts) {
-        final k   = (o['key'] ?? '1').toString();
-        final p   = 'opt:$k';
-        final gk  = _menuOptKeys[p];
+        final k = (o['key'] ?? '1').toString();
+        final p = 'opt:$k';
+        final gk = _menuOptKeys[p];
         if (gk != null) {
           widget.onReportPortLocal(n.id, p, localOf(gk));
         }
@@ -462,31 +472,46 @@ class _NodeCardViewState extends State<_NodeCardView> {
 
   Color _headerColor() {
     switch (widget.node.type) {
-      case NodeType.message: return Colors.indigo;
-      case NodeType.menu:    return Colors.blue;
-      case NodeType.handoff: return Colors.purple;
-      case NodeType.end:     return Colors.teal;
-      case NodeType.start:   return Colors.indigo;
+      case NodeType.message:
+        return Colors.indigo;
+      case NodeType.menu:
+        return Colors.blue;
+      case NodeType.handoff:
+        return Colors.purple;
+      case NodeType.end:
+        return Colors.teal;
+      case NodeType.start:
+        return Colors.indigo;
     }
   }
 
   String _fallbackTitle() {
     switch (widget.node.type) {
-      case NodeType.message: return 'Mensagem — Texto';
-      case NodeType.menu:    return 'Menu';
-      case NodeType.handoff: return 'Encerrar/Handoff';
-      case NodeType.end:     return 'Fim';
-      case NodeType.start:   return 'Início';
+      case NodeType.message:
+        return 'Mensagem — Texto';
+      case NodeType.menu:
+        return 'Menu';
+      case NodeType.handoff:
+        return 'Encerrar/Handoff';
+      case NodeType.end:
+        return 'Fim';
+      case NodeType.start:
+        return 'Início';
     }
   }
 
   IconData _iconFor(NodeType t) {
     switch (t) {
-      case NodeType.message: return Icons.sms_outlined;
-      case NodeType.menu:    return Icons.segment_outlined;
-      case NodeType.handoff: return Icons.support_agent_outlined;
-      case NodeType.end:     return Icons.stop_circle_outlined;
-      case NodeType.start:   return Icons.play_circle_outline;
+      case NodeType.message:
+        return Icons.sms_outlined;
+      case NodeType.menu:
+        return Icons.segment_outlined;
+      case NodeType.handoff:
+        return Icons.support_agent_outlined;
+      case NodeType.end:
+        return Icons.stop_circle_outlined;
+      case NodeType.start:
+        return Icons.play_circle_outline;
     }
   }
 
@@ -498,8 +523,12 @@ class _NodeCardViewState extends State<_NodeCardView> {
         color: cs.onSurface.withOpacity(.12),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Text(text,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.onSurface),
+      child: Text(
+        text,
+        style: Theme.of(context)
+            .textTheme
+            .bodyMedium
+            ?.copyWith(color: cs.onSecondary),
       ),
     );
   }
@@ -525,112 +554,151 @@ class _NodeCardViewState extends State<_NodeCardView> {
 
   Widget _body(BuildContext context, FunnelNode n) {
     switch (n.type) {
-      case NodeType.message: {
-        final cs = Theme.of(context).colorScheme;
-        final int waitValue = (n.data['waitValue'] ?? 10) as int;
-        final String waitUnit = (n.data['waitUnit'] ?? 'minutes').toString().toLowerCase();
+      case NodeType.message:
+        {
+          final cs = Theme.of(context).colorScheme;
+          final int waitValue = (n.data['waitValue'] ?? 10) as int;
+          final String waitUnit =
+          (n.data['waitUnit'] ?? 'minutes').toString().toLowerCase();
 
-        String unitLabel() {
-          switch (waitUnit) {
-            case 'hours': return waitValue == 1 ? 'hora' : 'horas';
-            case 'days':  return waitValue == 1 ? 'dia'  : 'dias';
-            default:      return waitValue == 1 ? 'minuto' : 'minutos';
+          String unitLabel() {
+            switch (waitUnit) {
+              case 'hours':
+                return waitValue == 1 ? 'hora' : 'horas';
+              case 'days':
+                return waitValue == 1 ? 'dia' : 'dias';
+              default:
+                return waitValue == 1 ? 'minuto' : 'minutos';
+            }
           }
-        }
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              '[${n.title.isEmpty ? _fallbackTitle() : n.title}]',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: cs.onSurface,
-              ),
-            ),
-            const SizedBox(height: 10),
-            _fieldBox(context, (n.data['text'] ?? '').toString()),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(child: Text('Se o contato responder',
-                    style: Theme.of(context).textTheme.bodySmall)),
-                _portDot(context, fill: Colors.green, size: 11, key: _replyKey), // ⬅️ mede
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(child: Text(
-                  'Se o contato não responder (máximo $waitValue ${unitLabel()})',
-                  style: Theme.of(context).textTheme.bodySmall,
-                )),
-                _portDot(context, fill: Colors.red, size: 11, key: _timeoutKey), // ⬅️ mede
-              ],
-            ),
-          ],
-        );
-      }
-
-      case NodeType.menu: {
-        final cs = Theme.of(context).colorScheme;
-        final String prompt = (n.data['prompt'] ?? '').toString();
-        final List opts = (n.data['options'] as List?) ?? [];
-        final int waitValue = (n.data['waitValue'] ?? 10) as int;
-        final String waitUnit = (n.data['waitUnit'] ?? 'minutes').toString().toLowerCase();
-
-        // garantir que temos keys para cada opção
-        final wanted = <String>{for (final o in opts) 'opt:${(o['key'] ?? '1')}'};
-        for (final p in wanted) { _menuOptKeys.putIfAbsent(p, () => GlobalKey()); }
-        _menuOptKeys.removeWhere((p, _) => !wanted.contains(p));
-
-        String unitLabel() {
-          switch (waitUnit) {
-            case 'hours': return waitValue == 1 ? 'hora' : 'horas';
-            case 'days':  return waitValue == 1 ? 'dia'  : 'dias';
-            default:      return waitValue == 1 ? 'minuto' : 'minutos';
-          }
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _fieldBox(context, prompt),
-            const SizedBox(height: 8),
-            ...opts.map((o) {
-              final k  = (o['key'] ?? '1').toString();
-              final lb = (o['label'] ?? 'Opção $k').toString();
-              final port = 'opt:$k';
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(child: _fieldBox(context, '• $k: $lb')),
-                    const SizedBox(width: 8),
-                    _portDot(context, fill: Colors.green, size: 11, key: _menuOptKeys[port]), // ⬅️ mede
-                  ],
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '[${n.title.isEmpty ? _fallbackTitle() : n.title}]',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSecondary,
                 ),
-              );
-            }),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Expanded(child: Text(
-                  'Se não responder (máximo $waitValue ${unitLabel()})',
-                  style: Theme.of(context).textTheme.bodySmall,
-                )),
-                _portDot(context, fill: Colors.redAccent, size: 11, key: _menuTimeoutKey), // ⬅️ mede
-              ],
-            ),
-          ],
-        );
-      }
+              ),
+              const SizedBox(height: 10),
+              _fieldBox(context, (n.data['text'] ?? '').toString()),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Se o contato responder',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: cs.onSecondary),
+                    ),
+                  ),
+                  _portDot(context,
+                      fill: Colors.green, size: 11, key: _replyKey), // mede
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Se o contato não responder (máximo $waitValue ${unitLabel()})',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: cs.onSecondary),
+                    ),
+                  ),
+                  _portDot(context,
+                      fill: Colors.red, size: 11, key: _timeoutKey), // mede
+                ],
+              ),
+            ],
+          );
+        }
+
+      case NodeType.menu:
+        {
+          final cs = Theme.of(context).colorScheme;
+          final String prompt = (n.data['prompt'] ?? '').toString();
+          final List opts = (n.data['options'] as List?) ?? [];
+          final int waitValue = (n.data['waitValue'] ?? 10) as int;
+          final String waitUnit =
+          (n.data['waitUnit'] ?? 'minutes').toString().toLowerCase();
+
+          // garantir que temos keys para cada opção
+          final wanted = <String>{for (final o in opts) 'opt:${(o['key'] ?? '1')}'};
+          for (final p in wanted) {
+            _menuOptKeys.putIfAbsent(p, () => GlobalKey());
+          }
+          _menuOptKeys.removeWhere((p, _) => !wanted.contains(p));
+
+          String unitLabel() {
+            switch (waitUnit) {
+              case 'hours':
+                return waitValue == 1 ? 'hora' : 'horas';
+              case 'days':
+                return waitValue == 1 ? 'dia' : 'dias';
+              default:
+                return waitValue == 1 ? 'minuto' : 'minutos';
+            }
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _fieldBox(context, prompt),
+              const SizedBox(height: 8),
+              ...opts.map((o) {
+                final k = (o['key'] ?? '1').toString();
+                final lb = (o['label'] ?? 'Opção $k').toString();
+                final port = 'opt:$k';
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(child: _fieldBox(context, '• $k: $lb')),
+                      const SizedBox(width: 8),
+                      _portDot(context,
+                          fill: Colors.green,
+                          size: 11,
+                          key: _menuOptKeys[port]), // mede
+                    ],
+                  ),
+                );
+              }),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Se não responder (máximo $waitValue ${unitLabel()})',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: cs.onSecondary),
+                    ),
+                  ),
+                  _portDot(context,
+                      fill: Colors.redAccent,
+                      size: 11,
+                      key: _menuTimeoutKey), // mede
+                ],
+              ),
+            ],
+          );
+        }
 
       case NodeType.handoff:
-        return _fieldBox(context, (n.data['text'] ?? 'Transferindo para atendente...').toString());
+        return _fieldBox(context,
+            (n.data['text'] ?? 'Transferindo para atendente...').toString());
       case NodeType.end:
-        return _fieldBox(context, (n.data['text'] ?? 'Encerrando atendimento...').toString());
+        return _fieldBox(context,
+            (n.data['text'] ?? 'Encerrando atendimento...').toString());
       case NodeType.start:
         return const SizedBox.shrink();
     }
@@ -658,10 +726,22 @@ class _FloatingToolbox extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(tooltip: 'Zoom +', onPressed: onZoomIn, icon: const Icon(Icons.zoom_in)),
-          IconButton(tooltip: 'Zoom −', onPressed: onZoomOut, icon: const Icon(Icons.zoom_out)),
+          IconButton(
+            tooltip: 'Zoom +',
+            onPressed: onZoomIn,
+            icon: Icon(Icons.zoom_in, color: cs.onSecondary),
+          ),
+          IconButton(
+            tooltip: 'Zoom −',
+            onPressed: onZoomOut,
+            icon: Icon(Icons.zoom_out, color: cs.onSecondary),
+          ),
           const Divider(height: 0),
-          IconButton(tooltip: 'Centralizar', onPressed: onCenter, icon: const Icon(Icons.center_focus_strong)),
+          IconButton(
+            tooltip: 'Centralizar',
+            onPressed: onCenter,
+            icon: Icon(Icons.center_focus_strong, color: cs.onSecondary),
+          ),
         ],
       ),
     );
