@@ -17,6 +17,7 @@ import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import '../chatbot/manage_chatbots.dart';
 import '../products/manage_products.dart';
 import '../requests/request_metting.dart';
+import '../requests/requests.dart';
 
 class AdminPanelPage extends StatefulWidget {
   @override
@@ -522,12 +523,12 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                           if (_isEmpresaUser)
                             _buildCardOption(
                               context,
-                              title: 'Solicitações de Reunião',
+                              title: 'Solicitações',
                               subtitle:
-                              'Solicitações de Reuniões abertas',
+                              'Solicitações abertas',
                               icon: Icons.comment,
                               onTap: () => _navigateWithFade(
-                                  context, RequestMetting()),
+                                  context, Requests()),
                               isDesktop: true,
                             ),
                           if (hasGerenciarWhatsappAccess)
@@ -568,7 +569,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                             'Encerrar sessão neste dispositivo',
                             icon: Icons.exit_to_app,
                             onTap: _showLogoutConfirmationDialog,
-                            isDesktop: false,
+                            isDesktop: true,
                           ),
                           if (!hasGerenciarParceirosAccess &&
                               !hasGerenciarColaboradoresAccess &&
@@ -678,11 +679,11 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                   if (_isEmpresaUser)
                     _buildCardOption(
                       context,
-                      title: 'Solicitações de Reunião',
-                      subtitle: 'Solicitações de Reuniões abertas',
+                      title: 'Solicitações',
+                      subtitle: 'Solicitações abertas',
                       icon: Icons.comment,
                       onTap: () =>
-                          _navigateWithFade(context, RequestMetting()),
+                          _navigateWithFade(context, Requests()),
                       isDesktop: false,
                     ),
                   if (hasGerenciarProdutosAccess)
@@ -710,7 +711,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                     subtitle: 'Encerrar sessão neste dispositivo',
                     icon: Icons.exit_to_app,
                     onTap: _showLogoutConfirmationDialog,
-                    isDesktop: false,
+                    isDesktop: true,
                   ),
                   if (!hasGerenciarParceirosAccess &&
                       !hasGerenciarColaboradoresAccess &&

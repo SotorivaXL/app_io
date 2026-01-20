@@ -989,35 +989,45 @@ class _ChatbotsList extends StatelessWidget {
                       children: [
                         PopupMenuButton<int>(
                           tooltip: 'Ações',
+                          color: cs.secondary, // fundo do menu no mesmo tom dos cards
                           icon: Icon(Icons.more_vert, color: cs.onSecondary),
                           itemBuilder: (context) => [
                             PopupMenuItem(
                               value: 1,
                               child: Row(
-                                children: const [
-                                  Icon(Icons.visibility_outlined, size: 20),
-                                  SizedBox(width: 8),
-                                  Text('Visualizar'),
+                                children: [
+                                  Icon(Icons.visibility_outlined, size: 20, color: cs.onSecondary),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Visualizar',
+                                    style: TextStyle(color: cs.onSecondary),
+                                  ),
                                 ],
                               ),
                             ),
                             PopupMenuItem(
                               value: 2,
                               child: Row(
-                                children: const [
-                                  Icon(Icons.edit_outlined, size: 20),
-                                  SizedBox(width: 8),
-                                  Text('Editar'),
+                                children: [
+                                  Icon(Icons.edit_outlined, size: 20, color: cs.onSecondary),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Editar',
+                                    style: TextStyle(color: cs.onSecondary),
+                                  ),
                                 ],
                               ),
                             ),
                             PopupMenuItem(
                               value: 3,
                               child: Row(
-                                children: const [
-                                  Icon(Icons.delete_outline, size: 20),
-                                  SizedBox(width: 8),
-                                  Text('Excluir'),
+                                children: [
+                                  Icon(Icons.delete_outline, size: 20, color: cs.onSecondary),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Excluir',
+                                    style: TextStyle(color: cs.onSecondary),
+                                  ),
                                 ],
                               ),
                             ),

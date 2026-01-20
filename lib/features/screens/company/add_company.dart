@@ -34,6 +34,7 @@ const List<String> _kPermKeys = [
   'modIndicadores',
   'modPainel',
   'modRelatorios',
+  'modDocumentos',
 ];
 
 // Defaults usados quando a chave não estiver presente
@@ -55,6 +56,7 @@ const Map<String, bool> _kPermDefaults = {
   'modIndicadores' : true,
   'modPainel'      : true,
   'modRelatorios'  : true,
+  'modDocumentos': false,
 };
 
 // Garante que todas as chaves existam como bool (sem arrays/map aninhado)
@@ -83,8 +85,8 @@ class _AddCompanyState extends State<AddCompany> {
   XFile? _selectedImage;
   Uint8List? _croppedData;
   String? _photoUrl;
-  // GlobalKey para acessar o editor do ExtendedImage
   final GlobalKey<ExtendedImageEditorState> _editorKey = GlobalKey<ExtendedImageEditorState>();
+  bool _isClienteIo = false; // false = IO Connect | true = Cliente IO
 
   // For generating a random background color when no image exists
   late Color _randomColor;
@@ -109,6 +111,7 @@ class _AddCompanyState extends State<AddCompany> {
     'modIndicadores': true,
     'modPainel': true,
     'modRelatorios': true,
+    'modDocumentos': false,
   };
 
   // Máscaras
@@ -186,7 +189,8 @@ class _AddCompanyState extends State<AddCompany> {
         ..['gerenciarParceiros'] = false
         ..['criarCampanha'] = false
         ..['criarForm'] = false
-        ..['gerenciarProdutos'] = true;
+        ..['gerenciarProdutos'] = true
+        ..['modDocumentos'] = _isClienteIo;
 
       final result = await callable.call({
         'email': _model.tfEmailTextController.text,
@@ -207,15 +211,19 @@ class _AddCompanyState extends State<AddCompany> {
       if (result.data['success'] == true) {
         final String uid = result.data['uid'] ?? "defaultUid";
 
-        // 2.1) Permissões "flat" na raiz (com defaults e garantindo gerenciarParceiros=false)
         final flatRights = _normalizeRights({
           ...accessRights,
           'gerenciarParceiros': false,
+          'modDocumentos': _isClienteIo,
         });
+
         await FirebaseFirestore.instance
             .collection('empresas')
             .doc(uid)
-            .set(flatRights, SetOptions(merge: true));
+            .set({
+          'clientType': _isClienteIo ? 'io' : 'ioconnect',
+        }, SetOptions(merge: true));
+
 
         // 2.2) Upload da imagem (avatar)
         final photoUrl = await _uploadImage(uid);
@@ -517,6 +525,42 @@ class _AddCompanyState extends State<AddCompany> {
     );
   }
 
+  Widget _buildClientTypeSwitch() {
+    final cs = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(20, 20, 20, 0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: cs.secondary,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.business_center, color: cs.tertiary, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _isClienteIo ? 'Cliente IO (com Documentos)' : 'Cliente IO Connect (sem Documentos)',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: cs.onSecondary,
+                ),
+              ),
+            ),
+            Switch(
+              value: _isClienteIo,
+              onChanged: (v) => setState(() => _isClienteIo = v),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // --------------------------
   //       BUILD
   // --------------------------
@@ -636,7 +680,7 @@ class _AddCompanyState extends State<AddCompany> {
         _buildZapiIdTextField(),
         _buildZapiTokenTextField(),
         _buildClientTokenTextField(),
-
+        _buildClientTypeSwitch(),
         _buildAddButton(),
       ],
     );

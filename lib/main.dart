@@ -1,3 +1,4 @@
+import 'package:app_io/util/kanban/in_memory_board_repository.dart';
 import 'package:http/http.dart' as http;
 import 'dart:typed_data';
 import 'package:app_io/auth/guard/auth_guard.dart';
@@ -29,6 +30,7 @@ import 'features/screens/crm/chat_detail.dart';
 import 'firebase_options.dart';
 import 'package:image/image.dart' as img;
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
+import 'package:clean_kanban/clean_kanban.dart';
 
 Future<Uint8List?> _roundAvatar(String url) async {
   final data = await _downloadBytes(url);
@@ -102,6 +104,8 @@ final List<Locale> appSupportedLocales = <Locale>{
 //
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  setupInjection(InMemoryBoardRepository());
 
   // ATT (somente iOS nativo)
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {

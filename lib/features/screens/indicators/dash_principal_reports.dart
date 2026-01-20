@@ -412,17 +412,14 @@ class _ReportsPageState extends State<IndicatorsPage> {
 
                 final docs = snap2.data!.docs;
 
-                final fila = docs.where((d) => d['status'] == 'novo').length;
-                final atendendo =
-                    docs.where((d) => d['status'] == 'atendendo').length;
-                final conclu30 = docs.where((d) {
-                  final st = d['status'];
-                  if (st != 'concluido_com_venda' && st != 'recusado')
-                    return false;
-                  final ts = (d['timestamp'] as Timestamp?)?.toDate();
-                  if (ts == null) return false;
-                  return ts.isAfter(
-                      DateTime.now().subtract(const Duration(days: 30)));
+                final fila       = docs.where((d){ final m=(d.data() as Map<String,dynamic>? ?? {}); return (m['status'] as String?)=='novo'; }).length;
+                final atendendo  = docs.where((d){ final m=(d.data() as Map<String,dynamic>? ?? {}); return (m['status'] as String?)=='atendendo'; }).length;
+                final conclu30   = docs.where((d){
+                  final m = (d.data() as Map<String,dynamic>? ?? {});
+                  final st = (m['status'] as String?) ?? '';
+                  if (st!='concluido_com_venda' && st!='recusado') return false;
+                  final ts = (m['timestamp'] as Timestamp?)?.toDate();
+                  return ts!=null && ts.isAfter(DateTime.now().subtract(const Duration(days:30)));
                 }).length;
                 final total = docs.length;
 

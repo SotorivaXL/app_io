@@ -104,71 +104,13 @@ class _CompanyReportsPageState extends State<CompanyReportsPage> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
-  // ======== Neon border util ========
-  Widget _neonBorderAround({
-    required Widget child,
-    required LinearGradient gradient,
-    double radius = 10,
-    double borderSpace = 3,
-    double blurSigma = 4,
-    double glowOpacity = .60,
-  }) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Positioned.fill(
-          child: IgnorePointer(
-            ignoring: true,
-            child: Opacity(
-              opacity: glowOpacity,
-              child: ImageFiltered(
-                imageFilter: ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-                child: Padding(
-                  padding: EdgeInsets.all(borderSpace),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: gradient,
-                      borderRadius: BorderRadius.circular(radius),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-        Positioned.fill(
-          child: Padding(
-            padding: EdgeInsets.all(borderSpace),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(radius),
-                border: Border.all(width: 1, color: const Color(0xFFFFFFFF).withOpacity(.08)),
-              ),
-            ),
-          ),
-        ),
-        Positioned.fill(
-          child: Padding(
-            padding: EdgeInsets.all(borderSpace + 1),
-            child: child,
-          ),
-        ),
-      ],
-    );
-  }
-
   // ======== Fundo liso para cards sem relatório ========
   Widget _solidCover({Color? color, IconData? icon}) {
     final cs = Theme.of(context).colorScheme;
     final bg = color ?? cs.surfaceVariant.withOpacity(.35);
     return Container(
       decoration: BoxDecoration(
-        color: bg,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [bg, bg.withOpacity(.85)],
-        ),
+        color: bg,                          // <- mantém cor lisa
         borderRadius: BorderRadius.circular(10),
       ),
       child: icon == null
@@ -256,15 +198,14 @@ class _CompanyReportsPageState extends State<CompanyReportsPage> {
       ),
     );
 
-    return _neonBorderAround(
-      gradient: LinearGradient(
-        begin: Alignment.centerLeft,
-        end: Alignment.centerRight,
-        colors: [cs.primary.withOpacity(.85), cs.tertiary.withOpacity(.85)],
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(
+          color: cs.outlineVariant.withOpacity(.25),
+          width: 1,
+        ),
       ),
-      glowOpacity: _isDesktop ? .45 : .60,   // ↓ menos brilho no desktop
-      borderSpace: _isDesktop ? 2 : 3,       // ↓ borda mais “seca” no desktop
-      radius: radius,
       child: body,
     );
   }
@@ -608,6 +549,14 @@ class _DesktopInfiniteCarouselState extends State<_DesktopInfiniteCarousel> {
     // alinhar o centro ao múltiplo de itemCount evita “quebras” visuais
     final mid = _loopSpan ~/ 2;
     _startPage = mid - (mid % widget.itemCount);
+
+    // Controller provisório para garantir render no 1º frame.
+    // Será substituído por _ensureController(vf) no build.
+    _controller = PageController(
+      viewportFraction: 1 / 3, // 3 cards por viewport como default
+      initialPage: _startPage,
+      keepPage: true,
+    );
   }
 
   @override
@@ -618,14 +567,14 @@ class _DesktopInfiniteCarouselState extends State<_DesktopInfiniteCarousel> {
 
   void _ensureController(double vf) {
     // recria o controller se o vf mudar (ex.: resize de janela)
-    if (_controller == null || _controller!.viewportFraction != vf) {
+    if (_controller == null || (_controller!.viewportFraction - vf).abs() > 0.0001) {
       _controller?.dispose();
       _controller = PageController(
         viewportFraction: vf,
         initialPage: _startPage,
         keepPage: true,
       );
-      setState(() {}); // garante rebuild com novo controller
+      // sem setState aqui para não causar "piscar"
     }
   }
 
@@ -701,17 +650,16 @@ class _DesktopInfiniteCarouselState extends State<_DesktopInfiniteCarousel> {
         child: SizedBox(
           height: bodyH,
           child: PageView.builder(
-            controller: _controller,
-            physics: const PageScrollPhysics(), // 1 card por “página”
+            controller: _controller!,                 // <- garante controller não-nulo
+            physics: const PageScrollPhysics(),       // 1 card por “página”
             padEnds: false,
             clipBehavior: Clip.hardEdge,
             itemCount: _loopSpan,
             itemBuilder: (context, i) {
               final realIndex = i % widget.itemCount;
-              // Largura exata do card dentro da página (sem exceder a página)
               return Padding(
                 padding: EdgeInsets.symmetric(horizontal: gap / 2),
-                child: Align( // garante centralização dentro da página
+                child: Align(
                   alignment: Alignment.center,
                   child: SizedBox(
                     width: cardW,
@@ -737,11 +685,10 @@ class _DesktopInfiniteCarouselState extends State<_DesktopInfiniteCarousel> {
         ),
       );
 
-      // se houver 3 ou menos, não mostra setas
-      // se houver 3 ou menos, não mostra setas
+      // Se houver 3 ou menos, não mostra setas
       if (widget.itemCount <= perScreen) return pageView;
 
-// ✅ Reserva 56px de cada lado para as setas ficarem DENTRO do Stack
+      // Reserva 56px de cada lado para as setas ficarem DENTRO do Stack
       return SizedBox(
         height: bodyH,
         child: Stack(
