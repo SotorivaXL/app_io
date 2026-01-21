@@ -3038,7 +3038,7 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
   @override
   void initState() {
     super.initState();
-    _ownsWave = widget.preloadedWave == null;
+    _ownsWave = !kIsWeb && widget.preloadedWave == null;
     _wave = widget.preloadedWave ?? aw.PlayerController();
 
     _bindPlayerStreams();
@@ -3108,9 +3108,11 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
 
     _player.dispose();
 
-    // ✅ NÃO pode dar dispose no controller do cache
-    if (_ownsWave) {
-      _wave.dispose();
+// ✅ Web: NÃO existe implementação do plugin, então não pode dispose/release
+    if (!kIsWeb && _ownsWave) {
+      try {
+        _wave.dispose();
+      } catch (_) {}
     }
 
     if (!kIsWeb && _tempPath != null) {
@@ -3212,7 +3214,7 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
         final mime = _mimeFromExt(ext);
         final dataUrl = 'data:$mime;base64,$raw';
         await _player.setUrl(dataUrl);
-        await _player.load(); // ✅ força carregar metadata/duração
+        await _player.load();
         if (mounted) {
           setState(() => _total = _player.duration ?? Duration.zero);
         }

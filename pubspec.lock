@@ -196,10 +196,9 @@ packages:
   clean_kanban:
     dependency: "direct main"
     description:
-      name: clean_kanban
-      sha256: "3db2696dfcf5b52308c46a3948b6334311b629e813939c71428243cf076503cf"
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/clean_kanban"
+      relative: true
+    source: path
     version: "0.0.6"
   cli_util:
     dependency: transitive
