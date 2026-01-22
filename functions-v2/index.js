@@ -1,6 +1,7 @@
 const {onRequest} = require("firebase-functions/v2/https");
 const {onSchedule} = require('firebase-functions/v2/scheduler');
 const { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } = require('firebase-functions/v2/firestore');
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 const functions = require("firebase-functions/v2");
 const admin = require('firebase-admin');
@@ -26,6 +27,7 @@ const AWS_REGION               = defineSecret('AWS_REGION');
 const AWS_SQS_COMPANY_QUEUE_URL= defineSecret('AWS_SQS_COMPANY_QUEUE_URL');
 const AWS_SQS_REPORTS_QUEUE_URL = defineSecret('AWS_SQS_REPORTS_QUEUE_URL');
 const ZAPI_HOSTS = ['https://api-v2.z-api.io', 'https://api.z-api.io',];
+
 
 async function callZ(instanceId, token, path, payload, headers = {}, timeout = 15000) {
     let lastErr = null;
@@ -726,7 +728,6 @@ async function resolveChatIdForNumber({ empresaId, phoneId, phoneDigits }) {
     return `${digits}@s.whatsapp.net`;
 }
 
-// SUBSTITUA a função atual
 async function getPhoneCtxByInstance(instanceIdPlain) {
     const hashed = hashInstanceId(instanceIdPlain); // normaliza + SHA-256
     const snap = await db
@@ -757,6 +758,45 @@ function getChatRefs(empresaId, phoneId, chatId) {
     };
 }
 
+// Função auxiliar para enviar status "Digitando..." (Composing)
+async function sendZApiTyping(instanceId, token, clientToken, phone) {
+    try {
+        const headers = {};
+        if (clientToken) headers['client-token'] = clientToken;
+
+        // O endpoint da Z-API para presença
+        await axios.post(
+            `https://api.z-api.io/instances/${instanceId}/token/${token}/send-presence`,
+            {
+                phone: phone,
+                presence: 'composing' // 'composing' = digitando, 'recording' = gravando audio
+            },
+            { headers }
+        );
+    } catch (error) {
+        // Não queremos travar o fluxo se isso falhar, apenas logamos um aviso
+        console.warn(`[Z-API Presence] Falha ao enviar digitando para ${phone}:`, error.message);
+    }
+}
+
+const { CloudTasksClient } = require('@google-cloud/tasks');
+
+// Inicializa o cliente do Cloud Tasks
+const tasksClient = new CloudTasksClient();
+
+// Tenta pegar o Project ID automaticamente. Se falhar, use a string fixa 'app-io-1c16f'
+const PROJECT_ID = process.env.GCLOUD_PROJECT || (process.env.FIREBASE_CONFIG ? JSON.parse(process.env.FIREBASE_CONFIG).projectId : 'app-io-1c16f');
+
+const QUEUE_LOCATION = 'us-central1';
+const QUEUE_NAME = 'gpt-buffer'; // Certifique-se que esta fila existe no GCloud
+const WORKER_FUNCTION_URL = `https://${QUEUE_LOCATION}-${PROJECT_ID}.cloudfunctions.net/gptQueueWorker`; 
+
+const DEBOUNCE_SECONDS = 10; // Tempo que o bot espera o cliente parar de digitar
+
+// =============================================================================
+// WEBHOOK Z-API (Gateway de Entrada)
+// =============================================================================
+
 exports.zApiWebhook = onRequest(async (req, res) => {
     try {
         res.set('Access-Control-Allow-Origin', '*');
@@ -766,30 +806,24 @@ exports.zApiWebhook = onRequest(async (req, res) => {
 
         const data = req.body;
 
-        /** ───────────────────────────────
-         *  ignore callbacks / sanity checks
-         *  ─────────────────────────────── */
+        // --- Sanity Checks ---
         if (!data || typeof data !== 'object') return res.status(200).send('OK');
         if (!data.phone && !data.participantPhone) return res.status(200).send('OK');
 
         const INBOUND_TYPES = new Set([
-            'ReceivedCallback',
-            'ReceivedCallbackChat',
-            'ReceivedCallbackAudio',
-            'ReceivedCallbackImage',
-            'ReceivedCallbackVideo',
-            'ReceivedCallbackSticker',
+            'ReceivedCallback', 'ReceivedCallbackChat', 'ReceivedCallbackAudio',
+            'ReceivedCallbackImage', 'ReceivedCallbackVideo', 'ReceivedCallbackSticker',
         ]);
 
         if (!INBOUND_TYPES.has(data.type)) return res.status(200).send('OK');
 
-        // normaliza números
+        // Normaliza números
         const remoteDigits = String(data.participantPhone || data.phone || '').replace(/\D/g, '');
         const serverDigits = String(data.connectedPhone || data.instanceId || '').replace(/\D/g, '');
 
         if (!remoteDigits) return res.status(200).send('OK');
 
-        // tenta achar phoneDoc pelo instanceId, se falhar cai pra busca por número do server
+        // Busca contexto do telefone (empresaId, phoneDoc)
         let empresaId, phoneDoc;
         try {
             ({ empresaId, phoneDoc } = await getPhoneCtxByInstance(String(data.instanceId || '')));
@@ -799,21 +833,20 @@ exports.zApiWebhook = onRequest(async (req, res) => {
         }
 
         const phoneId = phoneDoc.id;
+        const phoneData = phoneDoc.data() || {};
 
-        // resolve o chatId real (reaproveita se já existir, com ou sem 9, com ou sem @)
+        // Resolve chatId
         const chatId = await resolveChatIdForNumber({
-            empresaId,
-            phoneId,
-            phoneDigits: remoteDigits,
+            empresaId, phoneId, phoneDigits: remoteDigits,
         });
 
+        // Prepara dados da mensagem
         const chatName = data.chatName || data.senderName || remoteDigits;
         const incomingPhoto = String(data.senderPhoto || data.photo || '').trim();
         const photoPatch = incomingPhoto
             ? { contactPhoto: incomingPhoto, photoUpdatedAt: admin.firestore.FieldValue.serverTimestamp() }
             : {};
 
-        // tipo + conteúdo
         let messageContent = '';
         let messageType    = 'text';
         if      (data.text?.message)       { messageContent = data.text.message;       }
@@ -824,7 +857,7 @@ exports.zApiWebhook = onRequest(async (req, res) => {
 
         const { chatDocRef, msgsColRef } = getChatRefs(empresaId, phoneId, chatId);
 
-        // 1) grava a mensagem recebida
+        // 1) Grava a mensagem recebida no Firestore
         await msgsColRef.doc().set({
             content    : messageContent,
             type       : messageType,
@@ -839,7 +872,7 @@ exports.zApiWebhook = onRequest(async (req, res) => {
             saleValue  : null,
         });
 
-        // 2) atualiza o chat (em transação MINIMAL)
+        // 2) Atualiza o chat
         await admin.firestore().runTransaction(async (tx) => {
             const snap = await tx.get(chatDocRef);
             const cur  = snap.exists ? snap.data() : {};
@@ -847,7 +880,6 @@ exports.zApiWebhook = onRequest(async (req, res) => {
             const preserve = ['atendendo'];
             const newStatus = preserve.includes(curStatus) ? curStatus : 'novo';
 
-            // histórico se estava finalizado
             if (['concluido_com_venda', 'recusado'].includes(curStatus)) {
                 await chatDocRef.collection('history').add({
                     status    : curStatus,
@@ -872,11 +904,92 @@ exports.zApiWebhook = onRequest(async (req, res) => {
             }, { merge: true });
         });
 
-        // 3) bot fora da transação
+        // =========================================================================
+        // INTEGRAÇÃO GPT MAKER (DINÂMICA)
+        // =========================================================================
+        const isFromMe = data.fromMe === true;
+        const incomingMsgId = data.id || data.messageId || ('fallback_' + Date.now() + Math.random());
+
+        // A. Verifica Configurações no Documento do Telefone
+        const aiConfig = phoneData.ai_agent || {};         
+        const gptCreds = phoneData.gpt_integration || {};  
+
+        const isAiEnabled = aiConfig.enabled === true && 
+                            !!aiConfig.agentId && 
+                            !!gptCreds.api_token;
+
+        // B. Condição de Disparo: IA Ativa + Texto + Não sou eu
+        if (isAiEnabled && messageType === 'text' && !isFromMe) {
+
+            // --- NOVO: Envia "Digitando..." IMEDIATAMENTE ---
+            // Como vamos esperar DEBOUNCE_SECONDS, é vital avisar o usuário que estamos "vivos"
+            const zInst = (typeof decryptIfNeeded === 'function') ? decryptIfNeeded(phoneData.instanceId) : (phoneData.instanceId);
+            const zTok  = (typeof decryptIfNeeded === 'function') ? decryptIfNeeded(phoneData.token) : (phoneData.token);
+            const zCTok = (typeof decryptIfNeeded === 'function') ? decryptIfNeeded(phoneData.clientToken) : (phoneData.clientToken);
+
+            if (zInst && zTok) {
+                 // Dispara sem await para não atrasar o fluxo, ou com await se preferir garantir
+                 sendZApiTyping(zInst, zTok, zCTok, remoteDigits);
+            }
+            // -----------------------------------------------
+
+            const executionToken = `token_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+            const bufferColRef = chatDocRef.collection('gpt_buffer');
+
+            try {
+                // 1. Salva no Buffer e Atualiza Token de Execução
+                await admin.firestore().runTransaction(async (t) => {
+                    const doc = await t.get(chatDocRef);
+                    const d = doc.data() || {};
+                    
+                    if ((d.status || 'novo') !== 'novo') return;
+
+                    const bufferDoc = bufferColRef.doc(String(incomingMsgId));
+                    t.set(bufferDoc, {
+                        content: messageContent,
+                        timestamp: admin.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+
+                    t.update(chatDocRef, { gptDebounceToken: executionToken });
+                });
+
+                // 2. Cria a Task no Cloud Tasks
+                const parent = tasksClient.queuePath(PROJECT_ID, QUEUE_LOCATION, QUEUE_NAME);
+                
+                const task = {
+                    httpRequest: {
+                        httpMethod: 'POST',
+                        url: WORKER_FUNCTION_URL, 
+                        headers: { 'Content-Type': 'application/json' },
+                        body: Buffer.from(JSON.stringify({
+                            empresaId,
+                            phoneId,
+                            chatId,
+                            executionToken,
+                            senderNumber: remoteDigits,
+                            agentId: aiConfig.agentId,
+                            gptToken: gptCreds.api_token
+                        })).toString('base64'),
+                    },
+                    scheduleTime: {
+                        seconds: Date.now() / 1000 + DEBOUNCE_SECONDS,
+                    },
+                };
+
+                await tasksClient.createTask({ parent, task });
+                logger.info(`[GPT] Agendado para ${remoteDigits} (Agent: ${aiConfig.agentId})`);
+                
+                return res.status(200).send('Buffered & Scheduled');
+
+            } catch (e) {
+                logger.error('[GPT Webhook] Erro ao agendar:', e);
+            }
+        }
+        // =========================================================================
+
+        // 3) Robô Legado
         try {
-            logger.info('[zApiWebhook] chamando maybeHandleByBot', {
-                empresaId, phoneId, chatId, messageType, contentPreview: String(messageContent || '').slice(0, 120)
-            });
+            logger.info('[zApiWebhook] Fallback para bot legado', { empresaId, phoneId });
             await maybeHandleByBot({ empresaId, phoneDoc, chatId, messageContent });
         } catch (e) {
             logger.error('Bot handler falhou', e);
@@ -885,10 +998,249 @@ exports.zApiWebhook = onRequest(async (req, res) => {
         return res.status(200).send('OK');
     } catch (error) {
         logger.error('Erro no webhook Z-API:', error);
-        // devolvemos 200 mesmo em erro para não bloquear a Z-API
         return res.status(200).send('Erro interno, mas ACK enviado');
     }
 });
+
+// =============================================================================
+// 2. O WORKER (CONSUMIDOR) - FUNÇÃO QUE O CLOUD TASKS CHAMA
+// =============================================================================
+exports.gptQueueWorker = onRequest(async (req, res) => {
+    const { empresaId, phoneId, chatId, executionToken, senderNumber, agentId, gptToken } = req.body;
+
+    logger.info(`[GPT Worker] Acordou para processar token: ${executionToken} (Agent: ${agentId})`);
+
+    if (!agentId || !gptToken) {
+        logger.error('[GPT Worker] Abortado: agentId ou gptToken ausentes no payload.');
+        return res.status(400).send('Missing GPT Credentials');
+    }
+
+    const { chatDocRef, msgsColRef, phoneDocRef } = getChatRefs(empresaId, phoneId, chatId);
+    const bufferColRef = chatDocRef.collection('gpt_buffer');
+    
+    let textsToProcess = [];
+
+    // 2. VERIFICAÇÃO E CONSUMO ATÔMICO
+    try {
+        await admin.firestore().runTransaction(async (t) => {
+            const chatSnap = await t.get(chatDocRef);
+            const chatData = chatSnap.data() || {};
+
+            if (chatData.gptDebounceToken !== executionToken) {
+                return; 
+            }
+
+            const bufferSnaps = await t.get(bufferColRef.orderBy('timestamp', 'asc'));
+            
+            bufferSnaps.docs.forEach(d => {
+                const val = d.data().content;
+                if (val) textsToProcess.push(val);
+                t.delete(d.ref); 
+            });
+        });
+    } catch (e) {
+        logger.error('[GPT Worker] Erro Transação:', e);
+        return res.status(500).send('Transaction Error');
+    }
+
+    if (textsToProcess.length === 0) {
+        logger.info('[GPT Worker] Cancelado (Token antigo ou Buffer vazio).');
+        return res.status(200).send('Skipped');
+    }
+
+    // 3. PREPARA PROMPT
+    const uniqueTexts = [...new Set(textsToProcess)];
+    const fullPrompt = uniqueTexts.join(" ");
+
+    logger.info(`[GPT Worker] Enviando Prompt Agrupado: "${fullPrompt}"`);
+
+    // 4. CHAMA GPT E RESPONDE
+    try {
+        const pData = (await phoneDocRef.get()).data() || {};
+        
+        const zInstance = (typeof decryptIfNeeded === 'function') ? decryptIfNeeded(pData.instanceId) : (pData.instanceId || process.env.ZAPI_ID);
+        const zToken = (typeof decryptIfNeeded === 'function') ? decryptIfNeeded(pData.token) : (pData.token || process.env.ZAPI_TOKEN);
+        const zClientToken = (typeof decryptIfNeeded === 'function') ? decryptIfNeeded(pData.clientToken) : (pData.clientToken || process.env.ZAPI_CLIENT_TOKEN);
+
+        if (zInstance && zToken) {
+            
+            // --- NOVO: Envia "Digitando..." DE NOVO ---
+            // Como pode ter passado 10 segundos, o status anterior pode ter sumido.
+            // Renovamos agora enquanto a IA "pensa".
+            await sendZApiTyping(zInstance, zToken, zClientToken, senderNumber);
+            // ------------------------------------------
+
+            // CHAMADA AO GPT MAKER
+            const gptResponse = await axios.post(
+                `https://api.gptmaker.ai/v2/agent/${agentId}/conversation`, 
+                { contextId: senderNumber, prompt: fullPrompt },
+                { headers: { 'Authorization': `Bearer ${gptToken}` } }      
+            );
+
+            let rawResponse = gptResponse.data.response || gptResponse.data.message;
+            let aiMessage = rawResponse;
+            let isHandoff = false;
+
+            try {
+                const cleanJson = rawResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+                if (cleanJson.startsWith('{')) {
+                    const parsed = JSON.parse(cleanJson);
+                    if (parsed.action === 'handoff') {
+                        isHandoff = true;
+                        aiMessage = parsed.message;
+                    }
+                }
+            } catch (e) { }
+
+            if (aiMessage) {
+                // Envia via Z-API
+                const zHeaders = {};
+                if (zClientToken) zHeaders['client-token'] = zClientToken;
+
+                await axios.post(`https://api.z-api.io/instances/${zInstance}/token/${zToken}/send-text`, {
+                    phone: senderNumber, message: aiMessage
+                }, { headers: zHeaders });
+
+                // Salva resposta no histórico
+                await msgsColRef.add({
+                    content: aiMessage, type: 'text', timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    fromMe: true, sender: senderNumber, status: 'sent', read: true, zapiId: 'gpt_' + Date.now() 
+                });
+
+                if (isHandoff) {
+                    await chatDocRef.set({
+                        lastMessage: aiMessage, 
+                        lastMessageTime: new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }),
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(), 
+                        status: 'atendendo' 
+                    }, { merge: true });
+                    
+                    if (typeof persistSystemEventMessage === 'function') {
+                        await persistSystemEventMessage({ 
+                            empresaId, phoneId, chatId, 
+                            event: 'handoff', 
+                            label: 'IA Handoff', 
+                            extra: { agentId: agentId } 
+                        });
+                    }
+                } else {
+                    await chatDocRef.set({
+                        lastMessage: aiMessage, 
+                        lastMessageTime: new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }),
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    }, { merge: true });
+                }
+
+                return res.status(200).send('GPT Worker Done');
+            }
+        } else {
+             logger.error('[GPT Worker] Z-API Credenciais não encontradas no DB.');
+             return res.status(400).send('Z-API config missing');
+        }
+    } catch (err) {
+        logger.error('[GPT Worker] Erro final:', err.message);
+        return res.status(500).send(err.message);
+    }
+
+    return res.status(200).send('Worker Finished');
+});
+
+
+
+
+// Função Callable que busca o Workspace ID dinamicamente e depois os agentes
+exports.getGptAgents = onCall(async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário.');
+
+    // Recebe empresaId E phoneId
+    const { empresaId, phoneId } = request.data; 
+    
+    if (!empresaId || !phoneId) {
+        throw new HttpsError('invalid-argument', 'Empresa ID e Phone ID são obrigatórios.');
+    }
+
+    try {
+        // 1. Busca configurações DENTRO DO TELEFONE
+        const phoneDoc = await admin.firestore()
+            .collection('empresas')
+            .doc(empresaId)
+            .collection('phones')
+            .doc(phoneId)
+            .get();
+
+        if (!phoneDoc.exists) throw new HttpsError('not-found', 'Telefone não encontrado.');
+
+        const data = phoneDoc.data();
+        // Acessa o mapa gpt_integration que criamos
+        const config = data.gpt_integration;
+
+        if (!config || !config.api_token || !config.workspace_id) {
+            // Retorna array vazio se não estiver configurado (sem estourar erro fatal na tela)
+            return []; 
+        }
+
+        const companyToken = config.api_token;
+        const companyWorkspace = config.workspace_id;
+
+        // 2. Chama API do GPT Maker
+        const response = await axios.get(
+            `https://api.gptmaker.ai/v2/workspace/${companyWorkspace}/agents`, 
+            { 
+                headers: { 
+                    'Authorization': `Bearer ${companyToken}`,
+                    'Content-Type': 'application/json'
+                } 
+            }
+        );
+
+        const agents = Array.isArray(response.data) ? response.data : (response.data.data || []);
+        
+        return agents.map(agent => ({
+            id: agent.id,
+            name: agent.name,
+            description: agent.description || '',
+            model: agent.model || 'gpt-4',
+            status: agent.status
+        }));
+
+    } catch (error) {
+        // Loga o erro mas tenta ser resiliente
+        logger.error(`Erro GPT [Empresa ${empresaId} / Phone ${phoneId}]:`, error.message);
+        throw new HttpsError('internal', `Erro ao buscar agentes: ${error.message}`);
+    }
+});
+
+exports.listWorkspacesForSetup = onCall(async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
+
+    const { apiToken } = request.data;
+    if (!apiToken) throw new HttpsError('invalid-argument', 'Token é obrigatório.');
+
+    try {
+        // Chama a API usando o token fornecido na hora (não o global)
+        const response = await axios.get(
+            `https://api.gptmaker.ai/v2/workspaces`, 
+            { 
+                headers: { 
+                    'Authorization': `Bearer ${apiToken}`,
+                    'Content-Type': 'application/json'
+                } 
+            }
+        );
+
+        const list = Array.isArray(response.data) ? response.data : (response.data.data || []);
+        
+        return list.map(ws => ({
+            id: ws.id,
+            name: ws.name
+        }));
+
+    } catch (error) {
+        logger.error("Erro setup GPT:", error.message);
+        throw new HttpsError('internal', 'Token inválido ou erro na API.');
+    }
+});
+
 
 exports.sendMessage = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req, res) => {
     // CORS
@@ -1169,6 +1521,63 @@ exports.sendMessage = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req, res) =>
     }
 });
 
+// =============================================================================
+// ENVIAR STATUS "DIGITANDO..." (Para uso do Front-end Humano)
+// =============================================================================
+exports.sendTypingStatus = onRequest(async (req, res) => {
+    // CORS
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Content-Type");
+    if (req.method === "OPTIONS") return res.status(204).send("");
+
+    try {
+        const { empresaId, phoneId, chatId, status } = req.body; // status: 'composing' ou 'recording'
+
+        if (!empresaId || !phoneId || !chatId) {
+            return res.status(400).send("Faltam parâmetros.");
+        }
+
+        // Recupera credenciais do banco
+        const { phoneDocRef } = getChatRefs(empresaId, phoneId, chatId);
+        const phoneData = (await phoneDocRef.get()).data() || {};
+
+        const instanceId = decryptIfNeeded(phoneData.instanceId) || process.env.ZAPI_ID;
+        const token = decryptIfNeeded(phoneData.token) || process.env.ZAPI_TOKEN;
+        const clientToken = decryptIfNeeded(phoneData.clientToken) || process.env.ZAPI_CLIENT_TOKEN;
+
+        if (!instanceId || !token) {
+            return res.status(400).send("Credenciais Z-API não encontradas.");
+        }
+
+        const phoneDigits = chatId.replace(/\D/g, ''); // Garante só números
+        const presenceType = status === 'recording' ? 'recording' : 'composing';
+
+        // Usa a nossa função auxiliar (que você já tem ou eu passei antes)
+        // Se não tiver, chama o axios direto aqui
+        const headers = {};
+        if (clientToken) headers['client-token'] = clientToken;
+
+        await axios.post(
+            `https://api.z-api.io/instances/${instanceId}/token/${token}/send-presence`,
+            {
+                phone: phoneDigits,
+                presence: presenceType
+            },
+            { headers }
+        );
+
+        return res.status(200).send({ success: true });
+
+    } catch (error) {
+        logger.warn(`[sendTypingStatus] Erro: ${error.message}`);
+        // Retorna 200 para não quebrar o front, já que é um recurso visual opcional
+        return res.status(200).send({ success: false, error: error.message });
+    }
+});
+
+
+
 exports.deleteMessage = functions.https.onRequest(async (req, res) => {
     // Configura CORS
     res.set("Access-Control-Allow-Origin", "*");
@@ -1380,31 +1789,51 @@ exports.whatsappWebhook = onRequest(
         res.sendStatus(405); // Método não permitido
     });
 
-exports.enableReadReceipts = onRequest(async (req, res) => {
+exports.enableReadReceipts = onRequest(
+  {
+    region: "us-central1",
+    cpu: 0.25,
+    memory: "256MiB",
+    maxInstances: 1,
+    minInstances: 0,
+    timeoutSeconds: 60
+  },
+  async (req, res) => {
     // CORS pre-flight
-    if (req.method === 'OPTIONS') return res.status(204).send('');
+    if (req.method === "OPTIONS") {
+      return res.status(204).send("");
+    }
 
-    const {ZAPI_ID, ZAPI_TOKEN, ZAPI_CLIENT_TOKEN} = process.env;
-    if (!ZAPI_ID || !ZAPI_TOKEN || !ZAPI_CLIENT_TOKEN)
-        return res.status(500).send('Variáveis de ambiente faltando');
+    const { ZAPI_ID, ZAPI_TOKEN, ZAPI_CLIENT_TOKEN } = process.env;
+
+    if (!ZAPI_ID || !ZAPI_TOKEN || !ZAPI_CLIENT_TOKEN) {
+      return res.status(500).send("Variáveis de ambiente faltando");
+    }
 
     try {
-        const url =
-            `https://api.z-api.io/instances/${ZAPI_ID}/token/${ZAPI_TOKEN}` +
-            `/privacy/read-receipts?value=enable`;
+      const url =
+        `https://api.z-api.io/instances/${ZAPI_ID}/token/${ZAPI_TOKEN}` +
+        `/privacy/read-receipts?value=enable`;
 
-        const r = await axios.post(
-            url,
-            {},
-            {headers: {'Client-Token': ZAPI_CLIENT_TOKEN}},
-        );
+      const r = await axios.post(
+        url,
+        {},
+        { headers: { "Client-Token": ZAPI_CLIENT_TOKEN } }
+      );
 
-        return res.status(200).json(r.data);      // { success:true }
+      return res.status(200).json(r.data);
     } catch (err) {
-        console.error('Z-API read-receipts error', err.response?.data || err);
-        return res.status(err.response?.status || 500).send(err.toString());
+      console.error(
+        "Z-API read-receipts error",
+        err.response?.data || err
+      );
+      return res
+        .status(err.response?.status || 500)
+        .send(err.toString());
     }
-});
+  }
+);
+
 
 /* util: carrega credenciais salvas em /phones/{phoneId} */
 /* SUBSTITUA este helper */
