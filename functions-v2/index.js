@@ -28,7 +28,6 @@ const AWS_SQS_COMPANY_QUEUE_URL= defineSecret('AWS_SQS_COMPANY_QUEUE_URL');
 const AWS_SQS_REPORTS_QUEUE_URL = defineSecret('AWS_SQS_REPORTS_QUEUE_URL');
 const ZAPI_HOSTS = ['https://api-v2.z-api.io', 'https://api.z-api.io',];
 
-
 async function callZ(instanceId, token, path, payload, headers = {}, timeout = 15000) {
     let lastErr = null;
 
@@ -779,6 +778,32 @@ async function sendZApiTyping(instanceId, token, clientToken, phone) {
     }
 }
 
+function requireAuth(request) {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário.');
+}
+
+async function getPhoneGptConfig({ empresaId, phoneId }) {
+  const phoneDoc = await admin.firestore()
+    .collection('empresas').doc(empresaId)
+    .collection('phones').doc(phoneId)
+    .get();
+
+  if (!phoneDoc.exists) throw new HttpsError('not-found', 'Telefone não encontrado.');
+
+  const data = phoneDoc.data() || {};
+  const config = data.gpt_integration;
+
+  if (!config || !config.api_token) {
+    throw new HttpsError('failed-precondition', 'GPT Maker não configurado (api_token ausente).');
+  }
+
+  return {
+    token: config.api_token,
+    workspaceId: config.workspace_id || null,
+  };
+}
+
+
 const { CloudTasksClient } = require('@google-cloud/tasks');
 
 // Inicializa o cliente do Cloud Tasks
@@ -791,7 +816,15 @@ const QUEUE_LOCATION = 'us-central1';
 const QUEUE_NAME = 'gpt-buffer'; // Certifique-se que esta fila existe no GCloud
 const WORKER_FUNCTION_URL = `https://${QUEUE_LOCATION}-${PROJECT_ID}.cloudfunctions.net/gptQueueWorker`; 
 
-const DEBOUNCE_SECONDS = 10; // Tempo que o bot espera o cliente parar de digitar
+const DEFAULT_DEBOUNCE_SECONDS = 10;
+const MIN_DEBOUNCE_SECONDS = 0;
+const MAX_DEBOUNCE_SECONDS = 30;
+
+function clampDebounceSeconds(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return DEFAULT_DEBOUNCE_SECONDS;
+  return Math.max(MIN_DEBOUNCE_SECONDS, Math.min(MAX_DEBOUNCE_SECONDS, Math.round(n)));
+}
 
 // =============================================================================
 // WEBHOOK Z-API (Gateway de Entrada)
@@ -912,6 +945,7 @@ exports.zApiWebhook = onRequest(async (req, res) => {
 
         // A. Verifica Configurações no Documento do Telefone
         const aiConfig = phoneData.ai_agent || {};         
+        const debounceSeconds = clampDebounceSeconds(aiConfig.debounceSeconds);
         const gptCreds = phoneData.gpt_integration || {};  
 
         const isAiEnabled = aiConfig.enabled === true && 
@@ -972,7 +1006,7 @@ exports.zApiWebhook = onRequest(async (req, res) => {
                         })).toString('base64'),
                     },
                     scheduleTime: {
-                        seconds: Date.now() / 1000 + DEBOUNCE_SECONDS,
+                        seconds: Date.now() / 1000 + debounceSeconds,
                     },
                 };
 
@@ -1210,6 +1244,188 @@ exports.getGptAgents = onCall(async (request) => {
     }
 });
 
+exports.getGptAgentById = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário.');
+
+  const { empresaId, phoneId, agentId } = request.data || {};
+  if (!empresaId || !phoneId || !agentId) {
+    throw new HttpsError('invalid-argument', 'empresaId, phoneId e agentId são obrigatórios.');
+  }
+
+  const phoneDoc = await admin.firestore()
+    .collection('empresas').doc(empresaId)
+    .collection('phones').doc(phoneId).get();
+
+  if (!phoneDoc.exists) throw new HttpsError('not-found', 'Telefone não encontrado.');
+
+  const phoneData = phoneDoc.data() || {};
+  const config = phoneData.gpt_integration || {};
+  if (!config.api_token) throw new HttpsError('failed-precondition', 'GPT Maker não configurado neste telefone.');
+
+  const token = config.api_token;
+
+  try {
+    const r = await axios.get(
+      `https://api.gptmaker.ai/v2/agent/${agentId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    return r.data;
+  } catch (e) {
+    logger.error('[getGptAgentById] erro:', e.response?.data || e.message);
+    throw new HttpsError('internal', `Erro ao buscar agente: ${e.response?.status || ''}`);
+  }
+});
+
+
+
+exports.updateGptAgent = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário.');
+
+  const { empresaId, phoneId, agentId, patch } = request.data || {};
+  if (!empresaId || !phoneId || !agentId || !patch || typeof patch !== 'object') {
+    throw new HttpsError('invalid-argument', 'empresaId, phoneId, agentId e patch são obrigatórios.');
+  }
+
+  const phoneDoc = await admin.firestore()
+    .collection('empresas').doc(empresaId)
+    .collection('phones').doc(phoneId).get();
+
+  if (!phoneDoc.exists) throw new HttpsError('not-found', 'Telefone não encontrado.');
+
+  const phoneData = phoneDoc.data() || {};
+  const config = phoneData.gpt_integration || {};
+  if (!config.api_token) throw new HttpsError('failed-precondition', 'GPT Maker não configurado.');
+
+  const token = config.api_token;
+
+  // Campos que você quer preservar/gerenciar no app
+  const allowed = [
+    'name', 'communicationType', 'behavior', 'avatar',
+    'type', 'jobName', 'jobSite', 'jobDescription',
+  ];
+
+  // 1) Pega o estado atual do agente
+  let current = {};
+  try {
+    const g = await axios.get(`https://api.gptmaker.ai/v2/agent/${agentId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    current = g.data || {};
+  } catch (e) {
+    logger.error('[updateGptAgent] GET current failed:', e.response?.data || e.message);
+    throw new HttpsError('internal', 'Falha ao obter agente atual para merge.');
+  }
+
+  // 2) Monta payload final: current + patch (somente allowed)
+  const finalPayload = {};
+  for (const k of allowed) {
+    if (Object.prototype.hasOwnProperty.call(current, k)) finalPayload[k] = current[k];
+  }
+  for (const [k, v] of Object.entries(patch)) {
+    if (allowed.includes(k) && v !== undefined) {
+      finalPayload[k] = v;
+    }
+  }
+
+  // 3) PUT com payload completo (preserva o que não mudou)
+  try {
+    const r = await axios.put(
+      `https://api.gptmaker.ai/v2/agent/${agentId}`,
+      finalPayload,
+      { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+    );
+    return r.data;
+  } catch (e) {
+    logger.error('[updateGptAgent] PUT failed:', e.response?.data || e.message);
+    throw new HttpsError('internal', `Erro ao atualizar agente: ${e.response?.status || ''}`);
+  }
+});
+
+
+exports.getGptAgentSettings = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário.');
+
+  const { empresaId, phoneId, agentId } = request.data || {};
+  if (!empresaId || !phoneId || !agentId) {
+    throw new HttpsError('invalid-argument', 'empresaId, phoneId e agentId são obrigatórios.');
+  }
+
+  const phoneDoc = await admin.firestore()
+    .collection('empresas').doc(empresaId)
+    .collection('phones').doc(phoneId).get();
+
+  if (!phoneDoc.exists) throw new HttpsError('not-found', 'Telefone não encontrado.');
+
+  const phoneData = phoneDoc.data() || {};
+  const config = phoneData.gpt_integration || {};
+  if (!config.api_token) throw new HttpsError('failed-precondition', 'GPT Maker não configurado neste telefone.');
+
+  const token = config.api_token;
+
+  try {
+    const r = await axios.get(
+      `https://api.gptmaker.ai/v2/agent/${agentId}/settings`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    return r.data;
+  } catch (e) {
+    logger.error('[getGptAgentSettings] erro:', e.response?.data || e.message);
+    throw new HttpsError('internal', `Erro ao buscar settings: ${e.response?.status || ''}`);
+  }
+});
+
+exports.updateGptAgentSettings = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário.');
+
+  const { empresaId, phoneId, agentId, settings } = request.data || {};
+  if (!empresaId || !phoneId || !agentId || !settings || typeof settings !== 'object') {
+    throw new HttpsError('invalid-argument', 'empresaId, phoneId, agentId e settings são obrigatórios.');
+  }
+
+  const phoneDoc = await admin.firestore()
+    .collection('empresas').doc(empresaId)
+    .collection('phones').doc(phoneId).get();
+
+  if (!phoneDoc.exists) throw new HttpsError('not-found', 'Telefone não encontrado.');
+
+  const phoneData = phoneDoc.data() || {};
+  const config = phoneData.gpt_integration || {};
+  if (!config.api_token) throw new HttpsError('failed-precondition', 'GPT Maker não configurado neste telefone.');
+
+  const token = config.api_token;
+
+  // Whitelist (adicione/remova conforme você for habilitando no app)
+  const allowed = new Set([
+    'prefferModel', 'timezone',
+    'enabledHumanTransfer', 'enabledReminder',
+    'splitMessages', 'enabledEmoji', 'limitSubjects',
+    'messageGroupingTime', 'signMessages',
+    'maxDailyMessages', 'maxDailyMessagesLimitAction',
+    'knowledgeByFunction', 'onLackKnowLedge',
+  ]);
+
+  const safeSettings = {};
+  for (const [k, v] of Object.entries(settings)) {
+    if (allowed.has(k)) safeSettings[k] = v;
+  }
+
+  try {
+    const r = await axios.put(
+      `https://api.gptmaker.ai/v2/agent/${agentId}/settings`,
+      safeSettings,
+      { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+    );
+    return r.data;
+  } catch (e) {
+    logger.error('[updateGptAgentSettings] erro:', e.response?.data || e.message);
+    throw new HttpsError('internal', `Erro ao atualizar settings: ${e.response?.status || ''}`);
+  }
+});
+
+
+
+
+
 exports.listWorkspacesForSetup = onCall(async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
 
@@ -1240,6 +1456,203 @@ exports.listWorkspacesForSetup = onCall(async (request) => {
         throw new HttpsError('internal', 'Token inválido ou erro na API.');
     }
 });
+
+exports.getGptWorkspaceCredits = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário.');
+
+  const { empresaId, phoneId } = request.data || {};
+  if (!empresaId || !phoneId) {
+    throw new HttpsError('invalid-argument', 'empresaId e phoneId são obrigatórios.');
+  }
+
+  const phoneDoc = await admin.firestore()
+    .collection('empresas').doc(empresaId)
+    .collection('phones').doc(phoneId).get();
+
+  if (!phoneDoc.exists) throw new HttpsError('not-found', 'Telefone não encontrado.');
+
+  const phoneData = phoneDoc.data() || {};
+  const cfg = phoneData.gpt_integration || {};
+  if (!cfg.api_token || !cfg.workspace_id) {
+    throw new HttpsError('failed-precondition', 'GPT Maker não configurado neste telefone.');
+  }
+
+  try {
+    const r = await axios.get(
+      `https://api.gptmaker.ai/v2/workspace/${cfg.workspace_id}/credits`,
+      { headers: { Authorization: `Bearer ${cfg.api_token}` } }
+    );
+    return r.data; // retorna como vier
+  } catch (e) {
+    logger.error('[getGptWorkspaceCredits] erro:', e.response?.data || e.message);
+    throw new HttpsError('internal', 'Erro ao buscar créditos do workspace.');
+  }
+});
+
+
+exports.listGptTrainings = onCall(async (request) => {
+  requireAuth(request);
+
+  const { empresaId, phoneId, agentId, page = 1, pageSize = 10 } = request.data || {};
+  if (!empresaId || !phoneId || !agentId) {
+    throw new HttpsError('invalid-argument', 'empresaId, phoneId e agentId são obrigatórios.');
+  }
+
+  const { token } = await getPhoneGptConfig({ empresaId, phoneId });
+
+  try {
+    const r = await axios.get(
+      `https://api.gptmaker.ai/v2/agent/${agentId}/trainings`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { page, pageSize },
+      }
+    );
+
+    // A API pode devolver formatos diferentes
+    // Tentamos normalizar:
+    const raw = r.data || {};
+    const items = raw.data || raw.items || raw.trainings || (Array.isArray(raw) ? raw : []);
+    const meta = raw.meta || raw.pagination || {};
+
+    return {
+      items,
+      page: meta.page || page,
+      pageSize: meta.pageSize || pageSize,
+      total: meta.total || raw.total || null,
+      hasNext: meta.hasNext ?? null,
+    };
+  } catch (e) {
+    throw new HttpsError('internal', `Erro ao listar trainings: ${e.response?.data?.message || e.message}`);
+  }
+});
+
+/**
+ * CRIAR training TEXT
+ * POST /v2/agent/{agentId}/trainings
+ */
+exports.createGptTrainingText = onCall(async (request) => {
+  requireAuth(request);
+
+  const { empresaId, phoneId, agentId, text } = request.data || {};
+  if (!empresaId || !phoneId || !agentId || !text) {
+    throw new HttpsError('invalid-argument', 'empresaId, phoneId, agentId e text são obrigatórios.');
+  }
+
+  const cleaned = String(text).trim();
+  if (!cleaned) throw new HttpsError('invalid-argument', 'Texto vazio.');
+  if (cleaned.length > 1000) throw new HttpsError('invalid-argument', 'Texto excede 1000 caracteres.');
+
+  const { token } = await getPhoneGptConfig({ empresaId, phoneId });
+
+  try {
+    const r = await axios.post(
+      `https://api.gptmaker.ai/v2/agent/${agentId}/trainings`,
+      { type: 'TEXT', text: cleaned },
+      { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+    );
+
+    return r.data;
+  } catch (e) {
+    throw new HttpsError('internal', `Erro ao criar training: ${e.response?.data?.message || e.message}`);
+  }
+});
+
+/**
+ * UPDATE training TEXT
+ * PUT /v2/training/{trainingId}
+ * (Se der 404, troque para /v2/trainings/{trainingId})
+ */
+// update training (somente TEXT)
+exports.updateGptTrainingText = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário.');
+
+  const { empresaId, phoneId, trainingId, text } = request.data || {};
+  if (!empresaId || !phoneId || !trainingId) {
+    throw new HttpsError('invalid-argument', 'empresaId, phoneId e trainingId são obrigatórios.');
+  }
+  if (typeof text !== 'string' || !text.trim()) {
+    throw new HttpsError('invalid-argument', 'text é obrigatório.');
+  }
+
+  // limite que você quer no app (ex: 1000)
+  const finalText = text.trim().slice(0, 1000);
+
+  try {
+    // 1) pega token do phone
+    const phoneDoc = await admin.firestore()
+      .collection('empresas').doc(empresaId)
+      .collection('phones').doc(phoneId)
+      .get();
+    if (!phoneDoc.exists) throw new HttpsError('not-found', 'Telefone não encontrado.');
+
+    const cfg = phoneDoc.data()?.gpt_integration;
+    if (!cfg?.api_token) return { ok: false, error: 'Sem integração GPT configurada.' };
+
+    const token = cfg.api_token;
+
+    // 2) chama GPT Maker - UPDATE TRAINING
+    // ATENÇÃO: endpoint pode ser /training/{id} ou /trainings/{id}
+    // Se o seu DELETE usa um deles, use o mesmo aqui.
+    const url = `https://api.gptmaker.ai/v2/training/${trainingId}`;
+
+    const resp = await axios.put(
+      url,
+      {
+        type: 'TEXT',     // <<< OBRIGATÓRIO (se não, 400)
+        text: finalText,  // texto do treinamento
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    return resp.data;
+  } catch (err) {
+    logger.error(
+      '[updateGptTrainingText] fail',
+      err?.response?.status,
+      err?.response?.data || err.message
+    );
+    throw new HttpsError(
+      'internal',
+      `Erro ao atualizar treinamento: ${JSON.stringify(err?.response?.data || err.message)}`
+    );
+  }
+});
+
+
+/**
+ * DELETE training
+ * DELETE /v2/training/{trainingId}
+ * (Se der 404, troque para /v2/trainings/{trainingId})
+ */
+exports.deleteGptTraining = onCall(async (request) => {
+  requireAuth(request);
+
+  const { empresaId, phoneId, trainingId } = request.data || {};
+  if (!empresaId || !phoneId || !trainingId) {
+    throw new HttpsError('invalid-argument', 'empresaId, phoneId e trainingId são obrigatórios.');
+  }
+
+  const { token } = await getPhoneGptConfig({ empresaId, phoneId });
+
+  try {
+    const r = await axios.delete(
+      `https://api.gptmaker.ai/v2/training/${trainingId}`, // <- ajuste se necessário
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    return r.data ?? { success: true };
+  } catch (e) {
+    throw new HttpsError('internal', `Erro ao deletar training: ${e.response?.data?.message || e.message}`);
+  }
+});
+
+
 
 
 exports.sendMessage = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req, res) => {

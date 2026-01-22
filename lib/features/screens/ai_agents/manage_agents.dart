@@ -1,7 +1,6 @@
 // lib/features/screens/chatbot/manage_ai_agents.dart
-
 import 'dart:async';
-import 'package:cloud_functions/cloud_functions.dart'; // <--- IMPORTANTE: Para chamar a API
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:app_io/auth/providers/auth_provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:dropdown_button2/dropdown_button2.dart';
+import './agent_settings_page.dart';
 
 class ManageAgenteIAPage extends StatefulWidget {
   const ManageAgenteIAPage({super.key});
@@ -27,8 +27,11 @@ class _ManageAgenteIAPageState extends State<ManageAgenteIAPage> {
   final ScrollController _scrollController = ScrollController();
   double _scrollOffset = 0.0;
 
-  // Cache da lista de agentes para não chamar a API toda hora que der setState
+  // Cache da lista de agentes
   Future<List<Map<String, dynamic>>>? _agentsFuture;
+
+  // Cache dos créditos do workspace
+  Future<Map<String, dynamic>>? _creditsFuture;
 
   @override
   void initState() {
@@ -80,7 +83,8 @@ class _ManageAgenteIAPageState extends State<ManageAgenteIAPage> {
           _empresaId = uid;
           _resolving = false;
         });
-        _refreshAgentsList(); // Carrega a lista assim que tiver a empresa
+        _refreshAgentsList();
+        _refreshCredits();
         return;
       }
 
@@ -104,7 +108,8 @@ class _ManageAgenteIAPageState extends State<ManageAgenteIAPage> {
           _empresaId = createdBy;
           _resolving = false;
         });
-        _refreshAgentsList(); // Carrega a lista
+        _refreshAgentsList();
+        _refreshCredits();
         return;
       }
 
@@ -129,26 +134,52 @@ class _ManageAgenteIAPageState extends State<ManageAgenteIAPage> {
     });
   }
 
+  void _refreshCredits() {
+    setState(() {
+      _creditsFuture = _fetchWorkspaceCredits();
+    });
+  }
+
   Future<List<Map<String, dynamic>>> _fetchGptAgents() async {
-    // Verificação de segurança
     if (_empresaId == null || _selectedPhoneId == null) {
-       print("Aguardando empresa ou telefone...");
-       return [];
+      debugPrint("Aguardando empresa ou telefone...");
+      return [];
     }
 
     try {
       final result = await FirebaseFunctions.instance
           .httpsCallable('getGptAgents')
           .call({
-            'empresaId': _empresaId,       // <--- Usa a variável de estado, não widget
-            'phoneId': _selectedPhoneId,   // <--- Precisamos disso para achar a credencial
-          });
-      
+        'empresaId': _empresaId,
+        'phoneId': _selectedPhoneId,
+      });
+
       final data = result.data as List;
       return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
     } catch (e) {
       debugPrint('Erro ao buscar agentes na API: $e');
       rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> _fetchWorkspaceCredits() async {
+    if (_empresaId == null || _selectedPhoneId == null) return {};
+
+    try {
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('getGptWorkspaceCredits')
+          .call({
+        'empresaId': _empresaId,
+        'phoneId': _selectedPhoneId,
+      });
+
+      if (result.data is Map) {
+        return Map<String, dynamic>.from(result.data as Map);
+      }
+      return {'raw': result.data};
+    } catch (e) {
+      debugPrint('Erro ao buscar créditos do workspace: $e');
+      return {'error': e.toString()};
     }
   }
 
@@ -166,7 +197,6 @@ class _ManageAgenteIAPageState extends State<ManageAgenteIAPage> {
         .collection('phones')
         .doc(phoneId);
 
-    // Salva a configuração no documento do telefone
     await phoneRef.set({
       'ai_agent': {
         'enabled': true,
@@ -194,7 +224,6 @@ class _ManageAgenteIAPageState extends State<ManageAgenteIAPage> {
         'updatedAt': FieldValue.serverTimestamp(),
         'updatedBy': FirebaseAuth.instance.currentUser?.uid,
       },
-      // Removemos o ID para limpar
       'ai_agent.agentId': FieldValue.delete(),
     }, SetOptions(merge: true));
   }
@@ -240,7 +269,6 @@ class _ManageAgenteIAPageState extends State<ManageAgenteIAPage> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    // AppBar estilo "colaboradores"
     double appBarHeight = (100.0 - (_scrollOffset / 2)).clamp(0.0, 100.0);
     double opacity = (1.0 - (_scrollOffset / 100)).clamp(0.0, 1.0);
 
@@ -259,7 +287,6 @@ class _ManageAgenteIAPageState extends State<ManageAgenteIAPage> {
           ),
         );
 
-    // LOADING INICIAL DA EMPRESA
     if (_resolving) {
       return Scaffold(
         appBar: _buildStyledAppBar(appBarHeight, opacity, cs),
@@ -267,7 +294,6 @@ class _ManageAgenteIAPageState extends State<ManageAgenteIAPage> {
       );
     }
 
-    // ERRO AO RESOLVER EMPRESA
     if (_resolveError != null) {
       return Scaffold(
         appBar: _buildStyledAppBar(appBarHeight, opacity, cs),
@@ -277,7 +303,6 @@ class _ManageAgenteIAPageState extends State<ManageAgenteIAPage> {
 
     final empresaId = _empresaId!;
 
-    // CONTEÚDO PRINCIPAL
     final content = Column(
       children: [
         _PhonesSelector(
@@ -287,8 +312,10 @@ class _ManageAgenteIAPageState extends State<ManageAgenteIAPage> {
             setState(() {
               _selectedPhoneId = phoneId;
             });
-            // Adicione esta linha para recarregar a lista quando trocar o telefone
-            if (phoneId != null) _refreshAgentsList(); 
+            if (phoneId != null) {
+              _refreshAgentsList();
+              _refreshCredits();
+            }
           },
         ),
         const SizedBox(height: 16),
@@ -302,10 +329,12 @@ class _ManageAgenteIAPageState extends State<ManageAgenteIAPage> {
             child: _GptAgentsList(
               empresaId: empresaId,
               phoneId: _selectedPhoneId!,
-              // Passamos a Future da API
-              fetchAgentsFuture: _agentsFuture, 
-              // Função de callback para Refresh
-              onRefresh: _refreshAgentsList,
+              fetchAgentsFuture: _agentsFuture,
+              creditsFuture: _creditsFuture,
+              onRefresh: () {
+                _refreshAgentsList();
+                _refreshCredits();
+              },
               onActivate: (agentId, agentName) async {
                 try {
                   await _activateAgent(
@@ -314,7 +343,6 @@ class _ManageAgenteIAPageState extends State<ManageAgenteIAPage> {
                     agentId: agentId,
                     agentName: agentName,
                   );
-                  // Opcional: Feedback visual rápido
                 } catch (e) {
                   _showNotice(title: 'Erro', message: e.toString());
                 }
@@ -387,11 +415,13 @@ class _ManageAgenteIAPageState extends State<ManageAgenteIAPage> {
                       ),
                     ],
                   ),
-                  // Botão de Refresh manual da lista
                   IconButton(
                     icon: const Icon(Icons.refresh),
                     tooltip: 'Atualizar lista de Agentes',
-                    onPressed: _refreshAgentsList,
+                    onPressed: () {
+                      _refreshAgentsList();
+                      _refreshCredits();
+                    },
                   ),
                 ],
               ),
@@ -406,7 +436,7 @@ class _ManageAgenteIAPageState extends State<ManageAgenteIAPage> {
 }
 
 // -----------------------------------------------------------------------------
-// SELETOR DE TELEFONES (Mantido igual, apenas adaptado)
+// SELETOR DE TELEFONES
 // -----------------------------------------------------------------------------
 class _PhonesSelector extends StatelessWidget {
   const _PhonesSelector({
@@ -452,7 +482,6 @@ class _PhonesSelector extends StatelessWidget {
         final effectiveSelected =
             selectedPhoneId ?? (items.isNotEmpty ? items.first.value : null);
 
-        // Garante que seleciona o primeiro se estiver nulo
         if (effectiveSelected != selectedPhoneId) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             onChanged(effectiveSelected);
@@ -487,13 +516,14 @@ class _PhonesSelector extends StatelessWidget {
 }
 
 // -----------------------------------------------------------------------------
-// LISTA DE AGENTES (Consome API + Firestore)
+// LISTA DE AGENTES (API + Firestore + Créditos)
 // -----------------------------------------------------------------------------
 class _GptAgentsList extends StatelessWidget {
   const _GptAgentsList({
     required this.empresaId,
     required this.phoneId,
     required this.fetchAgentsFuture,
+    required this.creditsFuture,
     required this.onActivate,
     required this.onDeactivate,
     required this.onRefresh,
@@ -502,13 +532,34 @@ class _GptAgentsList extends StatelessWidget {
   final String empresaId;
   final String phoneId;
   final Future<List<Map<String, dynamic>>>? fetchAgentsFuture;
+  final Future<Map<String, dynamic>>? creditsFuture;
   final Function(String id, String name) onActivate;
   final VoidCallback onDeactivate;
   final VoidCallback onRefresh;
 
+  String _extractCreditsText(Map<String, dynamic> data) {
+    // tenta alguns nomes comuns (depende do retorno da sua function)
+    final candidates = [
+      data['credits'],
+      data['balance'],
+      data['available'],
+      data['remaining'],
+      (data['data'] is Map) ? (data['data'] as Map)['credits'] : null,
+      (data['data'] is Map) ? (data['data'] as Map)['balance'] : null,
+    ];
+
+    for (final c in candidates) {
+      if (c == null) continue;
+      if (c is num) return c.toString();
+      if (c is String && c.trim().isNotEmpty) return c.trim();
+    }
+
+    if (data.containsKey('error')) return '—';
+    return '—';
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Referência ao documento do telefone (para saber quem está ativo)
     final phoneDocRef = FirebaseFirestore.instance
         .collection('empresas')
         .doc(empresaId)
@@ -517,7 +568,7 @@ class _GptAgentsList extends StatelessWidget {
 
     return Column(
       children: [
-        // Headerzinho
+        // Header + Créditos
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
           child: Row(
@@ -531,25 +582,39 @@ class _GptAgentsList extends StatelessWidget {
                   style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ),
+              if (creditsFuture != null)
+                FutureBuilder<Map<String, dynamic>>(
+                  future: creditsFuture,
+                  builder: (context, snap) {
+                    if (snap.connectionState == ConnectionState.waiting) {
+                      return const Text(
+                        'Créditos restantes: ...',
+                        style: TextStyle(fontSize: 12, color: Color.fromARGB(255, 255, 255, 255)),
+                      );
+                    }
+                    final data = snap.data ?? {};
+                    final credits = _extractCreditsText(data);
+                    return Text(
+                      'Créditos restantes: $credits',
+                      style: const TextStyle(fontSize: 12, color: Color.fromARGB(255, 255, 255, 255)),
+                    );
+                  },
+                ),
             ],
           ),
         ),
 
         Expanded(
-          // 1. OUVIR O FIRESTORE (Estado Ativo)
           child: StreamBuilder<DocumentSnapshot>(
             stream: phoneDocRef.snapshots(),
             builder: (context, phoneSnap) {
-              
-              // Dados de quem está ativo agora
               final phoneData =
                   phoneSnap.data?.data() as Map<String, dynamic>? ?? {};
-              
+
               final agentCfg = (phoneData['ai_agent'] as Map?) ?? {};
               final bool enabled = agentCfg['enabled'] == true;
               final String? activeAgentId = agentCfg['agentId']?.toString();
 
-              // 2. OUVIR A API (Lista de opções)
               return FutureBuilder<List<Map<String, dynamic>>>(
                 future: fetchAgentsFuture,
                 builder: (context, apiSnap) {
@@ -591,7 +656,6 @@ class _GptAgentsList extends StatelessWidget {
                     );
                   }
 
-                  // Renderiza a lista
                   return ListView.separated(
                     itemCount: agents.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 8),
@@ -601,7 +665,6 @@ class _GptAgentsList extends StatelessWidget {
                       final agentName = agent['name']?.toString() ?? 'Sem Nome';
                       final description =
                           agent['description']?.toString() ?? '';
-                      // final model = agent['model']?.toString() ?? '';
 
                       final isActive = enabled && activeAgentId == agentId;
                       final cs = Theme.of(context).colorScheme;
@@ -634,20 +697,47 @@ class _GptAgentsList extends StatelessWidget {
                               ? Text(description,
                                   maxLines: 2, overflow: TextOverflow.ellipsis)
                               : null,
-                          trailing: Transform.scale(
-                            scale: 0.9,
-                            child: Switch(
-                              value: isActive,
-                              activeColor: cs.primary,
-                              onChanged: (val) {
-                                if (val) {
-                                  onActivate(agentId, agentName);
-                                } else {
-                                  // Só desativa se clicar no que já está ativo
-                                  if (isActive) onDeactivate();
-                                }
-                              },
-                            ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              PopupMenuButton<String>(
+                                icon: const Icon(Icons.more_vert),
+                                onSelected: (v) {
+                                  if (v == 'settings') {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => AgentSettingsPage(
+                                          empresaId: empresaId,
+                                          phoneId: phoneId,
+                                          agentId: agentId,
+                                          agentName: agentName,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                                itemBuilder: (_) => const [
+                                  PopupMenuItem(
+                                    value: 'settings',
+                                    child: Text('Configurar agente'),
+                                  ),
+                                ],
+                              ),
+                              Transform.scale(
+                                scale: 0.9,
+                                child: Switch(
+                                  value: isActive,
+                                  onChanged: (val) {
+                                    if (val) {
+                                      onActivate(agentId, agentName);
+                                    } else {
+                                      if (isActive) onDeactivate();
+                                    }
+                                  },
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       );
