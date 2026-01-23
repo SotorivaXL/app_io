@@ -976,7 +976,20 @@ exports.zApiWebhook = onRequest(async (req, res) => {
                     const doc = await t.get(chatDocRef);
                     const d = doc.data() || {};
                     
-                    if ((d.status || 'novo') !== 'novo') return;
+                    const st = (d.status || 'novo');
+                    const aiMode = (d.aiMode || 'ai'); // default: ai
+                    const pausedUntil = d.aiPausedUntil?.toDate?.() || null;
+
+                    const now = new Date();
+
+                    // se humano está atendendo, não agenda IA
+                    if (aiMode === 'human') return;
+
+                    // se está pausado ainda, não agenda
+                    if (pausedUntil && pausedUntil > now) return;
+
+                    // opcional: manter a regra “só responde em novo”
+                    if (st !== 'novo') return;
 
                     const bufferDoc = bufferColRef.doc(String(incomingMsgId));
                     t.set(bufferDoc, {
@@ -1088,6 +1101,24 @@ exports.gptQueueWorker = onRequest(async (req, res) => {
 
     logger.info(`[GPT Worker] Enviando Prompt Agrupado: "${fullPrompt}"`);
 
+    const chatSnap2 = await chatDocRef.get();
+    const chat2 = chatSnap2.data() || {};
+
+    const aiMode = chat2.aiMode || 'ai';
+    const pausedUntil = chat2.aiPausedUntil?.toDate?.() || null;
+    const now = new Date();
+
+    if (aiMode === 'human') {
+    logger.info('[GPT Worker] Abortado: aiMode=human');
+    return res.status(200).send('AI Paused (human)');
+    }
+
+    if (pausedUntil && pausedUntil > now) {
+    logger.info('[GPT Worker] Abortado: aiPausedUntil ativo');
+    return res.status(200).send('AI Paused (time)');
+    }
+
+
     // 4. CHAMA GPT E RESPONDE
     try {
         const pData = (await phoneDocRef.get()).data() || {};
@@ -1138,7 +1169,7 @@ exports.gptQueueWorker = onRequest(async (req, res) => {
                 // Salva resposta no histórico
                 await msgsColRef.add({
                     content: aiMessage, type: 'text', timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                    fromMe: true, sender: senderNumber, status: 'sent', read: true, zapiId: 'gpt_' + Date.now() 
+                    fromMe: true, sender: senderNumber, status: 'sent', read: true, zapiId: 'gpt_' + Date.now(), origin: 'ai',
                 });
 
                 if (isHandoff) {
@@ -1678,6 +1709,7 @@ exports.sendMessage = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req, res) =>
 
         const { phoneDocRef, chatDocRef, msgsColRef } = getChatRefs(empresaId, phoneId, chatId);
 
+
         // Validacão mínima
         if (!chatId || (!message && !fileData && fileType !== "read")) {
             logger.warn("Parâmetros ausentes", { chatId, hasMessage: !!message, hasFile: !!fileData, fileType });
@@ -1729,6 +1761,54 @@ exports.sendMessage = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req, res) =>
 
             return res.status(200).send({ value: true });
         }
+
+
+        const chatSnap = await chatDocRef.get();
+        const chatData = chatSnap.data() || {};
+
+        // considera manual quando não é read
+        const isManualSend = fileType !== "read";
+
+        // se ainda está em IA, vira humano e registra aviso UMA vez
+        const curAiMode = (chatData.aiMode || 'ai');
+        const curStatus = (chatData.status || 'novo');
+
+        const shouldFlipToHuman =
+        isManualSend && (curAiMode !== 'human' || curStatus !== 'atendendo');
+
+        if (shouldFlipToHuman) {
+        await admin.firestore().runTransaction(async (tx) => {
+            const fresh = await tx.get(chatDocRef);
+            const d = fresh.data() || {};
+            const aiModeNow = d.aiMode || 'ai';
+            const statusNow = d.status || 'novo';
+
+            // double-check dentro da transaction (evita duplicar em corrida)
+            if (aiModeNow === 'human' && statusNow === 'atendendo') return;
+
+            tx.set(chatDocRef, {
+            aiMode: 'human',
+            status: 'atendendo',
+            humanStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+            }, { merge: true });
+
+            // system marker (aparece no chat)
+            tx.set(msgsColRef.doc(), {
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            fromMe: false,
+            type: 'system',
+            content: '🧑‍💼 Atendimento iniciado — IA desativada',
+            senderType: 'system',
+            event: 'human_took_over',
+            read: true,
+            status: 'sent',
+            });
+        });
+        }
+
+
+
+
 
         // Escolhe endpoint + payload conforme fileType (sempre phone: phoneDigits)
         let endpoint = "";
@@ -1932,6 +2012,57 @@ exports.sendMessage = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req, res) =>
 
         return res.status(status).send(data || String(error));
     }
+});
+
+
+
+exports.logChatSystemEvent = onCall(async (request) => {
+  // ✅ exige usuário logado
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Login obrigatório.");
+  }
+
+  const { empresaId, phoneId, chatId, content, event, extra } = request.data || {};
+
+  // validação mínima
+  if (!empresaId || !phoneId || !chatId || !content) {
+    throw new HttpsError("invalid-argument", "Parâmetros ausentes.");
+  }
+
+  const uid = request.auth.uid;
+
+  // (Opcional) pega nome do usuário logado (se existir no token)
+  const actorName =
+    request.auth.token?.name ||
+    request.auth.token?.email ||
+    "Operador";
+
+  const chatDocRef = admin
+    .firestore()
+    .collection("empresas")
+    .doc(String(empresaId))
+    .collection("phones")
+    .doc(String(phoneId))
+    .collection("whatsappChats")
+    .doc(String(chatId));
+
+  const msgsColRef = chatDocRef.collection("messages");
+
+  // ✅ grava mensagem de sistema com auditoria
+  await msgsColRef.add({
+    type: "system",
+    origin: "system",
+    content: String(content),
+    event: event || null,
+    extra: extra || null,
+
+    actorUid: uid,
+    actorName: String(actorName),
+
+    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { ok: true };
 });
 
 // =============================================================================

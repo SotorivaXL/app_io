@@ -649,14 +649,14 @@ class _ChatDetailState extends State<ChatDetail> {
 
     await chatRef.set({
       'opened': true,
-      'status': 'atendendo',
+      // 'status': 'atendendo',
       'updatedBy': uid, //  <<< adição
       'updatedAt': FieldValue.serverTimestamp(), //  <<< adição
     }, SetOptions(merge: true));
 
     // (opcional) salva no histórico ─ só se você quiser
     await chatRef.collection('history').add({
-      'status': 'atendendo',
+      // 'status': 'atendendo',
       'saleValue': null,
       'changedAt': FieldValue.serverTimestamp(),
       'updatedBy': uid, //  <<< adição
@@ -1771,6 +1771,41 @@ class _ChatDetailState extends State<ChatDetail> {
     );
   }
 
+    // ✅ Badge minimalista: mostra se foi BOT ou HUMANO (quando existir senderType/senderName)
+  Widget _senderBadge(Map<String, dynamic> data) {
+    final cs = Theme.of(context).colorScheme;
+
+    final senderType = (data['senderType'] as String? ?? '').trim();
+    final senderName = (data['senderName'] as String? ?? '').trim();
+
+    if (senderType.isEmpty) return const SizedBox.shrink();
+    if (senderType == 'lead') return const SizedBox.shrink(); // não poluir msg do cliente
+    if (senderType == 'system') return const SizedBox.shrink();
+
+    String label;
+    if (senderType == 'ai') {
+      label = '🤖 ${senderName.isNotEmpty ? senderName : 'Bot'}';
+    } else if (senderType == 'human') {
+      label = '👤 ${senderName.isNotEmpty ? senderName : 'Humano'}';
+    } else {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          height: 1.0,
+          color: cs.onSecondary.withOpacity(.55),
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+
   // Constrói a bolha de mensagem com suporte à seleção
   Widget _buildMessageBubble(String msgId, Map<String, dynamic> data) {
     final caption = (data['caption'] as String? ?? '').trim();
@@ -1804,14 +1839,15 @@ class _ChatDetailState extends State<ChatDetail> {
     if (type == 'text') {
       return _buildRegularBubble(
         msgId: msgId,
+        data: data, // ✅ novo
         inner: _collapsibleText(msgId, content),
-        // <<< AQUI
         fromMe: fromMe,
         timeString: timeString,
         isSelected: isSelected,
         read: data['read'] == true,
       );
     }
+
 
     // ----- IMAGEM / FIGURINHA -----------------------------------------  ✅
     if (type == 'image' || type == 'sticker') {
@@ -2094,12 +2130,14 @@ class _ChatDetailState extends State<ChatDetail> {
     /* default: texto genérico caso algum tipo novo apareça ------------- */
     return _buildRegularBubble(
       msgId: msgId,
+      data: data, // ✅ novo
       inner: Text(content, style: const TextStyle(fontSize: 15)),
       fromMe: fromMe,
       timeString: timeString,
       isSelected: isSelected,
       read: data['read'] == true,
     );
+
   }
 
   // cache de aspect ratio (w/h) para imagens/thumbs
@@ -2383,8 +2421,9 @@ class _ChatDetailState extends State<ChatDetail> {
     );
   }
 
-  Widget _buildRegularBubble({
+    Widget _buildRegularBubble({
     required String msgId,
+    required Map<String, dynamic> data,
     required Widget inner,
     required bool fromMe,
     required String timeString,
@@ -2445,6 +2484,7 @@ class _ChatDetailState extends State<ChatDetail> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (fromMe) _senderBadge(data),
                     inner,
                     const SizedBox(height: 4),
                     Align(
