@@ -806,7 +806,7 @@ class _ChatDetailState extends State<ChatDetail> {
     try {
       final bytes = await readRecordedBytes(pathOrUrl);
       final base64Audio = base64Encode(bytes);
-
+      final uid = FirebaseAuth.instance.currentUser!.uid;
       final r = await http.post(
         Uri.parse('https://sendmessage-5a3yl3wsma-uc.a.run.app'),
         headers: {'Content-Type': 'application/json'},
@@ -817,6 +817,8 @@ class _ChatDetailState extends State<ChatDetail> {
           'message': '',
           'fileType': 'audio',
           'fileData': base64Audio,
+          'senderType': 'human',
+          'senderUid': uid,
         }),
       );
 
@@ -1069,16 +1071,21 @@ class _ChatDetailState extends State<ChatDetail> {
 
     try {
       final url = Uri.parse('https://sendmessage-5a3yl3wsma-uc.a.run.app');
+      final uid = FirebaseAuth.instance.currentUser!.uid;
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'empresaId': _companyId,
-          'phoneId': _phoneId,
-          'chatId': widget.chatId,
-          'message': text,
-          'fileType': 'text',
-        }),
+        'empresaId': _companyId,
+        'phoneId': _phoneId,
+        'chatId': widget.chatId,
+        'message': text,
+        'fileType': 'text',
+
+        // ✅ NOVO
+        'senderType': 'human',
+        'senderUid': uid,
+      }),
       );
       if (response.statusCode == 200) {
         await _markChatAsAttended(); // move para “Atendendo”
@@ -1786,7 +1793,7 @@ class _ChatDetailState extends State<ChatDetail> {
     if (senderType == 'ai') {
       label = '🤖 ${senderName.isNotEmpty ? senderName : 'Bot'}';
     } else if (senderType == 'human') {
-      label = '👤 ${senderName.isNotEmpty ? senderName : 'Humano'}';
+      label = senderName.isNotEmpty ? '👤 $senderName' : '👤 Atendente';
     } else {
       return const SizedBox.shrink();
     }
@@ -1910,32 +1917,32 @@ class _ChatDetailState extends State<ChatDetail> {
       }
 
       return _buildMediaBubble(
-        msgId: msgId,
-        fromMe: fromMe,
-        read: data['read'] == true,
-        isSelected: isSelected,
-        timeString: timeString,
-        caption: caption,
-        mediaWidth: box.width,
-        mediaHeight: box.height,
-        // ✅ AQUI
-        mediaChild: Hero(tag: heroTag, child: img),
-        onOpen: () {
-          Navigator.of(context).push(
-            ZoomPageRoute(
-              page: _ImagePreviewPage(
-                content: content,
-                heroTag: heroTag,
-                sender: fromMe ? 'Você' : widget.chatName,
-                sentAt: (timestamp is Timestamp)
-                    ? DateFormat("d 'de' MMMM HH:mm", 'pt_BR')
-                        .format(timestamp.toDate())
-                    : '',
-              ),
+      msgId: msgId,
+      data: data, // ✅ novo
+      fromMe: fromMe,
+      read: data['read'] == true,
+      isSelected: isSelected,
+      timeString: timeString,
+      caption: caption,
+      mediaWidth: box.width,
+      mediaHeight: box.height,
+      mediaChild: Hero(tag: heroTag, child: img),
+      onOpen: () {
+        Navigator.of(context).push(
+          ZoomPageRoute(
+            page: _ImagePreviewPage(
+              content: content,
+              heroTag: heroTag,
+              sender: fromMe ? 'Você' : widget.chatName,
+              sentAt: (timestamp is Timestamp)
+                  ? DateFormat("d 'de' MMMM HH:mm", 'pt_BR')
+                      .format(timestamp.toDate())
+                  : '',
             ),
-          );
-        },
-      );
+          ),
+        );
+      },
+    );
     }
 
     if (type == 'audio') {
@@ -1946,6 +1953,8 @@ class _ChatDetailState extends State<ChatDetail> {
         isFromMe: fromMe,
         sentTime: timeString,
         avatarUrl: fromMe ? _myAvatarUrl : widget.contactPhoto,
+        senderType: data['senderType'] as String?,
+        senderName: data['senderName'] as String?,
         preloadedPath: cached?.localPath,
         preloadedWave: cached?.wave,
         preloadedDur: cached?.total,
@@ -2100,6 +2109,7 @@ class _ChatDetailState extends State<ChatDetail> {
 
       return _buildMediaBubble(
         msgId: msgId,
+        data: data, // ✅ novo
         fromMe: fromMe,
         read: data['read'] == true,
         isSelected: isSelected,
@@ -2107,7 +2117,6 @@ class _ChatDetailState extends State<ChatDetail> {
         caption: caption,
         mediaWidth: mediaWidth,
         mediaHeight: mediaHeight,
-        // ✅ novo
         mediaChild: videoThumbStack,
         onOpen: () async {
           final playable = await _ensureVideoCached(msgId, videoUrl);
@@ -2125,6 +2134,7 @@ class _ChatDetailState extends State<ChatDetail> {
           );
         },
       );
+
     }
 
     /* default: texto genérico caso algum tipo novo apareça ------------- */
@@ -2283,143 +2293,180 @@ class _ChatDetailState extends State<ChatDetail> {
   }
 
   Widget _buildMediaBubble({
-    required String msgId,
-    required bool fromMe,
-    required bool read,
-    required bool isSelected,
-    required String timeString,
-    required Widget mediaChild,
-    required String caption,
-    required double mediaWidth,
-    required double mediaHeight, // ✅ novo
-    VoidCallback? onOpen,
-  }) {
-    final cs = Theme.of(context).colorScheme;
+  required String msgId,
+  required Map<String, dynamic> data, // ✅ novo
+  required bool fromMe,
+  required bool read,
+  required bool isSelected,
+  required String timeString,
+  required Widget mediaChild,
+  required String caption,
+  required double mediaWidth,
+  required double mediaHeight,
+  VoidCallback? onOpen,
+}) {
+  final cs = Theme.of(context).colorScheme;
 
-    final borderColor = fromMe ? cs.tertiary.withOpacity(.50) : cs.secondary;
-    const borderPad = 3.0;
+  final borderColor = fromMe ? cs.tertiary.withOpacity(.50) : cs.secondary;
+  const borderPad = 3.0;
 
-    final outerR = _mediaRadius(fromMe);
-    final innerR = BorderRadius.only(
-      topLeft:
-          Radius.circular((outerR.topLeft.x - borderPad).clamp(0.0, 999.0)),
-      topRight:
-          Radius.circular((outerR.topRight.x - borderPad).clamp(0.0, 999.0)),
-      bottomLeft:
-          Radius.circular((outerR.bottomLeft.x - borderPad).clamp(0.0, 999.0)),
-      bottomRight:
-          Radius.circular((outerR.bottomRight.x - borderPad).clamp(0.0, 999.0)),
-    );
+  final outerR = _mediaRadius(fromMe);
+  final innerR = BorderRadius.only(
+    topLeft: Radius.circular((outerR.topLeft.x - borderPad).clamp(0.0, 999.0)),
+    topRight:
+        Radius.circular((outerR.topRight.x - borderPad).clamp(0.0, 999.0)),
+    bottomLeft:
+        Radius.circular((outerR.bottomLeft.x - borderPad).clamp(0.0, 999.0)),
+    bottomRight: Radius.circular(
+        (outerR.bottomRight.x - borderPad).clamp(0.0, 999.0)),
+  );
 
-    final hasCaption = caption.trim().isNotEmpty;
+  final hasCaption = caption.trim().isNotEmpty;
+  final double innerW = mediaWidth;
 
-    // ✅ trava a largura do conteúdo interno na largura da mídia
-    final double innerW = mediaWidth;
+  // ✅ Badge só pra outgoing
+  final senderBadge = fromMe ? _senderBadge(data) : const SizedBox.shrink();
 
-    final innerContent = hasCaption
-        ? Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ✅ garante que a mídia ocupa a largura que você calculou
-              SizedBox(width: innerW, height: mediaHeight, child: mediaChild),
+  final innerContent = hasCaption
+      ? Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ✅ badge acima da mídia quando tem caption
+            if (fromMe)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+                child: senderBadge,
+              ),
 
-              // ✅ caption + meta com a MESMA largura da mídia
-              SizedBox(
-                width: innerW,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          caption,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: cs.onSecondary,
-                            height: 1.25,
-                          ),
+            SizedBox(width: innerW, height: mediaHeight, child: mediaChild),
+
+            SizedBox(
+              width: innerW,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        caption,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: cs.onSecondary,
+                          height: 1.25,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      _mediaMetaInline(
-                          fromMe: fromMe, read: read, timeString: timeString),
-                    ],
+                    ),
+                    const SizedBox(width: 8),
+                    _mediaMetaInline(
+                      fromMe: fromMe,
+                      read: read,
+                      timeString: timeString,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        )
+      : SizedBox(
+          width: innerW,
+          height: mediaHeight,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              mediaChild,
+
+              // ✅ badge “WhatsApp-like” sobre a mídia (sem caption)
+              if (fromMe)
+                Positioned(
+                  left: 6,
+                  top: 6,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(.35),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: DefaultTextStyle.merge(
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        height: 1.0,
+                      ),
+                      child: senderBadge,
+                    ),
                   ),
+                ),
+
+              Positioned(
+                right: 6,
+                bottom: 6,
+                child: _mediaMetaOverlay(
+                  fromMe: fromMe,
+                  read: read,
+                  timeString: timeString,
                 ),
               ),
             ],
-          )
-        : SizedBox(
-            width: innerW,
-            height: mediaHeight, // ✅ garante o mesmo retângulo
-            child: Stack(
-              fit: StackFit.expand, // ✅ importante
-              children: [
-                mediaChild,
-                Positioned(
-                  right: 6,
-                  bottom: 6,
-                  child: _mediaMetaOverlay(
-                      fromMe: fromMe, read: read, timeString: timeString),
-                ),
-              ],
-            ),
-          );
-
-    final bubble = ClipRRect(
-      borderRadius: outerR,
-      child: Container(
-        color: borderColor,
-        padding: const EdgeInsets.all(borderPad),
-        child: ClipRRect(
-          borderRadius: innerR,
-          child: innerContent,
-        ),
-      ),
-    );
-
-    final tappableBubble = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onLongPress: () {
-        setState(() {
-          selectionMode = true;
-          selectedMessageIds.add(msgId);
-        });
-      },
-      onTap: () {
-        if (selectionMode) {
-          setState(() {
-            if (isSelected) {
-              selectedMessageIds.remove(msgId);
-              if (selectedMessageIds.isEmpty) selectionMode = false;
-            } else {
-              selectedMessageIds.add(msgId);
-            }
-          });
-        } else {
-          onOpen?.call();
-        }
-      },
-      child: bubble,
-    );
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      child: Align(
-        alignment: fromMe ? Alignment.centerRight : Alignment.centerLeft,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: (selectionMode && isSelected)
-                ? Colors.blue.withOpacity(.30)
-                : Colors.transparent,
-            borderRadius: outerR,
           ),
-          child: tappableBubble,
-        ),
+        );
+
+  final bubble = ClipRRect(
+    borderRadius: outerR,
+    child: Container(
+      color: borderColor,
+      padding: const EdgeInsets.all(borderPad),
+      child: ClipRRect(
+        borderRadius: innerR,
+        child: innerContent,
       ),
-    );
-  }
+    ),
+  );
+
+  final tappableBubble = GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onLongPress: () {
+      setState(() {
+        selectionMode = true;
+        selectedMessageIds.add(msgId);
+      });
+    },
+    onTap: () {
+      if (selectionMode) {
+        setState(() {
+          if (isSelected) {
+            selectedMessageIds.remove(msgId);
+            if (selectedMessageIds.isEmpty) selectionMode = false;
+          } else {
+            selectedMessageIds.add(msgId);
+          }
+        });
+      } else {
+        onOpen?.call();
+      }
+    },
+    child: bubble,
+  );
+
+  return Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+    child: Align(
+      alignment: fromMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: (selectionMode && isSelected)
+              ? Colors.blue.withOpacity(.30)
+              : Colors.transparent,
+          borderRadius: outerR,
+        ),
+        child: tappableBubble,
+      ),
+    ),
+  );
+}
+
 
     Widget _buildRegularBubble({
     required String msgId,
@@ -3037,6 +3084,10 @@ class AudioMessageBubble extends StatefulWidget {
   final String sentTime;
   final String avatarUrl;
 
+  // ✅ novos
+  final String? senderType; // 'ai' | 'human' | 'lead' | 'system'
+  final String? senderName;
+
   final String? preloadedPath;
   final aw.PlayerController? preloadedWave;
   final Duration? preloadedDur;
@@ -3047,6 +3098,8 @@ class AudioMessageBubble extends StatefulWidget {
     required this.isFromMe,
     required this.sentTime,
     required this.avatarUrl,
+    this.senderType,
+    this.senderName,
     this.preloadedPath,
     this.preloadedWave,
     this.preloadedDur,
@@ -3060,7 +3113,7 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
   List<double>? _webPeaks;
   bool _loadingPeaks = false;
   late final aw.PlayerController _wave;
-  late final bool _ownsWave; // ✅ só dispose se eu criei
+  late final bool _ownsWave;
   final ja.AudioPlayer _player = ja.AudioPlayer();
 
   StreamSubscription<Duration>? _posSub;
@@ -3072,8 +3125,8 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
   Duration _total = Duration.zero;
   bool _playing = false;
 
-  String? _tempPath; // mobile/desktop
-  bool _waveOk = true; // se der erro, cai no fallback
+  String? _tempPath;
+  bool _waveOk = true;
 
   @override
   void initState() {
@@ -3087,7 +3140,6 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
 
   void _bindPlayerStreams() {
     if (kIsWeb) {
-      // ✅ WEB: duração + posição + playing via just_audio
       _posSub = _player.positionStream.listen((d) {
         if (!mounted) return;
         setState(() => _pos = d);
@@ -3118,7 +3170,6 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
       return;
     }
 
-    // ✅ MOBILE: PlayerController
     _wave.onCurrentDurationChanged.listen((ms) {
       if (!mounted) return;
       setState(() => _pos = Duration(milliseconds: ms));
@@ -3135,7 +3186,9 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
         _playing = false;
         _pos = Duration.zero;
       });
-      try { await _wave.seekTo(0); } catch (_) {}
+      try {
+        await _wave.seekTo(0);
+      } catch (_) {}
     });
   }
 
@@ -3148,13 +3201,14 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
 
     _player.dispose();
 
-    // ✅ NÃO pode dar dispose no controller do cache
     if (_ownsWave) {
       _wave.dispose();
     }
 
     if (!kIsWeb && _tempPath != null) {
-      try { File(_tempPath!).delete(); } catch (_) {}
+      try {
+        File(_tempPath!).delete();
+      } catch (_) {}
     }
 
     super.dispose();
@@ -3162,9 +3216,9 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
 
   Future<void> _prepare() async {
     try {
+      // 1) Cache pronto (mobile/desktop)
       if (!kIsWeb && widget.preloadedPath != null) {
         final pth = widget.preloadedPath!;
-
         try {
           await _wave.preparePlayer(
             path: pth,
@@ -3182,18 +3236,13 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
               _waveOk = true;
             });
           }
-        } catch (e) {
-          if (mounted) {
-            setState(() {
-              _waveOk = false;
-            });
-          }
+        } catch (_) {
+          if (mounted) setState(() => _waveOk = false);
         }
-
         return;
       }
 
-      // 2) Se vier URL
+      // 2) URL
       if (widget.base64Audio.startsWith('http')) {
         final url = proxifyMediaUrl(widget.base64Audio);
 
@@ -3202,18 +3251,15 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
           final bytes = resp.bodyBytes;
 
           await _player.setUrl(url);
-          await _player.load(); // ✅ força carregar metadata/duração
-          if (mounted) {
-            setState(() => _total = _player.duration ?? Duration.zero);
-          }
-          await _ensureWebPeaks(bytes);
+          await _player.load();
+          if (mounted) setState(() => _total = _player.duration ?? Duration.zero);
 
+          await _ensureWebPeaks(bytes);
           _waveOk = false;
           return;
         }
 
         final bytes = (await http.get(Uri.parse(url))).bodyBytes;
-
         final ext = _audioExtFromBytes(bytes);
 
         final dir = await getTemporaryDirectory();
@@ -3227,7 +3273,11 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
         await _player.setFilePath(_tempPath!);
 
         try {
-          await _wave.preparePlayer(path: _tempPath!, shouldExtractWaveform: true);
+          await _wave.preparePlayer(
+            path: _tempPath!,
+            shouldExtractWaveform: true,
+            noOfSamples: 90,
+          );
           final maxMs = await _wave.getDuration(aw.DurationType.max);
           if (mounted) {
             setState(() {
@@ -3235,7 +3285,6 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
               _waveOk = true;
             });
           }
-          _waveOk = true;
         } catch (_) {
           _waveOk = false;
         }
@@ -3243,7 +3292,7 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
         return;
       }
 
-      // 3) Se vier base64
+      // 3) base64
       final raw = _clean(widget.base64Audio);
       final bytes = base64Decode(raw);
       final ext = _audioExtFromBytes(bytes);
@@ -3252,18 +3301,14 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
         final mime = _mimeFromExt(ext);
         final dataUrl = 'data:$mime;base64,$raw';
         await _player.setUrl(dataUrl);
-        await _player.load(); // ✅ força carregar metadata/duração
-        if (mounted) {
-          setState(() => _total = _player.duration ?? Duration.zero);
-        }
+        await _player.load();
+        if (mounted) setState(() => _total = _player.duration ?? Duration.zero);
+
         await _ensureWebPeaks(bytes);
-
-
         _waveOk = false;
         return;
       }
 
-      // Mobile/desktop: salva em arquivo local pra waveform
       final dir = await getTemporaryDirectory();
       _tempPath = p.join(
         dir.path,
@@ -3274,19 +3319,19 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
       await _player.setFilePath(_tempPath!);
 
       try {
-        await _wave.preparePlayer(path: _tempPath!, shouldExtractWaveform: true);
+        await _wave.preparePlayer(
+          path: _tempPath!,
+          shouldExtractWaveform: true,
+          noOfSamples: 90,
+        );
         final maxMs = await _wave.getDuration(aw.DurationType.max);
+
         if (mounted) {
           setState(() {
             _total = Duration(milliseconds: maxMs > 0 ? maxMs : _wave.maxDuration);
             _waveOk = true;
           });
         }
-
-        _total = Duration(milliseconds: maxMs > 0 ? maxMs : _wave.maxDuration);
-        _waveOk = true;
-
-        _waveOk = true;
       } catch (_) {
         _waveOk = false;
       }
@@ -3296,10 +3341,9 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
   }
 
   Future<void> _ensureWebPeaks(Uint8List bytes) async {
-    // número de barras “WhatsApp-like” (ajuste fino)
     const bars = 80;
 
-    final key = bytes.length ^ bytes.first ^ bytes.last; // hash simples
+    final key = bytes.length ^ bytes.first ^ bytes.last;
     final cached = _webPeaksCache[key];
     if (cached != null) {
       if (!mounted) return;
@@ -3323,11 +3367,9 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
 
   Future<void> _toggle() async {
     if (kIsWeb) {
-      // WEB: just_audio
       if (_playing) {
         await _player.pause();
       } else {
-        // se terminou, volta pro começo
         if (_total.inMilliseconds > 0 &&
             _pos >= _total - const Duration(milliseconds: 200)) {
           await _player.seek(Duration.zero);
@@ -3337,27 +3379,26 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
       return;
     }
 
-    // ✅ APP: PlayerController
     if (_playing) {
-      await _wave.pausePlayer(); // :contentReference[oaicite:2]{index=2}
+      await _wave.pausePlayer();
       return;
     }
 
-    // para garantir 1 áudio tocando por vez
-    await _wave.pauseAllPlayers(); // :contentReference[oaicite:3]{index=3}
+    await _wave.pauseAllPlayers();
 
-    // se terminou, volta pro começo
     if (_wave.maxDuration > 0 &&
         _pos.inMilliseconds >= _wave.maxDuration - 200) {
-      try { await _wave.seekTo(0); } catch (_) {}
+      try {
+        await _wave.seekTo(0);
+      } catch (_) {}
     }
 
-    await _wave.startPlayer(); // :contentReference[oaicite:4]{index=4}
+    await _wave.startPlayer();
   }
 
   String _fmt(Duration d) =>
       '${d.inMinutes.remainder(60).toString().padLeft(2, '0')}:'
-          '${d.inSeconds.remainder(60).toString().padLeft(2, '0')}';
+      '${d.inSeconds.remainder(60).toString().padLeft(2, '0')}';
 
   String get _durLabel => _total.inMilliseconds == 0 ? '--:--' : _fmt(_total);
 
@@ -3372,11 +3413,24 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
 
     final avatar = widget.avatarUrl.trim();
     final avatarProvider =
-    avatar.isNotEmpty ? NetworkImage(proxifyMediaUrl(avatar)) : null;
+        avatar.isNotEmpty ? NetworkImage(proxifyMediaUrl(avatar)) : null;
+
+    // ✅ Badge (só outgoing)
+    final st = (widget.senderType ?? '').trim();
+    final sn = (widget.senderName ?? '').trim();
+    final showBadge = widget.isFromMe &&
+        st.isNotEmpty &&
+        st != 'lead' &&
+        st != 'system';
+
+    final badgeText = (st == 'ai')
+        ? '🤖 ${sn.isNotEmpty ? sn : 'Bot'}'
+        : (st == 'human')
+            ? '👤 ${sn.isNotEmpty ? sn : 'Humano'}'
+            : null;
 
     Widget waveWidget;
 
-    // ✅ mobile: waveform real; web: fallback
     if (!kIsWeb) {
       if (_waveOk) {
         waveWidget = LayoutBuilder(
@@ -3390,7 +3444,7 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
               enableSeekGesture: true,
               waveformType: aw.WaveformType.fitWidth,
               playerWaveStyle: aw.PlayerWaveStyle(
-                liveWaveColor: cs.primary, // ✅ roxo andando
+                liveWaveColor: cs.primary,
                 fixedWaveColor: cs.onSurface.withOpacity(.25),
                 waveThickness: 2,
                 spacing: 3,
@@ -3400,7 +3454,6 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
           },
         );
       } else {
-        // ✅ fallback visual no app (não trava)
         waveWidget = Container(
           height: 34,
           decoration: BoxDecoration(
@@ -3418,8 +3471,7 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
         );
       }
     } else {
-      // ✅ Web: waveform real por peaks (WebAudio)
-      if (kIsWeb && _webPeaks != null) {
+      if (_webPeaks != null) {
         waveWidget = WebPeaksWaveform(
           peaks: _webPeaks!,
           progress: ratio,
@@ -3428,7 +3480,6 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
           spacing: 3,
         );
       } else {
-        // placeholder enquanto carrega (ou fallback se decode falhar)
         waveWidget = Container(
           height: 34,
           decoration: BoxDecoration(
@@ -3436,7 +3487,7 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
             borderRadius: BorderRadius.circular(10),
           ),
           alignment: Alignment.center,
-          child: SizedBox(
+          child: const SizedBox(
             width: 16,
             height: 16,
             child: CircularProgressIndicator(strokeWidth: 2),
@@ -3455,6 +3506,23 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // ✅ BADGE no áudio
+          if (showBadge && badgeText != null) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                badgeText,
+                style: TextStyle(
+                  fontSize: 10,
+                  height: 1.0,
+                  color: cs.onSurface.withOpacity(.55),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+          ],
+
           Row(
             children: [
               InkWell(
@@ -3502,7 +3570,6 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
 
           const SizedBox(height: 6),
 
-          // ✅ meta em linha separada (não corta)
           Row(
             children: [
               Text(
@@ -3527,6 +3594,7 @@ class _AudioMessageBubbleState extends State<AudioMessageBubble> {
     );
   }
 }
+
 
 String _audioExtFromBytes(Uint8List b) {
   if (b.length >= 4) {

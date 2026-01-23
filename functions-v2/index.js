@@ -897,7 +897,8 @@ exports.zApiWebhook = onRequest(async (req, res) => {
             timestamp  : admin.firestore.FieldValue.serverTimestamp(),
             fromMe     : data.fromMe === true,
             sender     : data.participantPhone || data.phone,
-            senderName : data.senderName || '',
+            senderType : 'human',              // lead/contato
+            senderName : chatName || '',
             senderPhoto: data.senderPhoto || data.photo || '',
             zapiId     : data.id || null,
             read       : false,
@@ -1053,162 +1054,218 @@ exports.zApiWebhook = onRequest(async (req, res) => {
 // 2. O WORKER (CONSUMIDOR) - FUNÇÃO QUE O CLOUD TASKS CHAMA
 // =============================================================================
 exports.gptQueueWorker = onRequest(async (req, res) => {
-    const { empresaId, phoneId, chatId, executionToken, senderNumber, agentId, gptToken } = req.body;
+  const { empresaId, phoneId, chatId, executionToken, senderNumber, agentId, gptToken } = req.body;
 
-    logger.info(`[GPT Worker] Acordou para processar token: ${executionToken} (Agent: ${agentId})`);
+  logger.info(`[GPT Worker] Acordou para processar token: ${executionToken} (Agent: ${agentId})`);
 
-    if (!agentId || !gptToken) {
-        logger.error('[GPT Worker] Abortado: agentId ou gptToken ausentes no payload.');
-        return res.status(400).send('Missing GPT Credentials');
-    }
+  if (!agentId || !gptToken) {
+    logger.error('[GPT Worker] Abortado: agentId ou gptToken ausentes no payload.');
+    return res.status(400).send('Missing GPT Credentials');
+  }
 
-    const { chatDocRef, msgsColRef, phoneDocRef } = getChatRefs(empresaId, phoneId, chatId);
-    const bufferColRef = chatDocRef.collection('gpt_buffer');
-    
-    let textsToProcess = [];
+  const { chatDocRef, msgsColRef, phoneDocRef } = getChatRefs(empresaId, phoneId, chatId);
+  const bufferColRef = chatDocRef.collection('gpt_buffer');
 
-    // 2. VERIFICAÇÃO E CONSUMO ATÔMICO
-    try {
-        await admin.firestore().runTransaction(async (t) => {
-            const chatSnap = await t.get(chatDocRef);
-            const chatData = chatSnap.data() || {};
+  let textsToProcess = [];
 
-            if (chatData.gptDebounceToken !== executionToken) {
-                return; 
-            }
+  // 2. VERIFICAÇÃO E CONSUMO ATÔMICO
+  try {
+    await admin.firestore().runTransaction(async (t) => {
+      const chatSnap = await t.get(chatDocRef);
+      const chatData = chatSnap.data() || {};
 
-            const bufferSnaps = await t.get(bufferColRef.orderBy('timestamp', 'asc'));
-            
-            bufferSnaps.docs.forEach(d => {
-                const val = d.data().content;
-                if (val) textsToProcess.push(val);
-                t.delete(d.ref); 
-            });
-        });
-    } catch (e) {
-        logger.error('[GPT Worker] Erro Transação:', e);
-        return res.status(500).send('Transaction Error');
-    }
+      if (chatData.gptDebounceToken !== executionToken) {
+        return;
+      }
 
-    if (textsToProcess.length === 0) {
-        logger.info('[GPT Worker] Cancelado (Token antigo ou Buffer vazio).');
-        return res.status(200).send('Skipped');
-    }
+      const bufferSnaps = await t.get(bufferColRef.orderBy('timestamp', 'asc'));
 
-    // 3. PREPARA PROMPT
-    const uniqueTexts = [...new Set(textsToProcess)];
-    const fullPrompt = uniqueTexts.join(" ");
+      bufferSnaps.docs.forEach((d) => {
+        const val = d.data().content;
+        if (val) textsToProcess.push(val);
+        t.delete(d.ref);
+      });
+    });
+  } catch (e) {
+    logger.error('[GPT Worker] Erro Transação:', e);
+    return res.status(500).send('Transaction Error');
+  }
 
-    logger.info(`[GPT Worker] Enviando Prompt Agrupado: "${fullPrompt}"`);
+  if (textsToProcess.length === 0) {
+    logger.info('[GPT Worker] Cancelado (Token antigo ou Buffer vazio).');
+    return res.status(200).send('Skipped');
+  }
 
-    const chatSnap2 = await chatDocRef.get();
-    const chat2 = chatSnap2.data() || {};
+  // 3. PREPARA PROMPT
+  const uniqueTexts = [...new Set(textsToProcess)];
+  const fullPrompt = uniqueTexts.join(' ');
 
-    const aiMode = chat2.aiMode || 'ai';
-    const pausedUntil = chat2.aiPausedUntil?.toDate?.() || null;
-    const now = new Date();
+  logger.info(`[GPT Worker] Enviando Prompt Agrupado: "${fullPrompt}"`);
 
-    if (aiMode === 'human') {
+  const chatSnap2 = await chatDocRef.get();
+  const chat2 = chatSnap2.data() || {};
+
+  const aiMode = chat2.aiMode || 'ai';
+  const pausedUntil = chat2.aiPausedUntil?.toDate?.() || null;
+  const now = new Date();
+
+  if (aiMode === 'human') {
     logger.info('[GPT Worker] Abortado: aiMode=human');
     return res.status(200).send('AI Paused (human)');
-    }
+  }
 
-    if (pausedUntil && pausedUntil > now) {
+  if (pausedUntil && pausedUntil > now) {
     logger.info('[GPT Worker] Abortado: aiPausedUntil ativo');
     return res.status(200).send('AI Paused (time)');
+  }
+
+  // 4. CHAMA GPT E RESPONDE
+  try {
+    const pData = (await phoneDocRef.get()).data() || {};
+
+    const zInstance =
+      typeof decryptIfNeeded === 'function'
+        ? decryptIfNeeded(pData.instanceId)
+        : (pData.instanceId || process.env.ZAPI_ID);
+
+    const zToken =
+      typeof decryptIfNeeded === 'function'
+        ? decryptIfNeeded(pData.token)
+        : (pData.token || process.env.ZAPI_TOKEN);
+
+    const zClientToken =
+      typeof decryptIfNeeded === 'function'
+        ? decryptIfNeeded(pData.clientToken)
+        : (pData.clientToken || process.env.ZAPI_CLIENT_TOKEN);
+
+    if (!zInstance || !zToken) {
+      logger.error('[GPT Worker] Z-API Credenciais não encontradas no DB.');
+      return res.status(400).send('Z-API config missing');
     }
 
+    // ✅ NOVO: nome do bot dinâmico (vem do doc do telefone)
+    // Prioriza: phone.ai_agent.name -> phone.ai_agent.agentName -> fallback "OPI"
+    const botName =
+      String(pData?.ai_agent?.name || pData?.ai_agent?.agentName || '').trim() || 'Agente de IA';
 
-    // 4. CHAMA GPT E RESPONDE
+    // --- Renova "Digitando..."
     try {
-        const pData = (await phoneDocRef.get()).data() || {};
-        
-        const zInstance = (typeof decryptIfNeeded === 'function') ? decryptIfNeeded(pData.instanceId) : (pData.instanceId || process.env.ZAPI_ID);
-        const zToken = (typeof decryptIfNeeded === 'function') ? decryptIfNeeded(pData.token) : (pData.token || process.env.ZAPI_TOKEN);
-        const zClientToken = (typeof decryptIfNeeded === 'function') ? decryptIfNeeded(pData.clientToken) : (pData.clientToken || process.env.ZAPI_CLIENT_TOKEN);
-
-        if (zInstance && zToken) {
-            
-            // --- NOVO: Envia "Digitando..." DE NOVO ---
-            // Como pode ter passado 10 segundos, o status anterior pode ter sumido.
-            // Renovamos agora enquanto a IA "pensa".
-            await sendZApiTyping(zInstance, zToken, zClientToken, senderNumber);
-            // ------------------------------------------
-
-            // CHAMADA AO GPT MAKER
-            const gptResponse = await axios.post(
-                `https://api.gptmaker.ai/v2/agent/${agentId}/conversation`, 
-                { contextId: senderNumber, prompt: fullPrompt },
-                { headers: { 'Authorization': `Bearer ${gptToken}` } }      
-            );
-
-            let rawResponse = gptResponse.data.response || gptResponse.data.message;
-            let aiMessage = rawResponse;
-            let isHandoff = false;
-
-            try {
-                const cleanJson = rawResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-                if (cleanJson.startsWith('{')) {
-                    const parsed = JSON.parse(cleanJson);
-                    if (parsed.action === 'handoff') {
-                        isHandoff = true;
-                        aiMessage = parsed.message;
-                    }
-                }
-            } catch (e) { }
-
-            if (aiMessage) {
-                // Envia via Z-API
-                const zHeaders = {};
-                if (zClientToken) zHeaders['client-token'] = zClientToken;
-
-                await axios.post(`https://api.z-api.io/instances/${zInstance}/token/${zToken}/send-text`, {
-                    phone: senderNumber, message: aiMessage
-                }, { headers: zHeaders });
-
-                // Salva resposta no histórico
-                await msgsColRef.add({
-                    content: aiMessage, type: 'text', timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                    fromMe: true, sender: senderNumber, status: 'sent', read: true, zapiId: 'gpt_' + Date.now(), origin: 'ai',
-                });
-
-                if (isHandoff) {
-                    await chatDocRef.set({
-                        lastMessage: aiMessage, 
-                        lastMessageTime: new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }),
-                        timestamp: admin.firestore.FieldValue.serverTimestamp(), 
-                        status: 'atendendo' 
-                    }, { merge: true });
-                    
-                    if (typeof persistSystemEventMessage === 'function') {
-                        await persistSystemEventMessage({ 
-                            empresaId, phoneId, chatId, 
-                            event: 'handoff', 
-                            label: 'IA Handoff', 
-                            extra: { agentId: agentId } 
-                        });
-                    }
-                } else {
-                    await chatDocRef.set({
-                        lastMessage: aiMessage, 
-                        lastMessageTime: new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }),
-                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                    }, { merge: true });
-                }
-
-                return res.status(200).send('GPT Worker Done');
-            }
-        } else {
-             logger.error('[GPT Worker] Z-API Credenciais não encontradas no DB.');
-             return res.status(400).send('Z-API config missing');
-        }
-    } catch (err) {
-        logger.error('[GPT Worker] Erro final:', err.message);
-        return res.status(500).send(err.message);
+      await sendZApiTyping(zInstance, zToken, zClientToken, senderNumber);
+    } catch (e) {
+      logger.warn('[GPT Worker] Falhou typing (ignorado):', e?.message || e);
     }
 
-    return res.status(200).send('Worker Finished');
+    // CHAMADA AO GPT MAKER
+    const gptResponse = await axios.post(
+      `https://api.gptmaker.ai/v2/agent/${agentId}/conversation`,
+      { contextId: senderNumber, prompt: fullPrompt },
+      { headers: { Authorization: `Bearer ${gptToken}` } }
+    );
+
+    let rawResponse = gptResponse.data.response || gptResponse.data.message;
+    let aiMessage = rawResponse;
+    let isHandoff = false;
+
+    try {
+      const cleanJson = String(rawResponse || '')
+        .replace(/```json/g, '')
+        .replace(/```/g, '')
+        .trim();
+      if (cleanJson.startsWith('{')) {
+        const parsed = JSON.parse(cleanJson);
+        if (parsed.action === 'handoff') {
+          isHandoff = true;
+          aiMessage = parsed.message;
+        }
+      }
+    } catch (e) {
+      /* ignora */
+    }
+
+    aiMessage = String(aiMessage || '').trim();
+    if (!aiMessage) {
+      return res.status(200).send('GPT Worker Done (empty)');
+    }
+
+    // Envia via Z-API
+    const zHeaders = {};
+    if (zClientToken) zHeaders['client-token'] = zClientToken;
+
+    await axios.post(
+      `https://api.z-api.io/instances/${zInstance}/token/${zToken}/send-text`,
+      { phone: senderNumber, message: aiMessage },
+      { headers: zHeaders }
+    );
+
+    // ✅ Salva resposta no histórico com senderType/senderName (dinâmico)
+    await msgsColRef.add({
+      content: aiMessage,
+      type: 'text',
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      fromMe: true,
+      sender: senderNumber,
+      status: 'sent',
+
+      // "read" = lead leu? pra saída começa false
+      read: false,
+
+      // ✅ Campos novos pro badge no app
+      senderType: 'ai',
+      senderName: botName,
+
+      origin: 'ai',
+      zapiId: 'gpt_' + Date.now(),
+      clientMessageId: `gpt_${chatId}_${Date.now()}`,
+    });
+
+    const lastTimeStr = new Date().toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    if (isHandoff) {
+      // ✅ HANDOFF = pausar IA e marcar como atendendo/human
+      await chatDocRef.set(
+        {
+          lastMessage: aiMessage,
+          lastMessageTime: lastTimeStr,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          status: 'atendendo',
+          aiMode: 'human',
+          humanStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      if (typeof persistSystemEventMessage === 'function') {
+        await persistSystemEventMessage({
+          empresaId,
+          phoneId,
+          chatId,
+          event: 'handoff',
+          label: 'IA Handoff',
+          extra: { agentId: agentId },
+        });
+      }
+    } else {
+      await chatDocRef.set(
+        {
+          lastMessage: aiMessage,
+          lastMessageTime: lastTimeStr,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+
+    return res.status(200).send('GPT Worker Done');
+  } catch (err) {
+    logger.error('[GPT Worker] Erro final:', err?.message || err);
+    return res.status(500).send(err?.message || String(err));
+  }
 });
+
+
 
 
 
@@ -1687,332 +1744,395 @@ exports.deleteGptTraining = onCall(async (request) => {
 
 
 exports.sendMessage = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req, res) => {
-    // CORS
-    res.set("Access-Control-Allow-Origin", "*");
-    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.set("Access-Control-Allow-Headers", "Content-Type");
-    if (req.method === "OPTIONS") return res.status(204).send("");
+  // CORS
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.status(204).send("");
 
-    logger.info("sendMessage function called");
+  logger.info("sendMessage function called");
 
-    // Ignora callbacks da Z-API (payloads com "type")
-    if (req.body?.type) return res.status(200).send("Callback ignorado");
-    if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
+  // Ignora callbacks da Z-API (payloads com "type")
+  if (req.body?.type) return res.status(200).send("Callback ignorado");
+  if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
 
-    try {
-        const { empresaId, phoneId, chatId, message, caption, fileType, fileData, clientMessageId } = req.body;
+  try {
+    const {
+      empresaId,
+      phoneId,
+      chatId,
+      message,
+      caption,
+      fileType,
+      fileData,
+      clientMessageId,
 
-        const finalCaption = (typeof caption === 'string' ? caption : (typeof message === 'string' ? message : '')).trim();
+      // ✅ opcionais
+      senderType: senderTypeRaw,
+      senderName: senderNameRaw,
+      senderUid,
+    } = req.body;
 
-        const viewOnce = req.body.viewOnce === true;
+    const finalCaption = (
+      typeof caption === "string"
+        ? caption
+        : (typeof message === "string" ? message : "")
+    ).trim();
 
+    const viewOnce = req.body.viewOnce === true;
 
-        const { phoneDocRef, chatDocRef, msgsColRef } = getChatRefs(empresaId, phoneId, chatId);
+    const { phoneDocRef, chatDocRef, msgsColRef } = getChatRefs(empresaId, phoneId, chatId);
 
-
-        // Validacão mínima
-        if (!chatId || (!message && !fileData && fileType !== "read")) {
-            logger.warn("Parâmetros ausentes", { chatId, hasMessage: !!message, hasFile: !!fileData, fileType });
-            return res.status(400).send("Faltam parâmetros");
-        }
-
-        // Idempotência (se cliente não mandar, geramos um)
-        const uniqueId = clientMessageId || `${chatId}_${Date.now()}`;
-
-        // Credenciais (descriptografa ou cai nas envs)
-        const phoneData = (await phoneDocRef.get()).data() || {};
-        const instanceId  = decryptIfNeeded(phoneData.instanceId)  || process.env.ZAPI_ID;
-        const token       = decryptIfNeeded(phoneData.token)       || process.env.ZAPI_TOKEN;
-        const clientToken = decryptIfNeeded(phoneData.clientToken) || process.env.ZAPI_CLIENT_TOKEN;
-
-        if (!instanceId || !token || !clientToken) {
-            logger.error("Credenciais Z-API ausentes (verifique doc phones ou variáveis de ambiente)");
-            return res.status(500).send("Configuração do backend incorreta");
-        }
-
-        logger.info("Credenciais Z-API obtidas", {
-            instanceId: instanceId?.slice?.(0, 6) + '…',
-            token: '***',
-            clientToken: '***'
-        });
-
-        // Sempre enviar phone apenas com dígitos
-        const phoneDigits = (chatId || '').toString().replace(/\D/g, '');
-
-        // Headers exigidos pela Z-API (use 'client-token' em minúsculas)
-        const headers = { 'client-token': clientToken };
-
-        /* ─────────────────────────────
-         *  SUPORTE A fileType === "read"
-         * ───────────────────────────── */
-        if (fileType === "read") {
-            const modifyPayload = { phone: phoneDigits, action: "read" };
-            logger.info("Marcando chat como lido via Z-API");
-
-            // chama via callZ (fallback de host)
-            await callZ(instanceId, token, '/modify-chat', modifyPayload, headers, 15000);
-
-            // zera contador + marca mensagens como lidas no Firestore
-            const unreadSnap = await msgsColRef.where("read","==",false).get();
-            const batch = admin.firestore().batch();
-            unreadSnap.docs.forEach(d => batch.set(d.ref, { read: true }, { merge: true }));
-            batch.set(chatDocRef, { unreadCount: 0 }, { merge: true });
-            await batch.commit();
-
-            return res.status(200).send({ value: true });
-        }
-
-
-        const chatSnap = await chatDocRef.get();
-        const chatData = chatSnap.data() || {};
-
-        // considera manual quando não é read
-        const isManualSend = fileType !== "read";
-
-        // se ainda está em IA, vira humano e registra aviso UMA vez
-        const curAiMode = (chatData.aiMode || 'ai');
-        const curStatus = (chatData.status || 'novo');
-
-        const shouldFlipToHuman =
-        isManualSend && (curAiMode !== 'human' || curStatus !== 'atendendo');
-
-        if (shouldFlipToHuman) {
-        await admin.firestore().runTransaction(async (tx) => {
-            const fresh = await tx.get(chatDocRef);
-            const d = fresh.data() || {};
-            const aiModeNow = d.aiMode || 'ai';
-            const statusNow = d.status || 'novo';
-
-            // double-check dentro da transaction (evita duplicar em corrida)
-            if (aiModeNow === 'human' && statusNow === 'atendendo') return;
-
-            tx.set(chatDocRef, {
-            aiMode: 'human',
-            status: 'atendendo',
-            humanStartedAt: admin.firestore.FieldValue.serverTimestamp(),
-            }, { merge: true });
-
-            // system marker (aparece no chat)
-            tx.set(msgsColRef.doc(), {
-            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-            fromMe: false,
-            type: 'system',
-            content: '🧑‍💼 Atendimento iniciado — IA desativada',
-            senderType: 'system',
-            event: 'human_took_over',
-            read: true,
-            status: 'sent',
-            });
-        });
-        }
-
-
-
-
-
-        // Escolhe endpoint + payload conforme fileType (sempre phone: phoneDigits)
-        let endpoint = "";
-        let payload = {};
-        let kind = "text";
-
-        if (fileType === "image") {
-            endpoint = "/send-image";
-            kind = "image";
-            let imageData = fileData || "";
-            if (imageData && !/^data:image\//i.test(imageData)) {
-                imageData = "data:image/jpeg;base64," + imageData;
-            }
-            payload = {
-                phone: phoneDigits,
-                image: imageData,
-                caption: finalCaption,     // ✅ Z-API
-                viewOnce: viewOnce,        // ✅ opcional
-            };
-
-        } else if (fileType === "audio") {
-            endpoint = "/send-audio";
-            kind = "audio";
-            let audioData = fileData || "";
-            if (audioData && !/^data:audio\//i.test(audioData)) {
-                audioData = "data:audio/mp4;base64," + audioData;
-            }
-            payload = { phone: phoneDigits, audio: audioData, message: message || "" };
-
-        } else if (fileType === "video") {
-            endpoint = "/send-video";
-            kind = "video";
-
-            let videoData = fileData || "";
-            // ✅ padroniza base64 no formato que a Z-API costuma aceitar melhor
-            if (videoData && !/^data:video\//i.test(videoData)) {
-                videoData = "data:video/mp4;base64," + videoData;
-            }
-
-            payload = {
-                phone: phoneDigits,
-                video: videoData,
-                caption: finalCaption,     // ✅ Z-API
-                viewOnce: viewOnce,        // ✅ opcional
-            };
-
-        } else if (fileType === "file" || fileType === "document") {
-            endpoint = "/send-document";
-            kind = "file";
-
-            const fileName = req.body.fileName || "arquivo";
-            let docData = fileData || "";
-
-            // data uri genérico (serve pra pdf/docx/xlsx etc)
-            if (docData && !/^data:/i.test(docData)) {
-                docData = "data:application/octet-stream;base64," + docData;
-            }
-
-            payload = { phone: phoneDigits, document: docData, fileName, caption: finalCaption };
-
-        } else {
-            endpoint = "/send-text";
-            kind = "text";
-            payload = { phone: phoneDigits, message: message || "" };
-        }
-
-        logger.info("Enviando mensagem via Z-API", { kind, chatId });
-
-        // Envia via callZ (tenta api-v2 depois api)
-        const { host: usedHost, resp: zResp } =
-            await callZ(instanceId, token, endpoint, payload, headers, 15000);
-
-        const zData = zResp?.data || {};
-
-        // De-dup (se cliente mandou um id)
-        if (clientMessageId) {
-            const dup = await msgsColRef.where("clientMessageId","==", uniqueId).limit(1).get();
-            if (!dup.empty) {
-                logger.warn("Mensagem duplicada detectada", { clientMessageId: uniqueId });
-                return res.status(200).send(zData);
-            }
-        }
-
-        // ID da mensagem retornado
-        const zMsgId =
-            zData.messageId || zData.msgId || zData.id || zData.zaapId || null;
-
-        let contentToStore = (kind === 'text') ? (message || '') : '';
-        let mediaMeta = null;
-
-        if (kind !== 'text') {
-            // Para vídeo/áudio/documento: SEMPRE Storage
-            // Para imagem você pode decidir por tamanho, mas pode padronizar também
-            const upload = await uploadBase64ToStorage({
-                empresaId,
-                phoneId,
-                chatId,
-                uniqueId,
-                kind,
-                data: fileType === 'video'
-                    ? (payload.video)         // já está "data:video/mp4;base64,..."
-                    : fileType === 'audio'
-                        ? (payload.audio)
-                        : (fileType === 'file' || fileType === 'document')
-                            ? (payload.document)
-                            : (payload.image),
-                fileName: req.body.fileName || null,
-                defaultMime:
-                    fileType === 'video' ? 'video/mp4' :
-                        fileType === 'audio' ? 'audio/mp4' :
-                            (fileType === 'file' || fileType === 'document') ? 'application/octet-stream' :
-                                'image/jpeg'
-            });
-
-            contentToStore = upload.url;
-
-            let thumbUrl = null;
-            let thumbMeta = null;
-
-            if (req.body.thumbData) {
-                let t = String(req.body.thumbData || '');
-                // se vier só base64, prefixa data-uri
-                if (t && !/^data:image\//i.test(t)) {
-                    const mime = String(req.body.thumbMime || 'image/jpeg');
-                    t = `data:${mime};base64,${t}`;
-                }
-
-                const thumbUp = await uploadBase64ToStorage({
-                    empresaId,
-                    phoneId,
-                    chatId,
-                    uniqueId,
-                    kind: 'video_thumb',
-                    data: t,
-                    fileName: 'thumb.jpg',
-                    defaultMime: String(req.body.thumbMime || 'image/jpeg'),
-                });
-
-                thumbUrl = thumbUp.url;
-                thumbMeta = {
-                    thumbUrl: thumbUp.url,
-                    thumbMime: thumbUp.contentType,
-                    thumbSizeBytes: thumbUp.sizeBytes,
-                    thumbStoragePath: thumbUp.path,
-                };
-            }
-
-            mediaMeta = {
-                url: upload.url,
-                mime: upload.contentType,
-                sizeBytes: upload.sizeBytes,
-                fileName: upload.fileName,
-                storagePath: upload.path,
-                ...(thumbMeta ? thumbMeta : {}),
-            };
-        }
-
-        // Monta doc Firestore
-        const firestoreData = {
-            timestamp       : admin.firestore.FieldValue.serverTimestamp(),
-            fromMe          : true,
-            sender          : zData.sender || null,
-            clientMessageId : uniqueId,
-            zapiId          : zMsgId,
-            status          : 'sent',
-            read            : false,
-            type            : kind,
-            content         : contentToStore, // URL (mídia) ou texto
-        };
-
-        if (kind !== 'text') {
-            firestoreData.caption = finalCaption;
-            firestoreData.media   = mediaMeta;
-        }
-
-        await msgsColRef.add(firestoreData);
-
-        await chatDocRef.set({
-            chatId,
-            lastMessage: kind === 'text'
-                ? (message || '')
-                : (finalCaption ? finalCaption : (kind === 'video' ? '📹 Vídeo' : kind === 'audio' ? '🎤 Áudio' : '📎 Arquivo')),
-            lastMessageTime: admin.firestore.FieldValue.serverTimestamp(),
-            type: kind,
-            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
-
-        return res.status(200).send(zData);
-    } catch (error) {
-        const status = error?.status || error?.response?.status || 500;
-        const data = error?.data || error?.response?.data;
-
-        logger.error("sendMessage failed", {
-            status,
-            message: String(error?.message || error),
-            code: error?.code || null,
-            dataPreview: typeof data === 'string'
-                ? data.slice(0, 500)
-                : (data ? JSON.stringify(data).slice(0, 500) : null),
-        });
-
-        return res.status(status).send(data || String(error));
+    // Validação mínima
+    if (!chatId || (!message && !fileData && fileType !== "read")) {
+      logger.warn("Parâmetros ausentes", { chatId, hasMessage: !!message, hasFile: !!fileData, fileType });
+      return res.status(400).send("Faltam parâmetros");
     }
+
+    // Idempotência (se cliente não mandar, geramos um)
+    const uniqueId = clientMessageId || `${chatId}_${Date.now()}`;
+
+    // Sempre enviar phone apenas com dígitos
+    const phoneDigits = (chatId || "").toString().replace(/\D/g, "");
+
+    // Credenciais Z-API (descriptografa ou cai nas envs)
+    const phoneData = (await phoneDocRef.get()).data() || {};
+    const instanceId  = decryptIfNeeded(phoneData.instanceId)  || process.env.ZAPI_ID;
+    const token       = decryptIfNeeded(phoneData.token)       || process.env.ZAPI_TOKEN;
+    const clientToken = decryptIfNeeded(phoneData.clientToken) || process.env.ZAPI_CLIENT_TOKEN;
+
+    if (!instanceId || !token || !clientToken) {
+      logger.error("Credenciais Z-API ausentes (verifique doc phones ou variáveis de ambiente)");
+      return res.status(500).send("Configuração do backend incorreta");
+    }
+
+    logger.info("Credenciais Z-API obtidas", {
+      instanceId: instanceId?.slice?.(0, 6) + "…",
+      token: "***",
+      clientToken: "***",
+    });
+
+    // Headers exigidos pela Z-API (use 'client-token' em minúsculas)
+    const headers = { "client-token": clientToken };
+
+    /* ─────────────────────────────
+     *  SUPORTE A fileType === "read"
+     * ───────────────────────────── */
+    if (fileType === "read") {
+      const modifyPayload = { phone: phoneDigits, action: "read" };
+      logger.info("Marcando chat como lido via Z-API");
+
+      await callZ(instanceId, token, "/modify-chat", modifyPayload, headers, 15000);
+
+      const unreadSnap = await msgsColRef.where("read", "==", false).get();
+      const batch = admin.firestore().batch();
+      unreadSnap.docs.forEach((d) => batch.set(d.ref, { read: true }, { merge: true }));
+      batch.set(chatDocRef, { unreadCount: 0 }, { merge: true });
+      await batch.commit();
+
+      return res.status(200).send({ value: true });
+    }
+
+   // ✅ helper: resolve nome real (human) e nome do bot (ai)
+    const resolveSenderName = async ({ senderType, senderUid, senderNameRaw }) => {
+    const explicit = String(senderNameRaw || "").trim();
+    if (explicit) return explicit;
+
+    // Nome dinâmico do BOT pelo phoneData (se você já salva isso lá)
+    if (senderType === "ai") {
+        const botName =
+        String(phoneData?.ai_agent?.name || phoneData?.ai_agent?.agentName || "").trim() || "OPI";
+        return botName;
+    }
+
+    // ✅ Nome real do HUMANO pelo UID: users/{uid}.name
+    if (senderType === "human" && senderUid) {
+        const uid = String(senderUid).trim();
+        if (!uid) return "Atendente";
+
+        try {
+        const snap = await admin.firestore().doc(`users/${uid}`).get();
+        if (snap.exists) {
+            const d = snap.data() || {};
+            const name = String(d.name || "").trim();
+            if (name) return name;
+        }
+        } catch (e) {
+        logger.warn("[sendMessage] Falha ao buscar nome do user", { uid, err: e?.message || e });
+        }
+
+        return "Atendente";
+    }
+
+    if (senderType === "system") return "Sistema";
+    return "";
+    };
+
+
+    // ✅ Resolve senderType/senderName com defaults seguros
+    const normalizedSenderType = String(senderTypeRaw || "").trim().toLowerCase();
+    const normalizedSenderName = String(senderNameRaw || "").trim();
+
+    const isManualSend = fileType !== "read";
+
+    // Se não veio senderType:
+    // - envios manuais => human
+    // - automações => ai
+    const senderType =
+      (normalizedSenderType === "human" ||
+        normalizedSenderType === "ai" ||
+        normalizedSenderType === "lead" ||
+        normalizedSenderType === "system")
+        ? normalizedSenderType
+        : (isManualSend ? "human" : "ai");
+
+    // ✅ Nome final: humano pega do UID, bot pega do phone, ou usa senderName do req se veio
+    const senderName = await resolveSenderName({
+      senderType,
+      senderUid,
+      senderNameRaw: normalizedSenderName,
+    });
+
+    const chatSnap = await chatDocRef.get();
+    const chatData = chatSnap.data() || {};
+
+    // ✅ flip pra human somente se a mensagem for HUMANA
+    const curAiMode = (chatData.aiMode || "ai");
+    const curStatus = (chatData.status || "novo");
+
+    const shouldFlipToHuman =
+      isManualSend &&
+      senderType === "human" &&
+      (curAiMode !== "human" || curStatus !== "atendendo");
+
+    if (shouldFlipToHuman) {
+      await admin.firestore().runTransaction(async (tx) => {
+        const fresh = await tx.get(chatDocRef);
+        const d = fresh.data() || {};
+        const aiModeNow = d.aiMode || "ai";
+        const statusNow = d.status || "novo";
+
+        if (aiModeNow === "human" && statusNow === "atendendo") return;
+
+        tx.set(
+          chatDocRef,
+          {
+            aiMode: "human",
+            status: "atendendo",
+            humanStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        // system marker (aparece no chat)
+        tx.set(msgsColRef.doc(), {
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          fromMe: false,
+          type: "system",
+          content: "🧑‍💼 Atendimento iniciado — IA desativada",
+          senderType: "system",
+          senderName: "Sistema",
+          event: "human_took_over",
+          read: true,
+          status: "sent",
+        });
+      });
+    }
+
+    // Escolhe endpoint + payload conforme fileType
+    let endpoint = "";
+    let payload = {};
+    let kind = "text";
+
+    if (fileType === "image") {
+      endpoint = "/send-image";
+      kind = "image";
+      let imageData = fileData || "";
+      if (imageData && !/^data:image\//i.test(imageData)) {
+        imageData = "data:image/jpeg;base64," + imageData;
+      }
+      payload = { phone: phoneDigits, image: imageData, caption: finalCaption, viewOnce };
+    } else if (fileType === "audio") {
+      endpoint = "/send-audio";
+      kind = "audio";
+      let audioData = fileData || "";
+      if (audioData && !/^data:audio\//i.test(audioData)) {
+        audioData = "data:audio/mp4;base64," + audioData;
+      }
+      payload = { phone: phoneDigits, audio: audioData, message: message || "" };
+    } else if (fileType === "video") {
+      endpoint = "/send-video";
+      kind = "video";
+      let videoData = fileData || "";
+      if (videoData && !/^data:video\//i.test(videoData)) {
+        videoData = "data:video/mp4;base64," + videoData;
+      }
+      payload = { phone: phoneDigits, video: videoData, caption: finalCaption, viewOnce };
+    } else if (fileType === "file" || fileType === "document") {
+      endpoint = "/send-document";
+      kind = "file";
+      const fileName = req.body.fileName || "arquivo";
+      let docData = fileData || "";
+      if (docData && !/^data:/i.test(docData)) {
+        docData = "data:application/octet-stream;base64," + docData;
+      }
+      payload = { phone: phoneDigits, document: docData, fileName, caption: finalCaption };
+    } else {
+      endpoint = "/send-text";
+      kind = "text";
+      payload = { phone: phoneDigits, message: message || "" };
+    }
+
+    logger.info("Enviando mensagem via Z-API", { kind, chatId, senderType, senderName });
+
+    // Envia via callZ (tenta api-v2 depois api)
+    const { resp: zResp } = await callZ(instanceId, token, endpoint, payload, headers, 15000);
+    const zData = zResp?.data || {};
+
+    // De-dup
+    if (clientMessageId) {
+      const dup = await msgsColRef.where("clientMessageId", "==", uniqueId).limit(1).get();
+      if (!dup.empty) {
+        logger.warn("Mensagem duplicada detectada", { clientMessageId: uniqueId });
+        return res.status(200).send(zData);
+      }
+    }
+
+    // ID da mensagem retornado
+    const zMsgId = zData.messageId || zData.msgId || zData.id || zData.zaapId || null;
+
+    let contentToStore = (kind === "text") ? (message || "") : "";
+    let mediaMeta = null;
+
+    if (kind !== "text") {
+      const upload = await uploadBase64ToStorage({
+        empresaId,
+        phoneId,
+        chatId,
+        uniqueId,
+        kind,
+        data:
+          fileType === "video"
+            ? payload.video
+            : fileType === "audio"
+              ? payload.audio
+              : (fileType === "file" || fileType === "document")
+                ? payload.document
+                : payload.image,
+        fileName: req.body.fileName || null,
+        defaultMime:
+          fileType === "video"
+            ? "video/mp4"
+            : fileType === "audio"
+              ? "audio/mp4"
+              : (fileType === "file" || fileType === "document")
+                ? "application/octet-stream"
+                : "image/jpeg",
+      });
+
+      contentToStore = upload.url;
+
+      let thumbMeta = null;
+
+      if (req.body.thumbData) {
+        let t = String(req.body.thumbData || "");
+        if (t && !/^data:image\//i.test(t)) {
+          const mime = String(req.body.thumbMime || "image/jpeg");
+          t = `data:${mime};base64,${t}`;
+        }
+
+        const thumbUp = await uploadBase64ToStorage({
+          empresaId,
+          phoneId,
+          chatId,
+          uniqueId,
+          kind: "video_thumb",
+          data: t,
+          fileName: "thumb.jpg",
+          defaultMime: String(req.body.thumbMime || "image/jpeg"),
+        });
+
+        thumbMeta = {
+          thumbUrl: thumbUp.url,
+          thumbMime: thumbUp.contentType,
+          thumbSizeBytes: thumbUp.sizeBytes,
+          thumbStoragePath: thumbUp.path,
+        };
+      }
+
+      mediaMeta = {
+        url: upload.url,
+        mime: upload.contentType,
+        sizeBytes: upload.sizeBytes,
+        fileName: upload.fileName,
+        storagePath: upload.path,
+        ...(thumbMeta ? thumbMeta : {}),
+      };
+    }
+
+    // Monta doc Firestore
+    const firestoreData = {
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      fromMe: true,
+
+      // ⚠️ este "sender" era zData.sender (às vezes vem vazio/inesperado).
+      // Mantive seu padrão: zData.sender, com fallback melhor:
+      sender: zData.sender || phoneDigits || null,
+
+      clientMessageId: uniqueId,
+      zapiId: zMsgId,
+      status: "sent",
+      read: false,
+      type: kind,
+      content: contentToStore,
+
+      // ✅ identifica quem enviou (badge)
+      senderType,
+      senderName,
+      ...(senderUid ? { senderUid: String(senderUid) } : {}),
+    };
+
+    if (kind !== "text") {
+      firestoreData.caption = finalCaption;
+      firestoreData.media = mediaMeta;
+    }
+
+    await msgsColRef.add(firestoreData);
+
+    await chatDocRef.set(
+      {
+        chatId,
+        lastMessage:
+          kind === "text"
+            ? (message || "")
+            : (finalCaption ? finalCaption : (kind === "video" ? "📹 Vídeo" : kind === "audio" ? "🎤 Áudio" : "📎 Arquivo")),
+        lastMessageTime: admin.firestore.FieldValue.serverTimestamp(),
+        type: kind,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    return res.status(200).send(zData);
+  } catch (error) {
+    const status = error?.status || error?.response?.status || 500;
+    const data = error?.data || error?.response?.data;
+
+    logger.error("sendMessage failed", {
+      status,
+      message: String(error?.message || error),
+      code: error?.code || null,
+      dataPreview:
+        typeof data === "string"
+          ? data.slice(0, 500)
+          : (data ? JSON.stringify(data).slice(0, 500) : null),
+    });
+
+    return res.status(status).send(data || String(error));
+  }
 });
+
+
 
 
 
