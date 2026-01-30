@@ -21,6 +21,8 @@ const normInstanceId = (s) => String(s || '').trim().toUpperCase(); // evita var
 const hashInstanceId = (s) => crypto.createHash('sha256').update(normInstanceId(s), 'utf8').digest('hex');
 const ZAPI_ENC_KEY = defineSecret('ZAPI_ENC_KEY');
 const ENCRYPTION_KEY = defineSecret('ENCRYPTION_KEY');
+const GOOGLE_OAUTH_CLIENT_ID = defineSecret('GOOGLE_OAUTH_CLIENT_ID');
+const GOOGLE_OAUTH_CLIENT_SECRET = defineSecret('GOOGLE_OAUTH_CLIENT_SECRET');
 const AWS_ACCESS_KEY_ID        = defineSecret('AWS_ACCESS_KEY_ID');
 const AWS_SECRET_ACCESS_KEY    = defineSecret('AWS_SECRET_ACCESS_KEY');
 const AWS_REGION               = defineSecret('AWS_REGION');
@@ -130,6 +132,51 @@ function decryptIfNeeded(value, fieldName = '') {
 
     return value; // não parecia cifrado de verdade
 }
+
+function getEncKey() {
+    let keyB64;
+    try {
+        keyB64 = ENCRYPTION_KEY.value();
+    } catch {
+        keyB64 = process.env.ENCRYPTION_KEY;
+    }
+    if (!keyB64) throw new Error('ENCRYPTION_KEY não configurada');
+    return Buffer.from(keyB64, 'base64');
+}
+
+function encryptValue(plain) {
+    if (!plain) return '';
+    const key = getEncKey();
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const ct = Buffer.concat([cipher.update(String(plain), 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    const buf = Buffer.concat([iv, ct, tag]);
+    return `enc:v1:${buf.toString('base64')}`;
+}
+
+function decryptValue(value) {
+    if (!value) return '';
+    const key = getEncKey();
+    const raw = String(value);
+    const b64 = raw.startsWith('enc:v1:') ? raw.slice(7) : raw;
+    const buf = Buffer.from(b64, 'base64');
+    if (buf.length < 12 + 16 + 1) throw new Error('cipher muito curto');
+    const iv = buf.subarray(0, 12);
+    const ct = buf.subarray(12, buf.length - 16);
+    const tag = buf.subarray(buf.length - 16);
+    const dec = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    dec.setAuthTag(tag);
+    return Buffer.concat([dec.update(ct), dec.final()]).toString('utf8');
+}
+
+const GOOGLE_CALENDAR_SCOPES = [
+    'https://www.googleapis.com/auth/calendar',
+    'https://www.googleapis.com/auth/calendar.events',
+    'openid',
+    'email',
+    'profile',
+];
 
 
 // Configuração centralizada
@@ -1053,7 +1100,9 @@ exports.zApiWebhook = onRequest(async (req, res) => {
 // =============================================================================
 // 2. O WORKER (CONSUMIDOR) - FUNÇÃO QUE O CLOUD TASKS CHAMA
 // =============================================================================
-exports.gptQueueWorker = onRequest(async (req, res) => {
+exports.gptQueueWorker = onRequest(
+    { secrets: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, ENCRYPTION_KEY] },
+    async (req, res) => {
   const { empresaId, phoneId, chatId, executionToken, senderNumber, agentId, gptToken } = req.body;
 
   logger.info(`[GPT Worker] Acordou para processar token: ${executionToken} (Agent: ${agentId})`);
@@ -1155,10 +1204,217 @@ exports.gptQueueWorker = onRequest(async (req, res) => {
       logger.warn('[GPT Worker] Falhou typing (ignorado):', e?.message || e);
     }
 
+    // --- CONTEXTO: Agendamento automático com horários reais ---
+    let scheduleContext = '';
+    const scheduleHandle = async (messageToSend) => {
+      const zHeaders = {};
+      if (zClientToken) zHeaders['client-token'] = zClientToken;
+
+      await axios.post(
+        `https://api.z-api.io/instances/${zInstance}/token/${zToken}/send-text`,
+        { phone: senderNumber, message: messageToSend },
+        { headers: zHeaders }
+      );
+
+      await msgsColRef.add({
+        content: messageToSend,
+        type: 'text',
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        fromMe: true,
+        sender: senderNumber,
+        status: 'sent',
+        read: false,
+        senderType: 'ai',
+        senderName: botName,
+        origin: 'ai',
+        zapiId: 'gpt_' + Date.now(),
+        clientMessageId: `gpt_${chatId}_${Date.now()}`,
+      });
+
+      const lastTimeStr = new Date().toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      await chatDocRef.set(
+        {
+          lastMessage: messageToSend,
+          lastMessageTime: lastTimeStr,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    };
+
+    try {
+      const leadsSnap = await db
+          .collection('empresas').doc(empresaId)
+          .collection('phones').doc(phoneId)
+          .collection('ai_agent_leads').doc(agentId)
+          .get();
+      const leadsData = leadsSnap.exists ? (leadsSnap.data() || {}) : {};
+      const scheduleEnabled = leadsData?.schedule?.enabled === true;
+
+      const lastUserMsg = uniqueTexts[uniqueTexts.length - 1] || fullPrompt;
+      const pref = parseUserSchedulePreference(lastUserMsg);
+
+      const chatStateSnap = await chatDocRef.get();
+      const chatState = chatStateSnap.data() || {};
+      const pending = chatState.schedulePending || null;
+      const pendingExpires = pending?.expiresAt?.toDate?.() || null;
+      const pendingValid = pending && pendingExpires && pendingExpires > new Date();
+
+      const wantsSchedule =
+        pendingValid ||
+        /agend|agenda|reuni[aã]o|call|hor[aá]rio|disponibil|data|marcar|marque|quando|hoje|amanh[aã]/i
+          .test(lastUserMsg) ||
+        pref.hour != null ||
+        pref.wantsTomorrow ||
+        pref.day != null ||
+        pref.weekday != null;
+
+      if (scheduleEnabled && wantsSchedule) {
+        const baseSlots = pendingValid
+          ? (pending.slots || [])
+          : await computeAvailableSlots({
+              empresaId,
+              calendarId: 'primary',
+              timeZone: 'America/Sao_Paulo',
+              daysAhead: 7,
+              durationMinutes: 60,
+              stepMinutes: 30,
+            });
+
+        const slots = baseSlots || [];
+        const fromPending = pendingValid
+          ? parseUserFromPending(slots, lastUserMsg, 'America/Sao_Paulo')
+          : null;
+
+        const match = fromPending ||
+          (slots.length ? findMatchingSlot(slots, pref, 'America/Sao_Paulo') : null);
+
+        if (match) {
+          const label = formatSlotLabel(match.start, 'America/Sao_Paulo');
+          await createGoogleCalendarEventInternal({
+            empresaId,
+            calendarId: 'primary',
+            timeZone: 'America/Sao_Paulo',
+            startIso: match.start,
+            endIso: match.end,
+            summary: 'Reunião de diagnóstico',
+            description: `Lead ${senderNumber}`,
+          });
+
+          await scheduleHandle(
+            `Perfeito! Agendei para ${label}. Está reservado.`
+          );
+          await chatDocRef.set(
+            { schedulePending: admin.firestore.FieldValue.delete() },
+            { merge: true }
+          );
+          return res.status(200).send('GPT Worker Done (scheduled)');
+        }
+
+        if (slots.length) {
+          const preferredDaySlots = filterSlotsByPreference(
+              slots, pref, 'America/Sao_Paulo'
+          );
+          const listSlots = preferredDaySlots.length ? preferredDaySlots : slots;
+
+          await chatDocRef.set(
+            {
+              schedulePending: {
+                slots: listSlots,
+                expiresAt: admin.firestore.Timestamp.fromDate(
+                  new Date(Date.now() + 2 * 60 * 60 * 1000)
+                ),
+              },
+            },
+            { merge: true }
+          );
+
+          if (pref.hour != null || pref.day != null || pref.weekday != null || pref.wantsTomorrow) {
+            const nearest = listSlots[0];
+            const nearestText = nearest
+              ? formatSlotNatural(nearest.start, 'America/Sao_Paulo')
+              : null;
+            await scheduleHandle(
+              nearestText
+                ? `Não tenho exatamente esse horário. O mais próximo disponível é ${nearestText}. Quer confirmar?`
+                : 'Não encontrei esse horário. Quer que eu sugira o mais próximo disponível?'
+            );
+          } else {
+            const s1 = listSlots[0];
+            const s2 = listSlots[1];
+            const s3 = listSlots[2];
+            const opts = [s1, s2, s3].filter(Boolean)
+              .map((s) => formatSlotNatural(s.start, 'America/Sao_Paulo'));
+            await scheduleHandle(
+              opts.length
+                ? `Tenho estes horários próximos disponíveis: ${opts.join(' ou ')}. Qual você prefere?`
+                : 'Tenho horários disponíveis em breve. Qual período você prefere (manhã ou tarde)?'
+            );
+          }
+          return res.status(200).send('GPT Worker Done (slots)');
+        }
+
+        await scheduleHandle(
+          'No momento não tenho horários disponíveis nos próximos dias úteis. ' +
+          'Se preferir, posso chamar um humano para organizar manualmente.'
+        );
+        return res.status(200).send('GPT Worker Done (no slots)');
+      }
+    } catch (e) {
+      const status = e?.response?.status;
+      const data = e?.response?.data;
+      const msg = e?.message || 'Falha ao acessar a agenda.';
+      logger.warn('[GPT Worker] Falha ao obter horários.', { err: msg, status, data });
+
+      const handoffMsg =
+        'Perfeito — vou chamar alguém do nosso time pra te atender e já te direcionar certinho. Só um instante 🙂';
+
+      await scheduleHandle(handoffMsg);
+
+      // pausar IA e marcar como atendendo/human
+      await chatDocRef.set(
+        {
+          lastMessage: handoffMsg,
+          lastMessageTime: new Date().toLocaleTimeString('pt-BR', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          status: 'atendendo',
+          aiMode: 'human',
+          humanStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      if (typeof persistSystemEventMessage === 'function') {
+        await persistSystemEventMessage({
+          empresaId,
+          phoneId,
+          chatId,
+          event: 'handoff',
+          label: 'IA Handoff (agenda)',
+          extra: { agentId: agentId, error: msg, status },
+        });
+      }
+
+      return res.status(200).send('GPT Worker Done (schedule error -> handoff)');
+    }
+
     // CHAMADA AO GPT MAKER
     const gptResponse = await axios.post(
       `https://api.gptmaker.ai/v2/agent/${agentId}/conversation`,
-      { contextId: senderNumber, prompt: fullPrompt },
+      {
+        contextId: senderNumber,
+        prompt:
+            fullPrompt +
+            scheduleContext +
+            '\n[INSTRUÇÕES]\nNão mencionar nomes de responsáveis. Diga apenas "alguém do nosso time".\n',
+      },
       { headers: { Authorization: `Bearer ${gptToken}` } }
     );
 
@@ -1509,6 +1765,839 @@ exports.updateGptAgentSettings = onCall(async (request) => {
     throw new HttpsError('internal', `Erro ao atualizar settings: ${e.response?.status || ''}`);
   }
 });
+
+async function exchangeGoogleAuthCode({ authCode, redirectUri }) {
+    const clientId = GOOGLE_OAUTH_CLIENT_ID.value();
+    const clientSecret = GOOGLE_OAUTH_CLIENT_SECRET.value();
+
+    const body = new URLSearchParams({
+        code: authCode,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+    });
+
+    const resp = await axios.post(
+        'https://oauth2.googleapis.com/token',
+        body.toString(),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+
+    return resp.data || {};
+}
+
+async function fetchGoogleUserInfo(accessToken) {
+    if (!accessToken) return null;
+    const resp = await axios.get(
+        'https://openidconnect.googleapis.com/v1/userinfo',
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    return resp.data || null;
+}
+
+exports.connectGoogleCalendar = onCall(
+    { secrets: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, ENCRYPTION_KEY] },
+    async (request) => {
+        if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
+
+        const { empresaId, authCode, redirectUri } = request.data || {};
+        if (!empresaId || !authCode || !redirectUri) {
+            throw new HttpsError('invalid-argument', 'empresaId, authCode e redirectUri são obrigatórios.');
+        }
+
+        try {
+            const tokens = await exchangeGoogleAuthCode({ authCode, redirectUri });
+
+            const accessToken = tokens.access_token || '';
+            const refreshToken = tokens.refresh_token || '';
+            const expiresIn = Number(tokens.expires_in || 0);
+            const expiresAt = expiresIn ? Date.now() + (expiresIn * 1000) : null;
+
+            const userInfo = await fetchGoogleUserInfo(accessToken);
+
+            const ref = db
+                .collection('empresas')
+                .doc(String(empresaId))
+                .collection('integrations')
+                .doc('google_calendar');
+
+            const existing = await ref.get();
+            const existingData = existing.exists ? (existing.data() || {}) : {};
+            const existingRefresh = existingData.refreshToken || '';
+            const refreshEncrypted =
+                refreshToken ? encryptValue(refreshToken) : existingRefresh || '';
+
+            if (!refreshEncrypted) {
+                throw new HttpsError(
+                    'failed-precondition',
+                    'Google não retornou refresh_token. Confirme login com acesso offline (prompt=consent).'
+                );
+            }
+
+            await ref.set({
+                connected: true,
+                provider: 'google',
+                email: userInfo?.email || existingData.email || '',
+                displayName: userInfo?.name || existingData.displayName || '',
+                photoUrl: userInfo?.picture || existingData.photoUrl || '',
+                accessToken: accessToken ? encryptValue(accessToken) : admin.firestore.FieldValue.delete(),
+                refreshToken: refreshEncrypted,
+                scope: tokens.scope || existingData.scope || '',
+                tokenType: tokens.token_type || existingData.tokenType || '',
+                expiresAt: expiresAt || existingData.expiresAt || null,
+                updatedBy: request.auth.uid,
+                connectedAt: existingData.connectedAt || admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            }, { merge: true });
+
+            return {
+                ok: true,
+                email: userInfo?.email || existingData.email || '',
+                displayName: userInfo?.name || existingData.displayName || '',
+            };
+        } catch (e) {
+            const msg = e?.response?.data?.error_description || e?.message || 'Erro ao conectar Google Agenda';
+            logger.error('[connectGoogleCalendar] erro', { err: msg });
+            throw new HttpsError('internal', msg);
+        }
+    }
+);
+
+exports.getGoogleCalendarOAuthUrl = onCall(async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
+    const { empresaId } = request.data || {};
+    if (!empresaId) {
+        throw new HttpsError('invalid-argument', 'empresaId é obrigatório.');
+    }
+
+    const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT;
+    const region = process.env.FUNCTION_REGION || 'us-central1';
+    if (!projectId) {
+        throw new HttpsError('internal', 'Project ID não encontrado.');
+    }
+
+    const url = `https://${region}-${projectId}.cloudfunctions.net/googleCalendarOAuthStart?empresaId=${encodeURIComponent(empresaId)}`;
+    return { url };
+});
+
+exports.googleCalendarOAuthStart = onRequest(
+    { secrets: [GOOGLE_OAUTH_CLIENT_ID] },
+    async (req, res) => {
+        try {
+            const empresaId = String(req.query.empresaId || '').trim();
+            if (!empresaId) {
+                return res.status(400).send('empresaId é obrigatório');
+            }
+
+            const clientId = GOOGLE_OAUTH_CLIENT_ID.value();
+            const host = req.get('host');
+            const redirectUri = `https://${host}/googleCalendarOAuthCallback`;
+
+            const state = `${empresaId}:${crypto.randomUUID()}`;
+
+            const ref = db
+                .collection('empresas')
+                .doc(empresaId)
+                .collection('integrations')
+                .doc('google_calendar');
+
+            await ref.set({
+                oauthState: state,
+                oauthStateCreatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            }, { merge: true });
+
+            const scope = encodeURIComponent(GOOGLE_CALENDAR_SCOPES.join(' '));
+            const authUrl =
+                'https://accounts.google.com/o/oauth2/v2/auth' +
+                `?client_id=${encodeURIComponent(clientId)}` +
+                `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+                '&response_type=code' +
+                '&access_type=offline' +
+                '&prompt=consent' +
+                `&scope=${scope}` +
+                `&state=${encodeURIComponent(state)}`;
+
+            return res.redirect(authUrl);
+        } catch (e) {
+            logger.error('[googleCalendarOAuthStart] erro', { err: e?.message });
+            return res.status(500).send('Erro ao iniciar OAuth');
+        }
+    }
+);
+
+exports.googleCalendarOAuthCallback = onRequest(
+    { secrets: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, ENCRYPTION_KEY] },
+    async (req, res) => {
+        try {
+            const error = String(req.query.error || '').trim();
+            if (error) {
+                return res.status(400).send(`Erro OAuth: ${error}`);
+            }
+
+            const code = String(req.query.code || '').trim();
+            const state = String(req.query.state || '').trim();
+            if (!code || !state) {
+                return res.status(400).send('code/state ausentes');
+            }
+
+            const parts = state.split(':');
+            const empresaId = parts[0] || '';
+            if (!empresaId) {
+                return res.status(400).send('state inválido');
+            }
+
+            const ref = db
+                .collection('empresas')
+                .doc(empresaId)
+                .collection('integrations')
+                .doc('google_calendar');
+
+            const snap = await ref.get();
+            const data = snap.exists ? (snap.data() || {}) : {};
+            if (data.oauthState !== state) {
+                return res.status(400).send('state inválido');
+            }
+
+            const host = req.get('host');
+            const redirectUri = `https://${host}/googleCalendarOAuthCallback`;
+
+            const tokens = await exchangeGoogleAuthCode({
+                authCode: code,
+                redirectUri,
+            });
+
+            const accessToken = tokens.access_token || '';
+            const refreshToken = tokens.refresh_token || '';
+            const expiresIn = Number(tokens.expires_in || 0);
+            const expiresAt = expiresIn ? Date.now() + (expiresIn * 1000) : null;
+
+            const userInfo = await fetchGoogleUserInfo(accessToken);
+
+            if (!refreshToken) {
+                return res.status(400).send('Google não retornou refresh_token.');
+            }
+
+            await ref.set({
+                connected: true,
+                provider: 'google',
+                email: userInfo?.email || data.email || '',
+                displayName: userInfo?.name || data.displayName || '',
+                photoUrl: userInfo?.picture || data.photoUrl || '',
+                accessToken: accessToken ? encryptValue(accessToken) : admin.firestore.FieldValue.delete(),
+                refreshToken: encryptValue(refreshToken),
+                scope: tokens.scope || data.scope || '',
+                tokenType: tokens.token_type || data.tokenType || '',
+                expiresAt: expiresAt || data.expiresAt || null,
+                oauthState: admin.firestore.FieldValue.delete(),
+                oauthStateCreatedAt: admin.firestore.FieldValue.delete(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            }, { merge: true });
+
+            return res.status(200).send(
+                '<html><body style="font-family:Arial,sans-serif;">' +
+                '<h3>Agenda conectada com sucesso.</h3>' +
+                '<p>Você já pode voltar para o app.</p>' +
+                '<script>window.close();</script>' +
+                '</body></html>'
+            );
+        } catch (e) {
+            logger.error('[googleCalendarOAuthCallback] erro', { err: e?.message });
+            return res.status(500).send('Erro ao finalizar OAuth');
+        }
+    }
+);
+
+async function getGoogleCalendarTokens(empresaId) {
+    const ref = db
+        .collection('empresas')
+        .doc(String(empresaId))
+        .collection('integrations')
+        .doc('google_calendar');
+
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError('failed-precondition', 'Google Agenda não conectada.');
+
+    const data = snap.data() || {};
+    if (data.connected !== true || !data.refreshToken) {
+        throw new HttpsError('failed-precondition', 'Google Agenda não conectada.');
+    }
+
+    return { ref, data };
+}
+
+async function refreshGoogleAccessToken(refreshToken) {
+    const clientId = GOOGLE_OAUTH_CLIENT_ID.value();
+    const clientSecret = GOOGLE_OAUTH_CLIENT_SECRET.value();
+
+    const body = new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+    });
+
+    const resp = await axios.post(
+        'https://oauth2.googleapis.com/token',
+        body.toString(),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+    return resp.data || {};
+}
+
+async function ensureGoogleAccessToken({ empresaId }) {
+    const { ref, data } = await getGoogleCalendarTokens(empresaId);
+    const now = Date.now();
+    const expiresAt = Number(data.expiresAt || 0);
+    let accessToken = data.accessToken ? decryptValue(data.accessToken) : '';
+
+    if (!accessToken || (expiresAt && now > (expiresAt - 60000))) {
+        const refreshToken = decryptValue(data.refreshToken);
+        const refreshed = await refreshGoogleAccessToken(refreshToken);
+        accessToken = refreshed.access_token || accessToken;
+        const newExpiresAt = refreshed.expires_in
+            ? now + (Number(refreshed.expires_in) * 1000)
+            : expiresAt || null;
+
+        await ref.set({
+            accessToken: accessToken ? encryptValue(accessToken) : admin.firestore.FieldValue.delete(),
+            expiresAt: newExpiresAt,
+            tokenType: refreshed.token_type || data.tokenType || '',
+            scope: refreshed.scope || data.scope || '',
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+    }
+
+    if (!accessToken) throw new HttpsError('internal', 'Falha ao obter access token.');
+    return accessToken;
+}
+
+function getLocalDateParts(date, timeZone) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        weekday: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+    }).formatToParts(date);
+
+    const get = (type) => parts.find(p => p.type === type)?.value;
+    const weekday = get('weekday'); // Mon, Tue...
+    return {
+        year: Number(get('year')),
+        month: Number(get('month')),
+        day: Number(get('day')),
+        weekday,
+    };
+}
+
+function getLocalParts(date, timeZone) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        weekday: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }).formatToParts(date);
+
+    const get = (type) => parts.find(p => p.type === type)?.value;
+    return {
+        year: Number(get('year')),
+        month: Number(get('month')),
+        day: Number(get('day')),
+        weekday: get('weekday'),
+        hour: Number(get('hour')),
+        minute: Number(get('minute')),
+    };
+}
+
+function getTimeZoneOffsetMinutes(date, timeZone) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+    }).formatToParts(date);
+
+    const get = (type) => parts.find(p => p.type === type)?.value;
+    const y = Number(get('year'));
+    const m = Number(get('month'));
+    const d = Number(get('day'));
+    const h = Number(get('hour'));
+    const min = Number(get('minute'));
+    const s = Number(get('second'));
+
+    const asUtc = Date.UTC(y, m - 1, d, h, min, s);
+    return (asUtc - date.getTime()) / 60000;
+}
+
+function makeDateInTimeZone({ year, month, day, hour, minute, timeZone }) {
+    const utcDate = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+    const offset = getTimeZoneOffsetMinutes(utcDate, timeZone);
+    return new Date(utcDate.getTime() - offset * 60000);
+}
+
+function rangesOverlap(aStart, aEnd, bStart, bEnd) {
+    return aStart < bEnd && aEnd > bStart;
+}
+
+function formatSlotLabel(isoStart, timeZone) {
+    const dt = new Date(isoStart);
+    const dateFmt = new Intl.DateTimeFormat('pt-BR', {
+        timeZone,
+        weekday: 'short',
+        day: '2-digit',
+        month: '2-digit',
+    });
+    const timeFmt = new Intl.DateTimeFormat('pt-BR', {
+        timeZone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+    return `${dateFmt.format(dt)} às ${timeFmt.format(dt)}`.replace('.', '');
+}
+
+function parseUserSchedulePreference(text) {
+    const t = String(text || '').toLowerCase();
+
+    const timeMatch = t.match(/\b(\d{1,2})(?:[:h](\d{2}))?\b/);
+    const hour = timeMatch ? Number(timeMatch[1]) : null;
+    const minute = timeMatch ? Number(timeMatch[2] || '0') : null;
+
+    const dateMatch = t.match(/\b(\d{1,2})[\/\-](\d{1,2})\b/);
+    const day = dateMatch ? Number(dateMatch[1]) : null;
+    const month = dateMatch ? Number(dateMatch[2]) : null;
+
+    const weekdayMap = {
+        'segunda': 'Mon', 'seg': 'Mon',
+        'terça': 'Tue', 'terca': 'Tue', 'ter': 'Tue',
+        'quarta': 'Wed', 'qua': 'Wed',
+        'quinta': 'Thu', 'qui': 'Thu',
+        'sexta': 'Fri', 'sex': 'Fri',
+        'sábado': 'Sat', 'sabado': 'Sat', 'sab': 'Sat',
+        'domingo': 'Sun', 'dom': 'Sun',
+    };
+
+    let weekday = null;
+    for (const [key, val] of Object.entries(weekdayMap)) {
+        if (t.includes(key)) { weekday = val; break; }
+    }
+
+    const wantsTomorrow = t.includes('amanhã') || t.includes('amanha');
+
+    return { hour, minute, day, month, weekday, wantsTomorrow };
+}
+
+function parseSlotLabelToParts(text) {
+    const t = String(text || '').toLowerCase();
+    const dateMatch = t.match(/\b(\d{1,2})\/(\d{1,2})\b/);
+    const timeMatch = t.match(/\b(\d{1,2}):(\d{2})\b/);
+    const day = dateMatch ? Number(dateMatch[1]) : null;
+    const month = dateMatch ? Number(dateMatch[2]) : null;
+    const hour = timeMatch ? Number(timeMatch[1]) : null;
+    const minute = timeMatch ? Number(timeMatch[2]) : null;
+    return { day, month, hour, minute };
+}
+
+function filterSlotsByPreference(slots, preference, timeZone) {
+    const { day, month, weekday, wantsTomorrow } = preference;
+    const now = new Date();
+    const tomorrow = new Date(now.getTime() + 86400000);
+    const tomorrowParts = getLocalDateParts(tomorrow, timeZone);
+
+    return slots.filter((s) => {
+        const p = getLocalParts(new Date(s.start), timeZone);
+
+        if (wantsTomorrow) {
+            if (p.day !== tomorrowParts.day || p.month !== tomorrowParts.month) return false;
+        }
+
+        if (day != null && month != null) {
+            if (p.day !== day || p.month !== month) return false;
+        } else if (day != null) {
+            if (p.day !== day) return false;
+        }
+
+        if (weekday && p.weekday !== weekday) return false;
+        return true;
+    });
+}
+
+function formatSlotList(slots, timeZone, limit = 8) {
+    return slots.slice(0, limit).map((s) =>
+        `- ${formatSlotLabel(s.start, timeZone)}`
+    ).join('\n');
+}
+
+function formatSlotNatural(isoStart, timeZone) {
+    const dt = new Date(isoStart);
+    const dateFmt = new Intl.DateTimeFormat('pt-BR', {
+        timeZone,
+        weekday: 'long',
+        day: '2-digit',
+        month: '2-digit',
+    }).format(dt);
+    const timeFmt = new Intl.DateTimeFormat('pt-BR', {
+        timeZone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }).format(dt);
+    return `${dateFmt} às ${timeFmt}`.replace('-feira', '');
+}
+
+function parseUserFromPending(slots, messageText, timeZone) {
+    if (!slots || !slots.length) return null;
+    const msg = String(messageText || '').trim();
+    for (const s of slots) {
+        const label = formatSlotLabel(s.start, timeZone);
+        if (msg.toLowerCase().includes(label.toLowerCase())) return s;
+    }
+
+    const parsed = parseSlotLabelToParts(msg);
+    if (parsed.hour == null) return null;
+
+    const match = slots.find((s) => {
+        const p = getLocalParts(new Date(s.start), timeZone);
+        if (parsed.day != null && parsed.month != null) {
+            if (p.day !== parsed.day || p.month !== parsed.month) return false;
+        }
+        if (p.hour !== parsed.hour) return false;
+        if (parsed.minute != null && p.minute !== parsed.minute) return false;
+        return true;
+    });
+    return match || null;
+}
+
+function findMatchingSlot(slots, preference, timeZone) {
+    const { hour, minute, day, month, weekday, wantsTomorrow } = preference;
+    if (hour == null) return null;
+
+    const now = new Date();
+    const tomorrow = new Date(now.getTime() + 86400000);
+    const tomorrowParts = getLocalDateParts(tomorrow, timeZone);
+
+    for (const s of slots) {
+        const p = getLocalParts(new Date(s.start), timeZone);
+
+        if (wantsTomorrow) {
+            if (p.day !== tomorrowParts.day || p.month !== tomorrowParts.month) continue;
+        }
+
+        if (day != null && month != null) {
+            if (p.day !== day || p.month !== month) continue;
+        }
+
+        if (weekday && p.weekday !== weekday) continue;
+        if (p.hour !== hour) continue;
+        if (minute != null && p.minute !== minute) continue;
+
+        return s;
+    }
+    return null;
+}
+
+async function createGoogleCalendarEventInternal({
+    empresaId,
+    calendarId = 'primary',
+    timeZone = 'America/Sao_Paulo',
+    startIso,
+    endIso,
+    summary,
+    description,
+}) {
+    const accessToken = await ensureGoogleAccessToken({ empresaId });
+    const event = {
+        summary: summary || 'Reunião de diagnóstico',
+        description: description || '',
+        start: { dateTime: startIso, timeZone },
+        end: { dateTime: endIso, timeZone },
+    };
+    const resp = await axios.post(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+        event,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    return resp.data || {};
+}
+
+async function computeAvailableSlots({
+    empresaId,
+    calendarId = 'primary',
+    timeZone = 'America/Sao_Paulo',
+    daysAhead = 7,
+    durationMinutes = 60,
+    stepMinutes = 30,
+}) {
+    const accessToken = await ensureGoogleAccessToken({ empresaId });
+
+    const now = new Date();
+    const todayLocal = getLocalDateParts(now, timeZone);
+    const baseUtc = new Date(Date.UTC(todayLocal.year, todayLocal.month - 1, todayLocal.day, 12, 0, 0));
+
+    const windows = [
+        { start: { h: 8, m: 0 }, end: { h: 12, m: 0 } },
+        { start: { h: 13, m: 30 }, end: { h: 16, m: 0 } },
+    ];
+
+    const weekdaySet = new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+    const slots = [];
+
+    for (let i = 1; i <= Number(daysAhead); i++) {
+        const dayUtc = new Date(baseUtc.getTime() + i * 86400000);
+        const dayParts = getLocalDateParts(dayUtc, timeZone);
+        if (!weekdaySet.has(dayParts.weekday)) continue;
+
+        for (const w of windows) {
+            const startMinutes = w.start.h * 60 + w.start.m;
+            const endMinutes = w.end.h * 60 + w.end.m;
+            for (let t = startMinutes; t + durationMinutes <= endMinutes; t += stepMinutes) {
+                const h = Math.floor(t / 60);
+                const m = t % 60;
+                const start = makeDateInTimeZone({
+                    year: dayParts.year,
+                    month: dayParts.month,
+                    day: dayParts.day,
+                    hour: h,
+                    minute: m,
+                    timeZone,
+                });
+                const end = new Date(start.getTime() + durationMinutes * 60000);
+                slots.push({ start, end });
+            }
+        }
+    }
+
+    if (!slots.length) return [];
+
+    const timeMin = slots[0].start.toISOString();
+    const timeMax = slots[slots.length - 1].end.toISOString();
+
+    let fbResp;
+    try {
+        fbResp = await axios.post(
+            'https://www.googleapis.com/calendar/v3/freeBusy',
+            {
+                timeMin,
+                timeMax,
+                timeZone,
+                items: [{ id: calendarId }],
+            },
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+    } catch (e) {
+        const status = e?.response?.status;
+        const data = e?.response?.data;
+        logger.warn('[GoogleCalendar] freeBusy falhou', { status, data });
+        if (status === 401 || status === 403) {
+            throw new HttpsError(
+                'failed-precondition',
+                'Sem permissão para acessar a agenda. Reconecte o Google Agenda.'
+            );
+        }
+        throw e;
+    }
+
+    const busy = (fbResp.data?.calendars?.[calendarId]?.busy || []).map((b) => ({
+        start: new Date(b.start),
+        end: new Date(b.end),
+    }));
+
+    return slots
+        .filter((s) => !busy.some((b) => rangesOverlap(s.start, s.end, b.start, b.end)))
+        .map((s) => ({
+            start: s.start.toISOString(),
+            end: s.end.toISOString(),
+        }));
+}
+
+exports.suggestGoogleCalendarSlots = onCall(
+    { secrets: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, ENCRYPTION_KEY] },
+    async (request) => {
+        if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
+
+        const {
+            empresaId,
+            calendarId = 'primary',
+            timeZone = 'America/Sao_Paulo',
+            daysAhead = 7,
+            durationMinutes = 60,
+            stepMinutes = 30,
+        } = request.data || {};
+
+        if (!empresaId) {
+            throw new HttpsError('invalid-argument', 'empresaId é obrigatório.');
+        }
+
+        const slots = await computeAvailableSlots({
+            empresaId,
+            calendarId,
+            timeZone,
+            daysAhead,
+            durationMinutes,
+            stepMinutes,
+        });
+
+        return { timeZone, slots };
+    }
+);
+
+exports.listGoogleCalendarEvents = onCall(
+    { secrets: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, ENCRYPTION_KEY] },
+    async (request) => {
+        if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
+
+        const { empresaId, timeMin, timeMax, calendarId = 'primary' } = request.data || {};
+        if (!empresaId || !timeMin || !timeMax) {
+            throw new HttpsError('invalid-argument', 'empresaId, timeMin e timeMax são obrigatórios.');
+        }
+
+        const accessToken = await ensureGoogleAccessToken({ empresaId });
+
+        const resp = await axios.get(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+            {
+                headers: { Authorization: `Bearer ${accessToken}` },
+                params: {
+                    timeMin,
+                    timeMax,
+                    singleEvents: true,
+                    orderBy: 'startTime',
+                },
+            }
+        );
+
+        return resp.data || {};
+    }
+);
+
+exports.createGoogleCalendarEvent = onCall(
+    { secrets: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, ENCRYPTION_KEY] },
+    async (request) => {
+        if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
+
+        const { empresaId, calendarId = 'primary', event } = request.data || {};
+        if (!empresaId || !event) {
+            throw new HttpsError('invalid-argument', 'empresaId e event são obrigatórios.');
+        }
+
+        const accessToken = await ensureGoogleAccessToken({ empresaId });
+
+        const resp = await axios.post(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+            event,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+
+        return resp.data || {};
+    }
+);
+
+exports.updateGoogleCalendarEvent = onCall(
+    { secrets: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, ENCRYPTION_KEY] },
+    async (request) => {
+        if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
+
+        const { empresaId, calendarId = 'primary', eventId, event } = request.data || {};
+        if (!empresaId || !eventId || !event) {
+            throw new HttpsError('invalid-argument', 'empresaId, eventId e event são obrigatórios.');
+        }
+
+        const accessToken = await ensureGoogleAccessToken({ empresaId });
+
+        const resp = await axios.patch(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+            event,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+
+        return resp.data || {};
+    }
+);
+
+exports.deleteGoogleCalendarEvent = onCall(
+    { secrets: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, ENCRYPTION_KEY] },
+    async (request) => {
+        if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
+
+        const { empresaId, calendarId = 'primary', eventId } = request.data || {};
+        if (!empresaId || !eventId) {
+            throw new HttpsError('invalid-argument', 'empresaId e eventId são obrigatórios.');
+        }
+
+        const accessToken = await ensureGoogleAccessToken({ empresaId });
+
+        await axios.delete(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+
+        return { ok: true };
+    }
+);
+
+exports.disconnectGoogleCalendar = onCall(
+    { secrets: [ENCRYPTION_KEY] },
+    async (request) => {
+        if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
+
+        const { empresaId } = request.data || {};
+        if (!empresaId) {
+            throw new HttpsError('invalid-argument', 'empresaId é obrigatório.');
+        }
+
+        const ref = db
+            .collection('empresas')
+            .doc(String(empresaId))
+            .collection('integrations')
+            .doc('google_calendar');
+
+        const snap = await ref.get();
+        const data = snap.exists ? (snap.data() || {}) : {};
+        const refreshEnc = data.refreshToken || '';
+
+        try {
+            if (refreshEnc) {
+                const refreshToken = decryptValue(refreshEnc);
+                await axios.post(
+                    'https://oauth2.googleapis.com/revoke',
+                    new URLSearchParams({ token: refreshToken }).toString(),
+                    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+                );
+            }
+        } catch (e) {
+            logger.warn('[disconnectGoogleCalendar] revoke falhou', { err: e?.message });
+        }
+
+        await ref.set({
+            connected: false,
+            accessToken: admin.firestore.FieldValue.delete(),
+            refreshToken: admin.firestore.FieldValue.delete(),
+            scope: admin.firestore.FieldValue.delete(),
+            tokenType: admin.firestore.FieldValue.delete(),
+            expiresAt: admin.firestore.FieldValue.delete(),
+            email: admin.firestore.FieldValue.delete(),
+            displayName: admin.firestore.FieldValue.delete(),
+            photoUrl: admin.firestore.FieldValue.delete(),
+            updatedBy: request.auth.uid,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        return { ok: true };
+    }
+);
 
 
 

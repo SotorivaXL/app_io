@@ -22,6 +22,7 @@ import 'package:flutter_keyboard_visibility_web/flutter_keyboard_visibility_web.
 import 'package:flutter_secure_storage_web/flutter_secure_storage_web.dart';
 import 'package:geolocator_web/geolocator_web.dart';
 import 'package:google_maps_flutter_web/google_maps_flutter_web.dart';
+import 'package:google_sign_in_web/google_sign_in_web.dart';
 import 'package:image_picker_for_web/image_picker_for_web.dart';
 import 'package:just_audio_web/just_audio_web.dart';
 import 'package:open_file_web/open_file_web.dart';
@@ -54,6 +55,7 @@ void registerPlugins([final Registrar? pluginRegistrar]) {
   FlutterSecureStorageWeb.registerWith(registrar);
   GeolocatorPlugin.registerWith(registrar);
   GoogleMapsPlugin.registerWith(registrar);
+  GoogleSignInPlugin.registerWith(registrar);
   ImagePickerPlugin.registerWith(registrar);
   JustAudioPlugin.registerWith(registrar);
   OpenFilePlugin.registerWith(registrar);
