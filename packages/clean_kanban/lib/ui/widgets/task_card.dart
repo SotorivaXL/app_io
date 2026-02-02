@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'task_drag_data.dart';
-import 'dart:convert';
 
 class TaskMetaStore {
   static final Map<String, Map<String, dynamic>> _byId = {};
@@ -248,7 +247,7 @@ class TaskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = theme.cardMoveIconEnabledColor;
+    final cs = Theme.of(context).colorScheme;
 
     return Container(
       constraints: const BoxConstraints(minHeight: 64),
@@ -260,15 +259,29 @@ class TaskCard extends StatelessWidget {
             : null,
       ),
       clipBehavior: Clip.antiAlias,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Container(
-            width: TaskCardLayout.accentBarWidth,
-            height: 64,
-            color: accent,
+          // ✅ Faixa lateral com degradê e altura total do card
+          Positioned.fill(
+            left: 0,
+            right: null,
+            child: SizedBox(
+              width: TaskCardLayout.accentBarWidth,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [cs.primary, cs.tertiary],
+                  ),
+                ),
+              ),
+            ),
           ),
-          Expanded(
+
+          // ✅ Conteúdo deslocado pra direita
+          Padding(
+            padding: EdgeInsets.only(left: TaskCardLayout.accentBarWidth),
             child: Padding(
               padding: TaskCardLayout.contentPadding,
               child: TaskCardContent(data: data, theme: theme),
@@ -314,10 +327,7 @@ class _TagsLine extends StatelessWidget {
             final name = (t['name'] ?? '').toString().trim();
             if (name.isEmpty) return const SizedBox.shrink();
 
-            // cor vindo do Firestore (int tipo 4284955319)
             final tagColor = _parseAnyColor(t['color']) ?? const Color(0xFF9E9E9E);
-
-            // texto preto ou branco automaticamente
             final onDark =
                 ThemeData.estimateBrightnessForColor(tagColor) == Brightness.dark;
 
@@ -326,8 +336,8 @@ class _TagsLine extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(
-                  color: tagColor, // ✅ fundo sólido (cor original)
-                  borderRadius: BorderRadius.circular(5), // ✅ igual seu WhatsAppChats
+                  color: tagColor,
+                  borderRadius: BorderRadius.circular(5),
                 ),
                 child: Text(
                   name,
@@ -338,7 +348,7 @@ class _TagsLine extends StatelessWidget {
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     height: 1.5,
-                    color: onDark ? Colors.white : Colors.black, // ✅ nunca a cor da tag
+                    color: onDark ? Colors.white : Colors.black,
                   ),
                 ),
               ),

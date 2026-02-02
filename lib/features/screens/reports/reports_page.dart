@@ -431,6 +431,10 @@ class _LeadsKanbanPageState extends State<LeadsKanbanPage> {
             );
           },
 
+          onEditValue: (value) async {
+            await _updateLeadSaleValue(docId: chatId, saleValue: value);
+          },
+
           onMoveStage: (stageId) async {
             await _updateLeadStage(docId: chatId, stageId: stageId);
           },
@@ -726,6 +730,25 @@ class _LeadsKanbanPageState extends State<LeadsKanbanPage> {
     }, SetOptions(merge: true));
   }
 
+  Future<void> _updateLeadSaleValue({
+    required String docId,
+    required double? saleValue,
+  }) async {
+    if (!_ready) return;
+
+    final ref = FirebaseFirestore.instance
+        .collection('empresas')
+        .doc(_companyId)
+        .collection('phones')
+        .doc(_phoneId)
+        .collection('whatsappChats')
+        .doc(docId);
+
+    await ref.set({
+      'saleValue': saleValue, // null remove (merge mantém, mas seta null)
+      'pipelineUpdatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
 
 
   void _onBoardEvent(BoardEvent event) {
@@ -881,7 +904,7 @@ class _LeadsKanbanPageState extends State<LeadsKanbanPage> {
     final headerBgHex = _toHexArgb(cs.surface);
 
 // Fundo do card: um pouco mais claro que a coluna pra destacar
-    final cardBg = cs.tertiaryContainer;
+    final cardBg = cs.surfaceContainerHigh;
 
     final kanbanTheme = KanbanTheme(
       boardBackgroundColor: Colors.transparent,
@@ -892,7 +915,7 @@ class _LeadsKanbanPageState extends State<LeadsKanbanPage> {
         columnBorderColor: Colors.transparent,
         columnBorderWidth: 0.0,
         columnHeaderColor: primary,
-        columnHeaderTextColor: cs.onSurface,
+        columnHeaderTextColor: cs.onSecondary,
         columnAddButtonBoxColor: primary,
         columnAddIconColor: cs.onPrimary,
       ),
@@ -900,18 +923,17 @@ class _LeadsKanbanPageState extends State<LeadsKanbanPage> {
         cardBackgroundColor: cardBg,
 
         // dá um “recorte” leve no card sem ficar com borda branca
-        cardBorderColor: cs.onSurface.withOpacity(.08),
+        cardBorderColor: cs.onSurface.withOpacity(.05),
         cardBorderWidth: 1.0,
 
         cardDividerColor: Colors.transparent,
 
-        // ✅ texto com contraste correto
-        cardTitleColor: cs.onSurface,
-        cardSubtitleColor: cs.onSurface.withOpacity(.72),
+        cardTitleColor: cs.onSecondary,
+        cardSubtitleColor: cs.onSecondary.withOpacity(.72),
 
         // accent (barra lateral do card)
         cardMoveIconEnabledColor: primary,
-        cardMoveIconDisabledColor: cs.onSurface.withOpacity(.25),
+        cardMoveIconDisabledColor: cs.onSecondary.withOpacity(.25),
       ),
     );
 
@@ -940,14 +962,14 @@ class _LeadsKanbanPageState extends State<LeadsKanbanPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ✅ Search com padding 16px dos lados
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
                     child: TextField(
                       onChanged: (v) => setState(() => _search = v.trim()),
                       decoration: InputDecoration(
                         hintText: 'Pesquisar lead (nome, mensagem, telefone)',
-                        prefixIcon: const Icon(Icons.search),
+                        hintStyle: TextStyle(color: cs.onSecondary),
+                        prefixIcon: Icon(Icons.search, color: cs.onSecondary,),
                         filled: true,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -1159,6 +1181,8 @@ class _LeadDetailsDialog extends StatefulWidget {
   final Future<void> Function(String name, String photoUrl) onOpenChat;
   final Future<void> Function(String newName, String newNote) onEdit;
   final Future<void> Function(String stageId) onMoveStage;
+  final Future<void> Function(double? value) onEditValue;
+
   final List<_LeadStage> stages;
 
   const _LeadDetailsDialog({
@@ -1168,6 +1192,7 @@ class _LeadDetailsDialog extends StatefulWidget {
     required this.onOpenChat,
     required this.onEdit,
     required this.onMoveStage,
+    required this.onEditValue, // ✅ novo
     required this.stages,
   });
 
@@ -1178,6 +1203,11 @@ class _LeadDetailsDialog extends StatefulWidget {
 class _LeadDetailsDialogState extends State<_LeadDetailsDialog> {
   bool _editingNote = false;
   bool _savingNote = false;
+  bool _editingValue = false;
+  bool _savingValue = false;
+
+  late final TextEditingController _valueCtrl = TextEditingController();
+  String _valueOriginal = '';
 
   late final TextEditingController _noteCtrl = TextEditingController();
   late final FocusNode _noteFocus = FocusNode();
@@ -1189,6 +1219,7 @@ class _LeadDetailsDialogState extends State<_LeadDetailsDialog> {
   void dispose() {
     _noteCtrl.dispose();
     _noteFocus.dispose();
+    _valueCtrl.dispose();
     super.dispose();
   }
 
@@ -1230,6 +1261,56 @@ class _LeadDetailsDialogState extends State<_LeadDetailsDialog> {
           (m) => '${m[1]}.',
     );
     return 'R\$ $intPart,${parts[1]}';
+  }
+
+  double? _parseMoneyToDouble(String raw) {
+    final s = raw
+        .replaceAll('R\$', '')
+        .replaceAll(' ', '')
+        .replaceAll('.', '')
+        .replaceAll(',', '.')
+        .replaceAll(RegExp(r'[^0-9\.\-]'), '');
+
+    if (s.trim().isEmpty) return null;
+    return double.tryParse(s);
+  }
+
+  Future<void> _enterValueEdit(String currentValueLabel) async {
+    if (_savingValue) return;
+    setState(() {
+      _editingValue = true;
+      _valueOriginal = currentValueLabel;
+      _valueCtrl.text = currentValueLabel == '—' ? '' : currentValueLabel;
+    });
+  }
+
+  Future<void> _cancelValueEdit() async {
+    if (_savingValue) return;
+    setState(() {
+      _editingValue = false;
+      _valueCtrl.text = _valueOriginal == '—' ? '' : _valueOriginal;
+    });
+  }
+
+  Future<void> _saveValueEdit() async {
+    if (_savingValue) return;
+
+    final parsed = _parseMoneyToDouble(_valueCtrl.text);
+    setState(() => _savingValue = true);
+
+    try {
+      await widget.onEditValue(parsed);
+      if (!mounted) return;
+      setState(() {
+        _savingValue = false;
+        _editingValue = false;
+        _valueOriginal = parsed == null ? '—' : _fmtMoney(parsed);
+        _valueCtrl.text = parsed == null ? '' : _fmtMoney(parsed);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _savingValue = false);
+    }
   }
 
   Future<String?> _showStageDropdown(BuildContext context, String currentStageId) async {
@@ -1381,6 +1462,15 @@ class _LeadDetailsDialogState extends State<_LeadDetailsDialog> {
             (m['lastMessage'] ?? m['lastMsg'] ?? '').toString();
             final lastMessageTimeRaw = m['lastMessageTime'];
             final saleValueRaw = m['saleValue'];
+            final saleValueLabel = _fmtMoney(saleValueRaw);
+
+            if (!_editingValue) {
+              final nextText = (saleValueLabel == '—') ? '' : saleValueLabel;
+              if (_valueCtrl.text != nextText) {
+                _valueCtrl.text = nextText;
+                _valueOriginal = saleValueLabel;
+              }
+            }
 
             final grad = <Color>[cs.primary, cs.tertiary];
 
@@ -1389,7 +1479,6 @@ class _LeadDetailsDialogState extends State<_LeadDetailsDialog> {
               if (attendingAt != null)
                 _InfoItem('Atendendo desde', _fmtDate(attendingAt)),
               _InfoItem('Horário da última mensagem', _fmtAny(lastMessageTimeRaw)),
-              _InfoItem('Valor', _fmtMoney(saleValueRaw)),
             ];
 
             final currentStageId = (m['pipelineStage'] ?? 'entrada').toString();
@@ -1399,7 +1488,6 @@ class _LeadDetailsDialogState extends State<_LeadDetailsDialog> {
                 .cast<String?>()
                 .firstWhere((x) => x != null, orElse: () => null)
                 ?? currentStageId;
-
 
             return Column(
               mainAxisSize: MainAxisSize.min,
@@ -1499,6 +1587,70 @@ class _LeadDetailsDialogState extends State<_LeadDetailsDialog> {
                       children: [
                         _InfoGrid(items: infoItems),
                         const SizedBox(height: 12),
+
+                        _FieldBox(
+                          title: 'Valor do orçamento',
+                          topRight: _editingValue
+                              ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                tooltip: 'Salvar',
+                                splashRadius: 18,
+                                icon: Icon(Icons.check_rounded,
+                                    size: 20, color: cs.primary.withOpacity(.95)),
+                                onPressed: _savingValue ? null : _saveValueEdit,
+                              ),
+                              IconButton(
+                                tooltip: 'Cancelar',
+                                splashRadius: 18,
+                                icon: Icon(Icons.close_rounded,
+                                    size: 20, color: cs.onSurface.withOpacity(.70)),
+                                onPressed: _savingValue ? null : _cancelValueEdit,
+                              ),
+                            ],
+                          )
+                              : IconButton(
+                            tooltip: 'Editar valor',
+                            splashRadius: 18,
+                            icon: Icon(Icons.edit_rounded,
+                                size: 18, color: cs.onSurface.withOpacity(.70)),
+                            onPressed: () => _enterValueEdit(saleValueLabel),
+                          ),
+                          child: _editingValue
+                              ? TextField(
+                            controller: _valueCtrl,
+                            enabled: !_savingValue,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              filled: true,
+                              fillColor: cs.surfaceContainerHighest.withOpacity(.45),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: cs.primary.withOpacity(.35)),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: cs.primary.withOpacity(.25)),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: cs.primary.withOpacity(.55)),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 10,
+                              ),
+                              hintText: 'Ex: 1500,00',
+                            ),
+                            style: TextStyle(color: cs.onSurface.withOpacity(.90)),
+                          )
+                              : Text(
+                            saleValueLabel,
+                            style: TextStyle(color: cs.onSurface.withOpacity(.88)),
+                          ),
+                        ),
 
                         _FieldBox(
                           title: 'Última mensagem',
