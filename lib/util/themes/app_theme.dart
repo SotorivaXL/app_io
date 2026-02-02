@@ -34,6 +34,7 @@ class AppTheme {
       onTertiaryContainer: Color(0xFFF8F8F8),
       surfaceBright: Color(0xFFB7B3C6),
       onTertiary: constantGreen,
+      surfaceContainerHigh: Color(0xFFF6F5FF),
     ),
     textTheme: const TextTheme(
       bodyLarge: TextStyle(
@@ -89,6 +90,7 @@ class AppTheme {
       onInverseSurface: Color(0xFFC999FF),
       surfaceBright: Color(0xFFB7B3C6),
       onTertiary: constantGreen,
+      surfaceContainerHigh: Color(0xFF2F2E32),
     ),
     textTheme: const TextTheme(
       bodyLarge: TextStyle(
