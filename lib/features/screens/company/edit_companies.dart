@@ -5,6 +5,7 @@ import 'package:app_io/util/CustomWidgets/ChangePasswordSheet/change_password_sh
 import 'package:app_io/util/CustomWidgets/ConnectivityBanner/connectivity_banner.dart';
 import 'package:app_io/util/utils.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart'; // Importante para chamar a função de listar workspaces
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:app_io/data/models/RegisterCompanyModel/add_company_model.dart';
@@ -15,6 +16,7 @@ import 'package:extended_image/extended_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_holo_date_picker/flutter_holo_date_picker.dart';
 import 'package:flutter/services.dart';
+import 'package:dropdown_button2/dropdown_button2.dart'; // Importante para o Dropdown
 
 const List<String> _kPermKeys = [
   'dashboard',
@@ -125,6 +127,13 @@ class _EditCompaniesState extends State<EditCompanies> {
   final TextEditingController _tfZapiTokenController = TextEditingController();  // ZAPI_TOKEN
   final TextEditingController _tfClientTokenController = TextEditingController(); // clientToken
 
+  // --- GPT MAKER CONFIG ---
+  final TextEditingController _tfGptTokenController = TextEditingController();
+  bool _isFetchingWorkspaces = false;
+  List<Map<String, dynamic>> _gptWorkspaces = [];
+  String? _selectedGptWorkspaceId;
+  String? _selectedGptWorkspaceName;
+
   String? _originalPhoneDocId; // para saber se trocou o docId do phone
 
   String _onlyDigits(String s) => s.replaceAll(RegExp(r'\D'), '');
@@ -221,12 +230,29 @@ class _EditCompaniesState extends State<EditCompanies> {
       if (qs.docs.isNotEmpty) {
         final d = qs.docs.first;
         final m = d.data();
+        
         setState(() {
           _originalPhoneDocId    = d.id;
           _tfWhatsPhoneController.text = (m['phone'] ?? d.id).toString();
           _tfInstanceIdController.text = (m['instanceId'] ?? '').toString();
           _tfZapiTokenController.text  = (m['token'] ?? '').toString();
           _tfClientTokenController.text= (m['clientToken'] ?? '').toString();
+
+          // --- CARREGAR CONFIG GPT SE EXISTIR ---
+          if (m.containsKey('gpt_integration') && m['gpt_integration'] is Map) {
+            final gpt = m['gpt_integration'] as Map<String, dynamic>;
+            _tfGptTokenController.text = gpt['api_token']?.toString() ?? '';
+            _selectedGptWorkspaceId = gpt['workspace_id']?.toString();
+            _selectedGptWorkspaceName = gpt['workspace_name']?.toString();
+
+            // Adiciona o workspace atual à lista para que o dropdown mostre corretamente de início
+            if (_selectedGptWorkspaceId != null) {
+              _gptWorkspaces = [{
+                'id': _selectedGptWorkspaceId,
+                'name': _selectedGptWorkspaceName ?? 'Workspace Atual'
+              }];
+            }
+          }
         });
       } else {
         setState(() => _originalPhoneDocId = null);
@@ -234,6 +260,45 @@ class _EditCompaniesState extends State<EditCompanies> {
     } catch (e) {
       debugPrint('Erro ao carregar config de telefone: $e');
       setState(() => _originalPhoneDocId = null);
+    }
+  }
+
+  // --- GPT LOGIC ---
+  Future<void> _fetchGptWorkspaces() async {
+    final token = _tfGptTokenController.text.trim();
+    if (token.isEmpty) {
+      showErrorDialog(context, "Insira o Token da Conta do GPT Maker primeiro.", "Atenção");
+      return;
+    }
+
+    setState(() => _isFetchingWorkspaces = true);
+
+    try {
+      // Chama a função listWorkspacesForSetup que criamos no Cloud Functions
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('listWorkspacesForSetup')
+          .call({'apiToken': token});
+
+      final data = result.data as List;
+      final List<Map<String, dynamic>> loaded = data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+
+      setState(() {
+        _gptWorkspaces = loaded;
+        // Se houver apenas 1 workspace e nada selecionado (ou se trocou de conta), seleciona automático
+        if (_gptWorkspaces.length == 1) {
+          _selectedGptWorkspaceId = _gptWorkspaces[0]['id'];
+          _selectedGptWorkspaceName = _gptWorkspaces[0]['name'];
+        }
+      });
+
+      if (loaded.isEmpty) {
+        showErrorDialog(context, "Nenhum workspace encontrado para este token.", "Aviso");
+      }
+
+    } catch (e) {
+      showErrorDialog(context, "Erro ao buscar workspaces: $e", "Erro");
+    } finally {
+      setState(() => _isFetchingWorkspaces = false);
     }
   }
 
@@ -254,6 +319,18 @@ class _EditCompaniesState extends State<EditCompanies> {
       'phone'      : phoneDigits,
       'updatedAt'  : FieldValue.serverTimestamp(),
     };
+
+    // --- GPT MAKER SAVE ---
+    // Se tiver dados do GPT, adiciona ao mapa
+    if (_tfGptTokenController.text.isNotEmpty && _selectedGptWorkspaceId != null) {
+      data['gpt_integration'] = {
+        'api_token': _tfGptTokenController.text.trim(),
+        'workspace_id': _selectedGptWorkspaceId,
+        'workspace_name': _selectedGptWorkspaceName ?? '',
+        'updated_at': FieldValue.serverTimestamp(),
+      };
+    }
+    // -----------------------
 
     final batch = FirebaseFirestore.instance.batch();
 
@@ -296,6 +373,7 @@ class _EditCompaniesState extends State<EditCompanies> {
     _tfInstanceIdController.dispose();
     _tfZapiTokenController.dispose();
     _tfClientTokenController.dispose();
+    _tfGptTokenController.dispose(); // Limpa controller GPT
     _model.dispose();
     super.dispose();
   }
@@ -314,7 +392,7 @@ class _EditCompaniesState extends State<EditCompanies> {
   }
 
   // --------------------------
-  //       SALVAR DADOS
+  //      SALVAR DADOS
   // --------------------------
   Future<void> _saveCompany() async {
     final phoneDigits = _onlyDigits(_tfWhatsPhoneController.text);
@@ -330,6 +408,13 @@ class _EditCompaniesState extends State<EditCompanies> {
       showErrorDialog(context, "Falha ao carregar usuário", "Atenção");
       return;
     }
+    
+    // Validação GPT (opcional, mas recomendada se inseriu token)
+    if (_tfGptTokenController.text.isNotEmpty && _selectedGptWorkspaceId == null) {
+      showErrorDialog(context, "Você inseriu um token GPT Maker, por favor selecione um Workspace.", "Atenção");
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
@@ -786,12 +871,42 @@ class _EditCompaniesState extends State<EditCompanies> {
             _buildZapiTokenTextField(),
             _buildClientTokenTextField(),
 
+            // --- GPT MAKER CONFIG ---
+            Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+              child: Row(
+                children: [
+                  Padding(
+                    padding: const EdgeInsetsDirectional.fromSTEB(20, 10, 20, 10),
+                    child: Row(
+                      children: [
+                        Icon(Icons.psychology, color: Theme.of(context).colorScheme.primary),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Integração GPT Maker',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _buildGptTokenTextField(),
+            _buildGptWorkspaceDropdown(),
+            // -------------------------
+
             // Botão Alterar Senha (se permitido)
             StreamBuilder<DocumentSnapshot>(
               stream: FirebaseFirestore.instance.collection('empresas').doc(uid).snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const CircularProgressIndicator();
+                  return const SizedBox(height: 50, child: Center(child: CircularProgressIndicator()));
                 }
                 if (snapshot.hasError) {
                   return const Text('Erro ao carregar dados');
@@ -1234,6 +1349,121 @@ class _EditCompaniesState extends State<EditCompanies> {
     );
   }
 
+  // --- GPT MAKER WIDGETS ---
+
+  Widget _buildGptTokenTextField() {
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+              child: TextFormField(
+                controller: _tfGptTokenController,
+                decoration: InputDecoration(
+                  labelText: 'Account Token (GPT Maker)',
+                  labelStyle: TextStyle(color: Theme.of(context).colorScheme.onSecondary),
+                  hintText: 'Cole o Token da Conta aqui',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w500,
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.secondary,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.api,
+                    color: Theme.of(context).colorScheme.tertiary,
+                    size: 20,
+                  ),
+                  suffixIcon: IconButton(
+                    icon: _isFetchingWorkspaces
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : Icon(Icons.search, color: Theme.of(context).colorScheme.primary),
+                    onPressed: _isFetchingWorkspaces ? null : _fetchGptWorkspaces,
+                    tooltip: 'Buscar Workspaces',
+                  ),
+                ),
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSecondary,
+                ),
+                obscureText: true,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGptWorkspaceDropdown() {
+    // Se não tem workspaces carregados e também não tem nenhum selecionado, esconde
+    if (_gptWorkspaces.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(20, 10, 20, 10),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.secondary,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton2<String>(
+            isExpanded: true,
+            hint: Text(
+              'Selecione o Workspace',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 14,
+                color: Theme.of(context).colorScheme.onSecondary.withOpacity(0.7),
+              ),
+            ),
+            items: _gptWorkspaces
+                .map((item) => DropdownMenuItem<String>(
+              value: item['id'].toString(),
+              child: Text(
+                "${item['name']} (${item['id']})",
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Theme.of(context).colorScheme.onSecondary,
+                ),
+              ),
+            ))
+                .toList(),
+            value: _selectedGptWorkspaceId,
+            onChanged: (value) {
+              setState(() {
+                _selectedGptWorkspaceId = value;
+                final selected = _gptWorkspaces.firstWhere(
+                        (e) => e['id'].toString() == value,
+                    orElse: () => {'name': ''}
+                );
+                _selectedGptWorkspaceName = selected['name'];
+              });
+            },
+            buttonStyleData: const ButtonStyleData(height: 50),
+            dropdownStyleData: DropdownStyleData(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.secondary,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+  
   void _showChangePasswordSheet() {
     showModalBottomSheet(
       backgroundColor: Theme.of(context).colorScheme.background,

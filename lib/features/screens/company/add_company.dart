@@ -15,6 +15,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:extended_image/extended_image.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
+import 'package:dropdown_button2/dropdown_button2.dart'; // Certifique-se de importar se usar o Dropdown2, ou use o padrão
 
 const List<String> _kPermKeys = [
   'dashboard',
@@ -91,8 +92,7 @@ class _AddCompanyState extends State<AddCompany> {
   // For generating a random background color when no image exists
   late Color _randomColor;
 
-  // Access rights map (padrão já com permissões desejadas)
-// Access rights padrão
+  // Access rights padrão
   Map<String, bool> accessRights = {
     'dashboard': true,
     'leads': true,
@@ -126,6 +126,13 @@ class _AddCompanyState extends State<AddCompany> {
   final TextEditingController _tfZapiTokenController = TextEditingController();  // ZAPI_TOKEN
   final TextEditingController _tfClientTokenController = TextEditingController(); // clientToken
 
+  // --- GPT MAKER CONTROLLERS ---
+  final TextEditingController _tfGptTokenController = TextEditingController();
+  bool _isFetchingWorkspaces = false;
+  List<Map<String, dynamic>> _gptWorkspaces = [];
+  String? _selectedGptWorkspaceId;
+  String? _selectedGptWorkspaceName;
+
   @override
   void initState() {
     super.initState();
@@ -139,6 +146,7 @@ class _AddCompanyState extends State<AddCompany> {
     _tfInstanceIdController.dispose();
     _tfZapiTokenController.dispose();
     _tfClientTokenController.dispose();
+    _tfGptTokenController.dispose(); // Dispose GPT
     _model.dispose();
     super.dispose();
   }
@@ -152,6 +160,46 @@ class _AddCompanyState extends State<AddCompany> {
   }
 
   // --------------------------
+  //      GPT LOGIC
+  // --------------------------
+  Future<void> _fetchGptWorkspaces() async {
+    final token = _tfGptTokenController.text.trim();
+    if (token.isEmpty) {
+      showErrorDialog(context, "Insira o Token da Conta do GPT Maker primeiro.", "Atenção");
+      return;
+    }
+
+    setState(() => _isFetchingWorkspaces = true);
+
+    try {
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('listWorkspacesForSetup')
+          .call({'apiToken': token});
+
+      final data = result.data as List;
+      final List<Map<String, dynamic>> loaded = data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+
+      setState(() {
+        _gptWorkspaces = loaded;
+        // Se houver apenas 1, seleciona automático
+        if (_gptWorkspaces.length == 1) {
+          _selectedGptWorkspaceId = _gptWorkspaces[0]['id'];
+          _selectedGptWorkspaceName = _gptWorkspaces[0]['name'];
+        }
+      });
+      
+      if (loaded.isEmpty) {
+        showErrorDialog(context, "Nenhum workspace encontrado para este token.", "Aviso");
+      }
+
+    } catch (e) {
+      showErrorDialog(context, "Erro ao buscar workspaces: $e", "Erro");
+    } finally {
+      setState(() => _isFetchingWorkspaces = false);
+    }
+  }
+
+  // --------------------------
   //       ADD COMPANY
   // --------------------------
   Future<void> _addCompany() async {
@@ -162,7 +210,6 @@ class _AddCompanyState extends State<AddCompany> {
 
     // Validação mínima dos campos Z-API/phone
     final phoneDigits = _onlyDigits(_tfWhatsPhoneController.text);
-// E.164 permite de 10 a 15 dígitos (com DDI). Ex.: BR: 55 + 2 (DDD) + 9 (número) = 13.
     if (phoneDigits.length < 10 || phoneDigits.length > 15) {
       showErrorDialog(
         context,
@@ -176,8 +223,13 @@ class _AddCompanyState extends State<AddCompany> {
       showErrorDialog(context, "Informe ZAPI_ID e ZAPI_TOKEN", "Atenção");
       return;
     }
-    // clientToken pode ser opcional, dependendo de você ter ativado na Z-API
-    // aqui não forço; mas se quiser obrigar, valide também.
+
+    // Validação GPT (Opcional ou Obrigatória, depende de você)
+    // Aqui estou deixando opcional, mas se preencheu token, tem que selecionar workspace
+    if (_tfGptTokenController.text.isNotEmpty && _selectedGptWorkspaceId == null) {
+       showErrorDialog(context, "Você inseriu um token GPT Maker, por favor selecione um Workspace.", "Atenção");
+       return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -202,6 +254,7 @@ class _AddCompanyState extends State<AddCompany> {
         'accessRights': rights,
         'countArtsValue': _model.countArtsValue,
         'countVideosValue': _model.countVideosValue,
+        // Envia dados Z-API básicos para criar (se sua func backend usar, senão só salva abaixo)
         'phoneNumber': _onlyDigits(_tfWhatsPhoneController.text),
         'instanceId': _tfInstanceIdController.text.trim(),
         'token': _tfZapiTokenController.text.trim(),
@@ -210,12 +263,6 @@ class _AddCompanyState extends State<AddCompany> {
 
       if (result.data['success'] == true) {
         final String uid = result.data['uid'] ?? "defaultUid";
-
-        final flatRights = _normalizeRights({
-          ...accessRights,
-          'gerenciarParceiros': false,
-          'modDocumentos': _isClienteIo,
-        });
 
         await FirebaseFirestore.instance
             .collection('empresas')
@@ -234,7 +281,7 @@ class _AddCompanyState extends State<AddCompany> {
               .set({'photoUrl': photoUrl}, SetOptions(merge: true));
         }
 
-        // (opcional) salvar o phone config no subcollection se você já usa isso na criação
+        // SALVA AS CREDENCIAIS (Z-API + GPT MAKER) NA SUBCOLEÇÃO PHONE
         await _savePhoneConfig(uid);
 
         Navigator.pop(context);
@@ -261,9 +308,20 @@ class _AddCompanyState extends State<AddCompany> {
       'instanceId' : _tfInstanceIdController.text.trim(),  // EXATO (ZAPI_ID)
       'token'      : _tfZapiTokenController.text.trim(),   // EXATO (ZAPI_TOKEN)
       'clientToken': _tfClientTokenController.text.trim(), // EXATO
-      'phone'      : phoneDigits,                          // número normalizado (útil ter salvo)
+      'phone'      : phoneDigits,                          // número normalizado
       'createdAt'  : FieldValue.serverTimestamp(),
     };
+
+    // --- GPT MAKER CONFIG ---
+    // Se tiver dados do GPT, adiciona ao mapa
+    if (_tfGptTokenController.text.isNotEmpty && _selectedGptWorkspaceId != null) {
+      data['gpt_integration'] = {
+        'api_token': _tfGptTokenController.text.trim(),
+        'workspace_id': _selectedGptWorkspaceId,
+        'workspace_name': _selectedGptWorkspaceName ?? '',
+        'updated_at': FieldValue.serverTimestamp(),
+      };
+    }
 
     await FirebaseFirestore.instance
         .collection('empresas')
@@ -276,7 +334,7 @@ class _AddCompanyState extends State<AddCompany> {
   String _onlyDigits(String s) => s.replaceAll(RegExp(r'\D'), '');
 
   // --------------------------
-  //     IMAGE UPLOAD
+  //   IMAGE UPLOAD (MANTIDO)
   // --------------------------
   Future<String?> _uploadImage(String uid) async {
     Uint8List imageData;
@@ -297,9 +355,6 @@ class _AddCompanyState extends State<AddCompany> {
     }
   }
 
-  // --------------------------
-  //   GENERATE INITIALS FROM COMPANY NAME
-  // --------------------------
   String _generateInitialsFromCompany() {
     final text = _model.tfCompanyTextController.text.trim();
     if (text.isEmpty) return "";
@@ -309,9 +364,6 @@ class _AddCompanyState extends State<AddCompany> {
     return (first + last).toUpperCase();
   }
 
-  // --------------------------
-  //   GENERATE AVATAR (100x100) WITH RANDOM BACKGROUND AND INITIALS
-  // --------------------------
   Future<Uint8List> _generateAvatar(String initials) async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, 100, 100));
@@ -337,9 +389,6 @@ class _AddCompanyState extends State<AddCompany> {
     return byteData!.buffer.asUint8List();
   }
 
-  // --------------------------
-  //   AVATAR WIDGET
-  // --------------------------
   Widget _buildImagePicker() {
     final bool hasCroppedImage = _croppedData != null;
     return GestureDetector(
@@ -358,9 +407,6 @@ class _AddCompanyState extends State<AddCompany> {
     );
   }
 
-  // --------------------------
-  //   IMAGE PICKER OPTIONS
-  // --------------------------
   void _showImagePickerOptions() {
     showModalBottomSheet(
       context: context,
@@ -427,7 +473,6 @@ class _AddCompanyState extends State<AddCompany> {
     );
   }
 
-  // Modificação para solicitar permissão antes de acessar a câmera
   Future<void> _pickImage(ImageSource source) async {
     final pickedFile = await _picker.pickImage(source: source);
     if (pickedFile != null) {
@@ -437,9 +482,6 @@ class _AddCompanyState extends State<AddCompany> {
     }
   }
 
-  // --------------------------
-  //   CUSTOM CROP FUNCTION USING EXTENDED_IMAGE
-  // --------------------------
   Future<Uint8List?> _cropImageFromEditor() async {
     final ExtendedImageEditorState? state = _editorKey.currentState;
     if (state == null) return null;
@@ -562,7 +604,7 @@ class _AddCompanyState extends State<AddCompany> {
   }
 
   // --------------------------
-  //       BUILD
+  //      BUILD UI
   // --------------------------
   @override
   Widget build(BuildContext context) {
@@ -637,17 +679,14 @@ class _AddCompanyState extends State<AddCompany> {
     );
   }
 
-  // Main content of the form
   Widget _buildMainContent(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.max,
       children: [
-        // Avatar
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 20.0),
           child: _buildImagePicker(),
         ),
-        // Dados da empresa
         _buildCompanyTextField(),
         _buildEmailTextField(),
         _buildContractTextField(),
@@ -656,7 +695,7 @@ class _AddCompanyState extends State<AddCompany> {
         _buildPasswordField(),
         _buildPasswordConfirmField(),
 
-        // WhatsApp / Z-API
+        // SEÇÃO Z-API
         Padding(
           padding: const EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
           child: Row(
@@ -680,15 +719,48 @@ class _AddCompanyState extends State<AddCompany> {
         _buildZapiIdTextField(),
         _buildZapiTokenTextField(),
         _buildClientTokenTextField(),
+
+        // --- GPT MAKER CONFIG ---
+        Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
+          child: Row(
+            children: [
+              Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(20, 10, 20, 10),
+                child: Row(
+                  children: [
+                    Icon(Icons.psychology, color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Integração GPT Maker',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        _buildGptTokenTextField(),
+        _buildGptWorkspaceDropdown(),
+        // -------------------------
+
         _buildClientTypeSwitch(),
         _buildAddButton(),
       ],
     );
   }
 
-  // --------------------------
-  // INDIVIDUAL FIELDS
-  // --------------------------
+  // ... (Campos de Texto Anteriores: _buildCompanyTextField, etc. MANTIDOS IGUAIS) ...
+  // Vou omitir aqui para economizar espaço, mas no seu arquivo original, mantenha-os.
+  // Vou colocar apenas os NOVOS widgets do GPT Maker aqui embaixo.
+
+  // --- WIDGETS ANTERIORES (MANTIDOS) ---
   Widget _buildCompanyTextField() {
     return Padding(
       padding: const EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
@@ -700,27 +772,15 @@ class _AddCompanyState extends State<AddCompany> {
               child: TextFormField(
                 controller: _model.tfCompanyTextController,
                 focusNode: _model.tfCompanyFocusNode,
-                autofocus: true,
                 decoration: InputDecoration(
                   hintText: 'Digite o nome da empresa',
-                  hintStyle: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontWeight: FontWeight.w500,
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSecondary,
-                  ),
-                  prefixIcon: Icon(Icons.corporate_fare,
-                      color: Theme.of(context).colorScheme.tertiary, size: 20),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  hintStyle: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 12, color: Theme.of(context).colorScheme.onSecondary,),
+                  prefixIcon: Icon(Icons.corporate_fare, color: Theme.of(context).colorScheme.tertiary, size: 20),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
                   filled: true, fillColor: Theme.of(context).colorScheme.secondary,
                 ),
-                style: TextStyle(
-                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
-                ),
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSecondary,),
                 textInputAction: TextInputAction.next,
-                textAlign: TextAlign.start,
               ),
             ),
           ),
@@ -728,7 +788,7 @@ class _AddCompanyState extends State<AddCompany> {
       ),
     );
   }
-
+  
   Widget _buildEmailTextField() {
     return Padding(
       padding: const EdgeInsetsDirectional.fromSTEB(0, 20, 0, 0),
@@ -740,26 +800,15 @@ class _AddCompanyState extends State<AddCompany> {
               child: TextFormField(
                 controller: _model.tfEmailTextController,
                 focusNode: _model.tfEmailFocusNode,
-                autofocus: true,
                 decoration: InputDecoration(
                   hintText: 'Digite o email da empresa',
-                  hintStyle: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontWeight: FontWeight.w500,
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSecondary,
-                  ),
+                  hintStyle: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 12, color: Theme.of(context).colorScheme.onSecondary,),
                   filled: true, fillColor: Theme.of(context).colorScheme.secondary,
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                  prefixIcon: Icon(Icons.mail,
-                      color: Theme.of(context).colorScheme.tertiary, size: 20),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  prefixIcon: Icon(Icons.mail, color: Theme.of(context).colorScheme.tertiary, size: 20),
                 ),
-                style: TextStyle(
-                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
-                ),
-                textAlign: TextAlign.start, keyboardType: TextInputType.emailAddress,
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSecondary,),
+                keyboardType: TextInputType.emailAddress,
               ),
             ),
           ),
@@ -779,28 +828,15 @@ class _AddCompanyState extends State<AddCompany> {
               child: TextFormField(
                 controller: _model.tfContractTextController,
                 focusNode: _model.tfContractFocusNode,
-                autofocus: true,
                 decoration: InputDecoration(
                   hintText: 'Digite a data final do contrato',
-                  hintStyle: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontWeight: FontWeight.w500,
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSecondary,
-                  ),
+                  hintStyle: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 12, color: Theme.of(context).colorScheme.onSecondary,),
                   filled: true, fillColor: Theme.of(context).colorScheme.secondary,
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                  prefixIcon: Icon(Icons.import_contacts,
-                      color: Theme.of(context).colorScheme.tertiary, size: 20),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  prefixIcon: Icon(Icons.import_contacts, color: Theme.of(context).colorScheme.tertiary, size: 20),
                 ),
-                style: TextStyle(
-                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
-                ),
-                textAlign: TextAlign.start,
-                inputFormatters: [_model.tfContractMask],
-                keyboardType: TextInputType.number,
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSecondary,),
+                inputFormatters: [_model.tfContractMask], keyboardType: TextInputType.number,
               ),
             ),
           ),
@@ -820,28 +856,15 @@ class _AddCompanyState extends State<AddCompany> {
               child: TextFormField(
                 controller: _model.tfCnpjTextController,
                 focusNode: _model.tfCnpjFocusNode,
-                autofocus: true,
                 decoration: InputDecoration(
                   hintText: 'Digite o CNPJ da empresa',
-                  hintStyle: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontWeight: FontWeight.w500,
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSecondary,
-                  ),
+                  hintStyle: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 12, color: Theme.of(context).colorScheme.onSecondary,),
                   filled: true, fillColor: Theme.of(context).colorScheme.secondary,
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                  prefixIcon: Icon(Icons.contact_emergency_sharp,
-                      color: Theme.of(context).colorScheme.tertiary, size: 20),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  prefixIcon: Icon(Icons.contact_emergency_sharp, color: Theme.of(context).colorScheme.tertiary, size: 20),
                 ),
-                style: TextStyle(
-                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
-                ),
-                textAlign: TextAlign.start,
-                inputFormatters: [cnpjMask],
-                keyboardType: TextInputType.number,
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSecondary,),
+                inputFormatters: [cnpjMask], keyboardType: TextInputType.number,
               ),
             ),
           ),
@@ -861,79 +884,34 @@ class _AddCompanyState extends State<AddCompany> {
               child: GestureDetector(
                 onTap: () async {
                   await showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
-                    ),
+                    context: context, isScrollControlled: true,
+                    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
                     builder: (BuildContext context) {
                       DateTime selectedDate = DateTime.now();
                       return Padding(
-                        padding: EdgeInsets.only(
-                          bottom: MediaQuery.of(context).viewInsets.bottom,
-                        ),
+                        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom,),
                         child: Container(
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.secondary,
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
-                          ),
+                          decoration: BoxDecoration(color: Theme.of(context).colorScheme.secondary, borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),),
                           height: 300,
                           child: Column(
                             children: [
-                              const Padding(
-                                padding: EdgeInsets.all(16.0),
-                                child: Text(
-                                  "Selecione a Data de Abertura",
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
+                              const Padding(padding: EdgeInsets.all(16.0), child: Text("Selecione a Data de Abertura", style: TextStyle(fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.bold,),),),
                               Expanded(
                                 child: DatePickerWidget(
-                                  initialDate: DateTime.now(),
-                                  firstDate: DateTime(1900),
-                                  lastDate: DateTime.now(),
-                                  dateFormat: "dd-MMMM-yyyy",
-                                  locale: DateTimePickerLocale.pt_br,
-                                  looping: false,
-                                  pickerTheme: DateTimePickerTheme(
-                                    backgroundColor: Theme.of(context).colorScheme.secondary,
-                                    itemTextStyle: TextStyle(
-                                      color: Theme.of(context).colorScheme.onSecondary,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    dividerColor: Theme.of(context).colorScheme.onSecondary,
-                                  ),
+                                  initialDate: DateTime.now(), firstDate: DateTime(1900), lastDate: DateTime.now(), dateFormat: "dd-MMMM-yyyy", locale: DateTimePickerLocale.pt_br, looping: false,
+                                  pickerTheme: DateTimePickerTheme(backgroundColor: Theme.of(context).colorScheme.secondary, itemTextStyle: TextStyle(color: Theme.of(context).colorScheme.onSecondary, fontSize: 18, fontWeight: FontWeight.bold,), dividerColor: Theme.of(context).colorScheme.onSecondary,),
                                   onChange: (date, _) => setState(() => selectedDate = date),
                                 ),
                               ),
                               Padding(
                                 padding: const EdgeInsetsDirectional.fromSTEB(0, 0, 0, 30),
                                 child: ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Theme.of(context).colorScheme.primary,
-                                    foregroundColor: Theme.of(context).colorScheme.outline,
-                                  ),
+                                  style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.outline,),
                                   onPressed: () {
-                                    setState(() {
-                                      _model.tfBirthTextController.text =
-                                      "${selectedDate.day.toString().padLeft(2, '0')}/${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.year}";
-                                    });
+                                    setState(() { _model.tfBirthTextController.text = "${selectedDate.day.toString().padLeft(2, '0')}/${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.year}"; });
                                     Navigator.pop(context);
                                   },
-                                  child: Text(
-                                    "Confirmar",
-                                    style: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: Theme.of(context).colorScheme.outline,
-                                    ),
-                                  ),
+                                  child: Text("Confirmar", style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.outline,),),
                                 ),
                               ),
                             ],
@@ -948,25 +926,12 @@ class _AddCompanyState extends State<AddCompany> {
                     controller: _model.tfBirthTextController,
                     decoration: InputDecoration(
                       hintText: 'Selecione a data de abertura',
-                      hintStyle: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontWeight: FontWeight.w500,
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.onSecondary,
-                      ),
-                      filled: true,
-                      fillColor: Theme.of(context).colorScheme.secondary,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide.none,
-                      ),
-                      prefixIcon: Icon(Icons.calendar_month,
-                          color: Theme.of(context).colorScheme.tertiary, size: 20),
+                      hintStyle: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 12, color: Theme.of(context).colorScheme.onSecondary,),
+                      filled: true, fillColor: Theme.of(context).colorScheme.secondary,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none,),
+                      prefixIcon: Icon(Icons.calendar_month, color: Theme.of(context).colorScheme.tertiary, size: 20),
                     ),
-                    style: TextStyle(
-                      fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
-                      color: Theme.of(context).colorScheme.onSecondary,
-                    ),
+                    style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSecondary,),
                     readOnly: true,
                   ),
                 ),
@@ -989,38 +954,20 @@ class _AddCompanyState extends State<AddCompany> {
               child: TextFormField(
                 controller: _model.tfPasswordTextController,
                 focusNode: _model.tfPasswordFocusNode,
-                autofocus: true,
                 obscureText: !_model.tfPasswordVisibility,
                 decoration: InputDecoration(
                   hintText: 'Crie uma senha para a empresa',
-                  hintStyle: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontWeight: FontWeight.w500,
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSecondary,
-                  ),
-                  filled: true,
-                  fillColor: Theme.of(context).colorScheme.secondary,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                  prefixIcon: Icon(Icons.lock,
-                      color: Theme.of(context).colorScheme.tertiary, size: 20),
+                  hintStyle: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 12, color: Theme.of(context).colorScheme.onSecondary,),
+                  filled: true, fillColor: Theme.of(context).colorScheme.secondary,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none,),
+                  prefixIcon: Icon(Icons.lock, color: Theme.of(context).colorScheme.tertiary, size: 20),
                   suffixIcon: InkWell(
                     onTap: () => setState(() => _model.tfPasswordVisibility = !_model.tfPasswordVisibility),
                     focusNode: FocusNode(skipTraversal: true),
-                    child: Icon(
-                        _model.tfPasswordVisibility ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                        color: Theme.of(context).colorScheme.tertiary, size: 20),
+                    child: Icon(_model.tfPasswordVisibility ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: Theme.of(context).colorScheme.tertiary, size: 20),
                   ),
                 ),
-                style: TextStyle(
-                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
-                ),
-                textInputAction: TextInputAction.next,
-                textAlign: TextAlign.start,
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSecondary,),
               ),
             ),
           ),
@@ -1040,38 +987,20 @@ class _AddCompanyState extends State<AddCompany> {
               child: TextFormField(
                 controller: _model.tfPasswordConfirmTextController,
                 focusNode: _model.tfPasswordConfirmFocusNode,
-                autofocus: true,
                 obscureText: !_model.tfPasswordConfirmVisibility,
                 decoration: InputDecoration(
                   hintText: 'Confirme a senha da empresa',
-                  hintStyle: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontWeight: FontWeight.w500,
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSecondary,
-                  ),
-                  filled: true,
-                  fillColor: Theme.of(context).colorScheme.secondary,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                  prefixIcon: Icon(Icons.lock,
-                      color: Theme.of(context).colorScheme.tertiary, size: 20),
+                  hintStyle: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 12, color: Theme.of(context).colorScheme.onSecondary,),
+                  filled: true, fillColor: Theme.of(context).colorScheme.secondary,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none,),
+                  prefixIcon: Icon(Icons.lock, color: Theme.of(context).colorScheme.tertiary, size: 20),
                   suffixIcon: InkWell(
                     onTap: () => setState(() => _model.tfPasswordConfirmVisibility = !_model.tfPasswordConfirmVisibility),
                     focusNode: FocusNode(skipTraversal: true),
-                    child: Icon(
-                        _model.tfPasswordConfirmVisibility ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                        color: Theme.of(context).colorScheme.tertiary, size: 20),
+                    child: Icon(_model.tfPasswordConfirmVisibility ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: Theme.of(context).colorScheme.tertiary, size: 20),
                   ),
                 ),
-                style: TextStyle(
-                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
-                ),
-                textInputAction: TextInputAction.next,
-                textAlign: TextAlign.start,
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSecondary,),
               ),
             ),
           ),
@@ -1080,7 +1009,6 @@ class _AddCompanyState extends State<AddCompany> {
     );
   }
 
-  // --------- WhatsApp / Z-API fields ----------
   Widget _buildWhatsPhoneTextField() {
     return Padding(
       padding: const EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
@@ -1094,31 +1022,12 @@ class _AddCompanyState extends State<AddCompany> {
                 keyboardType: TextInputType.phone,
                 decoration: InputDecoration(
                   hintText: 'Número do WhatsApp com DDI',
-                  hintStyle: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontWeight: FontWeight.w500,
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSecondary,
-                  ),
-                  filled: true,
-                  fillColor: Theme.of(context).colorScheme.secondary,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                  prefixIcon: Icon(
-                    Icons.phone_iphone,
-                    color: Theme.of(context).colorScheme.tertiary,
-                    size: 20,
-                  ),
+                  hintStyle: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 12, color: Theme.of(context).colorScheme.onSecondary,),
+                  filled: true, fillColor: Theme.of(context).colorScheme.secondary,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none,),
+                  prefixIcon: Icon(Icons.phone_iphone, color: Theme.of(context).colorScheme.tertiary, size: 20,),
                 ),
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
-                ),
-                textAlign: TextAlign.start,
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSecondary,),
               ),
             ),
           ),
@@ -1139,20 +1048,12 @@ class _AddCompanyState extends State<AddCompany> {
                 controller: _tfInstanceIdController,
                 decoration: InputDecoration(
                   hintText: 'ZAPI_ID (instanceId)',
-                  hintStyle: TextStyle(
-                    fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSecondary,
-                  ),
+                  hintStyle: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 12, color: Theme.of(context).colorScheme.onSecondary,),
                   filled: true, fillColor: Theme.of(context).colorScheme.secondary,
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                  prefixIcon: Icon(Icons.memory,
-                      color: Theme.of(context).colorScheme.tertiary, size: 20),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none,),
+                  prefixIcon: Icon(Icons.memory, color: Theme.of(context).colorScheme.tertiary, size: 20),
                 ),
-                style: TextStyle(
-                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
-                ),
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSecondary,),
               ),
             ),
           ),
@@ -1173,20 +1074,12 @@ class _AddCompanyState extends State<AddCompany> {
                 controller: _tfZapiTokenController,
                 decoration: InputDecoration(
                   hintText: 'ZAPI_TOKEN (token)',
-                  hintStyle: TextStyle(
-                    fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSecondary,
-                  ),
+                  hintStyle: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 12, color: Theme.of(context).colorScheme.onSecondary,),
                   filled: true, fillColor: Theme.of(context).colorScheme.secondary,
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                  prefixIcon: Icon(Icons.vpn_key,
-                      color: Theme.of(context).colorScheme.tertiary, size: 20),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none,),
+                  prefixIcon: Icon(Icons.vpn_key, color: Theme.of(context).colorScheme.tertiary, size: 20),
                 ),
-                style: TextStyle(
-                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
-                ),
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSecondary,),
               ),
             ),
           ),
@@ -1207,20 +1100,12 @@ class _AddCompanyState extends State<AddCompany> {
                 controller: _tfClientTokenController,
                 decoration: InputDecoration(
                   hintText: 'Client-Token',
-                  hintStyle: TextStyle(
-                    fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSecondary,
-                  ),
+                  hintStyle: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 12, color: Theme.of(context).colorScheme.onSecondary,),
                   filled: true, fillColor: Theme.of(context).colorScheme.secondary,
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                  prefixIcon: Icon(Icons.shield,
-                      color: Theme.of(context).colorScheme.tertiary, size: 20),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none,),
+                  prefixIcon: Icon(Icons.shield, color: Theme.of(context).colorScheme.tertiary, size: 20),
                 ),
-                style: TextStyle(
-                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSecondary,
-                ),
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSecondary,),
               ),
             ),
           ),
@@ -1229,6 +1114,98 @@ class _AddCompanyState extends State<AddCompany> {
     );
   }
 
+  // --- WIDGETS NOVOS (GPT MAKER) ---
+
+  Widget _buildGptTokenTextField() {
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 0),
+              child: TextFormField(
+                controller: _tfGptTokenController,
+                decoration: InputDecoration(
+                  labelText: 'Account Token (GPT Maker)',
+                  labelStyle: TextStyle(color: Theme.of(context).colorScheme.onSecondary),
+                  hintText: 'Cole o Token da Conta aqui',
+                  hintStyle: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 12, color: Theme.of(context).colorScheme.onSecondary,),
+                  filled: true, fillColor: Theme.of(context).colorScheme.secondary,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none,),
+                  prefixIcon: Icon(Icons.api, color: Theme.of(context).colorScheme.tertiary, size: 20),
+                  suffixIcon: IconButton(
+                    icon: _isFetchingWorkspaces
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : Icon(Icons.search, color: Theme.of(context).colorScheme.primary),
+                    onPressed: _isFetchingWorkspaces ? null : _fetchGptWorkspaces,
+                    tooltip: 'Buscar Workspaces',
+                  ),
+                ),
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSecondary,),
+                obscureText: true,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGptWorkspaceDropdown() {
+    if (_gptWorkspaces.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(20, 10, 20, 10),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.secondary,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton2<String>(
+            isExpanded: true,
+            hint: Text(
+              'Selecione o Workspace',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 14,
+                color: Theme.of(context).colorScheme.onSecondary.withOpacity(0.7),
+              ),
+            ),
+            items: _gptWorkspaces
+                .map((item) => DropdownMenuItem<String>(
+              value: item['id'],
+              child: Text(
+                "${item['name']} (${item['id']})",
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Theme.of(context).colorScheme.onSecondary,
+                ),
+              ),
+            ))
+                .toList(),
+            value: _selectedGptWorkspaceId,
+            onChanged: (value) {
+              setState(() {
+                _selectedGptWorkspaceId = value;
+                _selectedGptWorkspaceName = _gptWorkspaces.firstWhere((e) => e['id'] == value)['name'];
+              });
+            },
+            buttonStyleData: const ButtonStyleData(height: 50),
+            dropdownStyleData: DropdownStyleData(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.secondary,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+  
   Widget _buildAddButton() {
     return Align(
       alignment: const AlignmentDirectional(0, 0),

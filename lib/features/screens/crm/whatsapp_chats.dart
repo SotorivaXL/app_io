@@ -10,6 +10,7 @@ import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:app_io/features/screens/crm/welcome_connect_phone.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class WhatsAppChats extends StatefulWidget {
   const WhatsAppChats({Key? key}) : super(key: key);
@@ -70,6 +71,9 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
   bool _noPhone = false;
   bool _showArchived = false;
 
+  // ✅ lock anti-duplo clique / double-tap (evita duplicar log)
+  final Set<String> _openingLocks = <String>{};
+
   // helper (dentro da _WhatsAppChatsState)
   Color get _paneBg => Theme.of(context).colorScheme.background;
 
@@ -103,7 +107,8 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
     required String phoneId,
     required String phoneDigits, // ex: 5546991073494 (com DDI)
   }) async {
-    final url = Uri.parse('https://createchat-v2-5a3yl3wsma-uc.a.run.app'); // <- ajuste
+    final url =
+        Uri.parse('https://createchat-v2-5a3yl3wsma-uc.a.run.app'); // <- ajuste
 
     final r = await http.post(
       url,
@@ -130,12 +135,16 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
   String _digitsFromJid(String jid) =>
       jid.replaceAll('@s.whatsapp.net', '').replaceAll(RegExp(r'\D'), '');
 
-
+  // ✅ CORRIGIDO: NÃO DUPLICA MAIS
   Future<void> _openChat({
     required String chatId,
     required String name,
     required String contactPhoto,
   }) async {
+    // ✅ lock anti-duplo clique
+    if (_openingLocks.contains(chatId)) return;
+    _openingLocks.add(chatId);
+
     final ref = FirebaseFirestore.instance
         .collection('empresas')
         .doc(_companyId)
@@ -144,27 +153,47 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
         .collection('whatsappChats')
         .doc(chatId);
 
-    await ref.set({
-      'unreadCount': 0,
-      'opened': true,
-      'chatId': chatId, // ✅ mantém consistente
-    }, SetOptions(merge: true));
+    bool shouldLogHumanStart = false;
+    Map<String, dynamic> previous = {};
 
-    if (_isDesktop) {
-      setState(() => _selected = _SelectedChat(chatId, name, contactPhoto));
-    } else {
-      if (!mounted) return;
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ChatDetail(
-            chatId: chatId,
-            chatName: name,
-            contactPhoto: contactPhoto,
+    try {
+      await FirebaseFirestore.instance.runTransaction((tx) async {
+        final snap = await tx.get(ref);
+        final data = (snap.data() as Map<String, dynamic>?) ?? {};
+
+        // (opcional) se você quiser guardar pra debug:
+        // final curOpened = (data['opened'] as bool?) ?? false;
+
+        final updates = <String, dynamic>{
+          'unreadCount': 0,
+          'opened': true,
+          'chatId': chatId,
+          'lastSeenAt': FieldValue.serverTimestamp(),
+        };
+
+        tx.set(ref, updates, SetOptions(merge: true));
+      });
+
+      if (_isDesktop) {
+        if (!mounted) return;
+        setState(() => _selected = _SelectedChat(chatId, name, contactPhoto));
+      } else {
+        if (!mounted) return;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChatDetail(
+              chatId: chatId,
+              chatName: name,
+              contactPhoto: contactPhoto,
+            ),
           ),
-        ),
-      );
+        );
+      }
+    } finally {
+      _openingLocks.remove(chatId);
     }
+
   }
 
   @override
@@ -220,8 +249,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
       final semi = msg.indexOf(';');
       if (semi > 5) {
         final mime = msg.substring(5, semi).toLowerCase();
-        if (mime.startsWith('image/webp'))
-          return ('Figurinha', Icons.emoji_emotions);
+        if (mime.startsWith('image/webp')) return ('Figurinha', Icons.emoji_emotions);
         if (mime.startsWith('image/')) return ('Imagem', Icons.photo);
         if (mime.startsWith('video/')) return ('Vídeo', Icons.videocam);
         if (mime.startsWith('audio/')) return ('Áudio', Icons.audiotrack);
@@ -234,14 +262,15 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
       if (uri != null) {
         final path = uri.path.toLowerCase();
         final parts = path.split('.');
-        final String? ext =
-            parts.length > 1 ? parts.last : null; // evita .lastOrNull
+        final String? ext = parts.length > 1 ? parts.last : null;
         if (ext != null && _extMatchers.containsKey(ext)) {
           return _extMatchers[ext];
         }
         final qp = uri.queryParametersAll.map(
-          (k, v) => MapEntry(k.toLowerCase(),
-              v.map((x) => Uri.decodeComponent(x).toLowerCase()).toList()),
+          (k, v) => MapEntry(
+            k.toLowerCase(),
+            v.map((x) => Uri.decodeComponent(x).toLowerCase()).toList(),
+          ),
         );
         final mimeParam =
             (qp['contenttype'] ?? qp['mimetype'] ?? qp['mime'] ?? const [])
@@ -249,9 +278,8 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                 .firstWhere((e) => e != null && e!.contains('/'),
                     orElse: () => null);
         if (mimeParam != null) {
-          final mime = mimeParam!;
-          if (mime.startsWith('image/webp'))
-            return ('Figurinha', Icons.emoji_emotions);
+          final mime = mimeParam;
+          if (mime.startsWith('image/webp')) return ('Figurinha', Icons.emoji_emotions);
           if (mime.startsWith('image/')) return ('Imagem', Icons.photo);
           if (mime.startsWith('video/')) return ('Vídeo', Icons.videocam);
           if (mime.startsWith('audio/')) return ('Áudio', Icons.audiotrack);
@@ -271,8 +299,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
         var cleaned = s.replaceAll(RegExp(r'\s'), '');
         cleaned = cleaned.substring(0, cleaned.length.clamp(0, take * 2));
         final mod = cleaned.length % 4;
-        if (mod != 0)
-          cleaned = cleaned.padRight(cleaned.length + (4 - mod), '=');
+        if (mod != 0) cleaned = cleaned.padRight(cleaned.length + (4 - mod), '=');
         return base64Decode(cleaned);
       } catch (_) {
         return null;
@@ -291,15 +318,13 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
         }
 
         // Imagens
-        if (startsWithSig([0x89, 0x50, 0x4E, 0x47]))
-          return ('Imagem', Icons.photo); // PNG
-        if (startsWithSig([0xFF, 0xD8, 0xFF]))
-          return ('Imagem', Icons.photo); // JPEG
-        if (String.fromCharCodes(head).startsWith('GIF8'))
-          return ('Imagem', Icons.photo); // GIF
+        if (startsWithSig([0x89, 0x50, 0x4E, 0x47])) return ('Imagem', Icons.photo);
+        if (startsWithSig([0xFF, 0xD8, 0xFF])) return ('Imagem', Icons.photo);
+        if (String.fromCharCodes(head).startsWith('GIF8')) return ('Imagem', Icons.photo);
         final ascii = String.fromCharCodes(head);
-        if (ascii.startsWith('RIFF') && ascii.contains('WEBP'))
+        if (ascii.startsWith('RIFF') && ascii.contains('WEBP')) {
           return ('Figurinha', Icons.emoji_emotions);
+        }
 
         // Áudio: OGG/OPUS, MP3
         if (ascii.startsWith('OggS')) return ('Áudio', Icons.audiotrack);
@@ -308,29 +333,17 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
         // Contêiner ISO-BMFF (mp4/mov/m4a) – tem 'ftyp'
         final ftypAt = ascii.indexOf('ftyp');
         if (ftypAt >= 0 && head.length >= ftypAt + 8) {
-          // major_brand são os 4 bytes após 'ftyp'
           final mbStart = ftypAt + 4;
           final mbEnd = mbStart + 4;
           final majorBrand = String.fromCharCodes(head.sublist(mbStart, mbEnd));
 
-          // Heurísticas:
-          //  - Marcas de áudio puro
           if (majorBrand.startsWith('M4A') || majorBrand.startsWith('M4B')) {
             return ('Áudio', Icons.audiotrack);
           }
 
-          //  - Codecs encontrados no cabeçalho
           final lower = ascii.toLowerCase();
           const audioHints = ['mp4a', 'alac', 'ac-3', 'ec-3'];
-          const videoHints = [
-            'avc1',
-            'hvc1',
-            'hev1',
-            'vp09',
-            'av01',
-            'mp4v',
-            'encv'
-          ];
+          const videoHints = ['avc1', 'hvc1', 'hev1', 'vp09', 'av01', 'mp4v', 'encv'];
 
           final hasAudioHint = audioHints.any(lower.contains);
           final hasVideoHint = videoHints.any(lower.contains);
@@ -338,7 +351,6 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
           if (hasAudioHint && !hasVideoHint) return ('Áudio', Icons.audiotrack);
           if (hasVideoHint && !hasAudioHint) return ('Vídeo', Icons.videocam);
 
-          // Sem pista clara → assume ÁUDIO para evitar falso “Vídeo”
           return ('Áudio', Icons.audiotrack);
         }
       }
@@ -353,9 +365,11 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
     );
 
     try {
-      final r = await http.post(url,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'empresaId': _companyId, 'phoneId': _phoneId}));
+      final r = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'empresaId': _companyId, 'phoneId': _phoneId}),
+      );
 
       if (r.statusCode != 200) {
         debugPrint('updateContactPhotos ERRO ${r.statusCode}: ${r.body}');
@@ -381,13 +395,11 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
     final uid = FirebaseAuth.instance.currentUser!.uid;
 
     final usersRef = FirebaseFirestore.instance.collection('users').doc(uid);
-    final empresasRef =
-        FirebaseFirestore.instance.collection('empresas').doc(uid);
+    final empresasRef = FirebaseFirestore.instance.collection('empresas').doc(uid);
 
     // Lê doc de users/{uid} apenas para saber se É colaborador (createdBy)
     final userSnap = await usersRef.get();
-    final Map<String, dynamic> userData =
-        (userSnap.data() as Map<String, dynamic>?) ?? {};
+    final Map<String, dynamic> userData = (userSnap.data() as Map<String, dynamic>?) ?? {};
     final String? createdBy = (userData['createdBy'] as String?)?.trim();
 
     // ✔️ Colaborador SÓ se tem createdBy não-vazio
@@ -490,8 +502,8 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
           .doc(_phoneId)
           .collection('whatsappChats');
 
-      final jidRef = chatsBase.doc(resolvedChatId);      // padrão correto
-      final bareRef = chatsBase.doc(resolvedDigits);     // legado sem "@"
+      final jidRef = chatsBase.doc(resolvedChatId); // padrão correto
+      final bareRef = chatsBase.doc(resolvedDigits); // legado sem "@"
 
       // 2) Migra legado (sem @) -> JID, se necessário
       final jidSnap = await jidRef.get();
@@ -517,7 +529,11 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
             'opened': false,
             'unreadCount': 0,
             'contactPhoto': contactPhoto,
+
+            // ✅ defaults corretos
             'status': 'novo',
+            'aiMode': 'ai',
+
             'saleValue': null,
           });
         }
@@ -617,21 +633,16 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
     required List<TagItem> tags,
   }) {
     final theme = Theme.of(context);
-    final mediaInfo =
-        _classifyMediaMessage(lastMessage); // (label, icon)? ou null
+    final mediaInfo = _classifyMediaMessage(lastMessage);
 
-    // ---------- linha que mostra a última mensagem ----------
     late final Widget lastLine;
     if (mediaInfo != null) {
       final (label, icon) = mediaInfo;
-      // onde você monta o `lastLine` quando é mídia:
       lastLine = Row(
         children: [
-          Icon(icon,
-              size: 14, color: theme.colorScheme.onSecondary.withOpacity(.7)),
+          Icon(icon, size: 14, color: theme.colorScheme.onSecondary.withOpacity(.7)),
           const SizedBox(width: 4),
           Flexible(
-            // <<< impede overflow
             child: Text(
               label,
               maxLines: 1,
@@ -657,7 +668,6 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
       );
     }
 
-    // ---------- widget completo ----------
     return InkWell(
       onTap: () => _openChat(
         chatId: chatId,
@@ -669,7 +679,6 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ---------- avatar ----------
             Stack(
               clipBehavior: Clip.none,
               children: [
@@ -685,17 +694,13 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                       borderRadius: BorderRadius.circular(5),
                     ),
                     child: const Center(
-                      child: FaIcon(FontAwesomeIcons.whatsapp,
-                          size: 10, color: Colors.white),
+                      child: FaIcon(FontAwesomeIcons.whatsapp, size: 10, color: Colors.white),
                     ),
                   ),
                 ),
               ],
             ),
-
             const SizedBox(width: 12),
-
-            // ---------- nome + tags + última mensagem ----------
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -718,11 +723,9 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                       runSpacing: 6,
                       children: tags.map((tag) {
                         final onDark =
-                            ThemeData.estimateBrightnessForColor(tag.color) ==
-                                Brightness.dark;
+                            ThemeData.estimateBrightnessForColor(tag.color) == Brightness.dark;
                         return Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 1),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                           decoration: BoxDecoration(
                             color: tag.color,
                             borderRadius: BorderRadius.circular(5),
@@ -745,8 +748,6 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                 ],
               ),
             ),
-
-            // ---------- hora + badge ----------
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -760,14 +761,11 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                 const SizedBox(height: 6),
                 if (unreadCount > 0)
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: _currentTab == ChatTab.novos
-                          ? theme
-                              .colorScheme.error // bolinha vermelha nos “Novos”
+                          ? theme.colorScheme.error
                           : theme.colorScheme.tertiary,
-                      // badge comum em “Atendendo”
                       borderRadius: BorderRadius.circular(10),
                     ),
                     alignment: Alignment.center,
@@ -791,7 +789,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
   void _openFilterSheet() {
     if (_tagMap.isEmpty) return;
 
-    final tmp = _filterTags.toSet(); // cópia mutável
+    final tmp = _filterTags.toSet();
 
     showModalBottomSheet(
       context: context,
@@ -815,7 +813,6 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ─── cabeçalho ───
                   Align(
                     alignment: Alignment.center,
                     child: Container(
@@ -833,14 +830,10 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 12),
-
-                  // ─── lista de tags ───
                   ..._tagMap.entries.map((e) {
                     final tag = e.value;
                     final sel = tmp.contains(e.key);
-                    final onDark =
-                        ThemeData.estimateBrightnessForColor(tag.color) ==
-                            Brightness.dark;
+                    final onDark = ThemeData.estimateBrightnessForColor(tag.color) == Brightness.dark;
 
                     void toggle() => setModalState(() {
                           sel ? tmp.remove(e.key) : tmp.add(e.key);
@@ -850,8 +843,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                       onTap: toggle,
                       child: Container(
                         margin: const EdgeInsets.symmetric(vertical: 5),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                         decoration: BoxDecoration(
                           color: tag.color,
                           borderRadius: BorderRadius.circular(8),
@@ -878,18 +870,14 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                       ),
                     );
                   }),
-
                   const SizedBox(height: 18),
-
-                  // ─── botões ───
                   Row(
                     children: [
                       TextButton(
                         style: TextButton.styleFrom(
-                          foregroundColor: cs.onSecondary, // cor do texto
+                          foregroundColor: cs.onSecondary,
                         ),
                         onPressed: () => setModalState(() => tmp.clear()),
-                        // desmarca visualmente
                         child: const Text('Limpar'),
                       ),
                       const Spacer(),
@@ -899,7 +887,6 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                           foregroundColor: cs.onSurface,
                         ),
                         onPressed: () {
-                          // grava seleção no estado principal e fecha o modal
                           setState(() => _filterTags = tmp);
                           Navigator.pop(context);
                         },
@@ -937,10 +924,8 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
               return InkWell(
                 onTap: () => setModalState(() => _sort = option),
                 child: Container(
-                  margin:
-                      const EdgeInsets.symmetric(vertical: 4, horizontal: 20),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
                     color: cs.secondary,
                     borderRadius: BorderRadius.circular(10),
@@ -950,14 +935,15 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                       Icon(icon, color: cs.onSecondary, size: 20),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Text(label,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: cs.onBackground,
-                            )),
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onBackground,
+                          ),
+                        ),
                       ),
-                      // radio “fake”
                       Container(
                         width: 22,
                         height: 22,
@@ -981,12 +967,12 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                   _item(
                     option: SortOption.oldestFirst,
                     label: 'Mais antigos primeiro',
-                    icon: Icons.arrow_downward, // 🔻
+                    icon: Icons.arrow_downward,
                   ),
                   _item(
                     option: SortOption.newestFirst,
                     label: 'Últimas interações primeiro',
-                    icon: Icons.arrow_upward, // 🔺
+                    icon: Icons.arrow_upward,
                   ),
                   const SizedBox(height: 12),
                   ElevatedButton(
@@ -996,8 +982,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                       minimumSize: const Size(160, 46),
                     ),
                     onPressed: () {
-                      // grava escolha e fecha
-                      setState(() {}); // força rebuild da lista
+                      setState(() {});
                       Navigator.pop(ctx);
                     },
                     child: const Text('Aplicar'),
@@ -1021,20 +1006,17 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
       if (_noPhone) return const WelcomeConnectPhone();
     }
 
-    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: _paneBg, // antes: theme.colorScheme.background
-      body: _isDesktop
-          ? _buildDesktop(context)
-          : SafeArea(child: _buildMobile(context)),
+      backgroundColor: _paneBg,
+      body: _isDesktop ? _buildDesktop(context) : SafeArea(child: _buildMobile(context)),
     );
   }
 
+  // ========================= MOBILE =========================
   Widget _buildMobile(BuildContext context) {
     final theme = Theme.of(context);
     return Column(
       children: [
-        // ------------ LINHA DE ABAS ------------
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: StreamBuilder<QuerySnapshot>(
@@ -1047,7 +1029,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                 .snapshots(),
             builder: (context, snap) {
               int novosCount = 0;
-              int atendendoUnread = 0; // <<< NOVO
+              int atendendoUnread = 0;
 
               if (snap.hasData) {
                 for (final d in snap.data!.docs) {
@@ -1056,11 +1038,9 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                   final unread = (map['unreadCount'] as int?) ?? 0;
 
                   if (!opened) {
-                    // ainda não aberto → conta em "Novos"
                     novosCount += 1;
                   } else if (unread > 0) {
-                    // já em atendimento e com mensagens não lidas → soma mensagens
-                    atendendoUnread += unread; // <<< NOVO
+                    atendendoUnread += unread;
                   }
                 }
               }
@@ -1075,34 +1055,25 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                         children: [
                           _buildTab('Novos', ChatTab.novos, badge: novosCount),
                           const SizedBox(width: 8),
-                          _buildTab('Atendendo', ChatTab.atendendo, badge: atendendoUnread), // <<< NOVO
+                          _buildTab('Atendendo', ChatTab.atendendo, badge: atendendoUnread),
                         ],
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
-
-                  // Ações – botões compactos
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       _actionIcon(
-                        icon: _showArchived
-                            ? Icons.archive
-                            : Icons.archive_outlined,
+                        icon: _showArchived ? Icons.archive : Icons.archive_outlined,
                         color: _showArchived
                             ? Theme.of(context).colorScheme.primary
                             : Theme.of(context).colorScheme.onSecondary,
-                        tooltip: _showArchived
-                            ? 'Mostrar em andamento'
-                            : 'Mostrar concluídos',
-                        onPressed: () =>
-                            setState(() => _showArchived = !_showArchived),
+                        tooltip: _showArchived ? 'Mostrar em andamento' : 'Mostrar concluídos',
+                        onPressed: () => setState(() => _showArchived = !_showArchived),
                       ),
                       _actionIcon(
-                        icon: _filterTags.isEmpty
-                            ? Icons.filter_alt_outlined
-                            : Icons.filter_alt,
+                        icon: _filterTags.isEmpty ? Icons.filter_alt_outlined : Icons.filter_alt,
                         onPressed: _openFilterSheet,
                       ),
                       _actionIcon(
@@ -1110,15 +1081,12 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                         onPressed: _openSortSheet,
                       ),
                       _actionIcon(
-                        icon: _showUnreadOnly
-                            ? Icons.filter_list
-                            : Icons.filter_list_outlined,
+                        icon: _showUnreadOnly ? Icons.filter_list : Icons.filter_list_outlined,
                         color: _showUnreadOnly
                             ? Theme.of(context).colorScheme.primary
                             : Theme.of(context).colorScheme.onSecondary,
                         tooltip: 'Somente não lidas',
-                        onPressed: () =>
-                            setState(() => _showUnreadOnly = !_showUnreadOnly),
+                        onPressed: () => setState(() => _showUnreadOnly = !_showUnreadOnly),
                       ),
                     ],
                   ),
@@ -1128,7 +1096,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
           ),
         ),
 
-        // ------------ CAMPO DE BUSCA ------------
+        // ------------ BUSCA ------------
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
@@ -1143,20 +1111,16 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                   child: Row(
                     children: [
                       const SizedBox(width: 12),
-                      Icon(Icons.search,
-                          color:
-                              theme.colorScheme.onBackground.withOpacity(0.5)),
+                      Icon(Icons.search, color: theme.colorScheme.onBackground.withOpacity(0.5)),
                       const SizedBox(width: 8),
                       Expanded(
                         child: TextField(
-                          onChanged: (v) => setState(
-                              () => _searchTerm = v.trim().toLowerCase()),
+                          onChanged: (v) => setState(() => _searchTerm = v.trim().toLowerCase()),
                           textAlign: TextAlign.start,
                           decoration: InputDecoration(
                             hintText: 'Buscar atendimento',
                             hintStyle: TextStyle(
-                              color: theme.colorScheme.onBackground
-                                  .withOpacity(0.5),
+                              color: theme.colorScheme.onBackground.withOpacity(0.5),
                             ),
                             isDense: true,
                             border: InputBorder.none,
@@ -1183,8 +1147,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                 .collection('phones')
                 .doc(_phoneId)
                 .collection('whatsappChats')
-                .orderBy('timestamp',
-                    descending: _sort == SortOption.newestFirst)
+                .orderBy('timestamp', descending: _sort == SortOption.newestFirst)
                 .snapshots(),
             builder: (ctx, snap) {
               if (!snap.hasData) {
@@ -1198,77 +1161,60 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                 return (map['opened'] as bool?) ?? false;
               }
 
-// ----- filtro por ABA (só quando NÃO estamos vendo arquivados) -----
               if (!_showArchived) {
                 if (_currentTab == ChatTab.novos) {
                   docs = docs.where((d) => !_isOpened(d)).toList();
                 } else {
-                  docs = docs.where(_isOpened).toList(); // Atendendo
+                  docs = docs.where(_isOpened).toList();
                 }
               }
 
-// ----- filtro por texto -----
               docs = docs.where((d) {
                 final name = (d['name'] as String? ?? '').toLowerCase();
                 return name.contains(_searchTerm);
               }).toList();
 
-// ----- filtro por etiquetas -----
               if (_filterTags.isNotEmpty) {
                 docs = docs.where((d) {
                   final map = d.data() as Map<String, dynamic>;
-                  final tagList =
-                      (map['tags'] as List?)?.cast<String>() ?? const [];
+                  final tagList = (map['tags'] as List?)?.cast<String>() ?? const [];
                   return tagList.any(_filterTags.contains);
                 }).toList();
               }
 
-// ----- filtro “somente não-lidas” -----
               if (_showUnreadOnly) {
-                docs = docs
-                    .where((d) => ((d['unreadCount'] as int?) ?? 0) > 0)
-                    .toList();
+                docs = docs.where((d) => ((d['unreadCount'] as int?) ?? 0) > 0).toList();
               }
 
-// ----- filtro por STATUS (aqui entra o “arquivo”) -----
               if (_showArchived) {
-                // mostrar APENAS concluídos
                 docs = docs.where((d) {
                   final st = d['status'] as String? ?? '';
                   return st == 'concluido_com_venda' || st == 'recusado';
                 }).toList();
               } else {
-                // esconder concluídos
                 docs = docs.where((d) {
                   final st = d['status'] as String? ?? 'novo';
-                  return st != 'concluido' &&
-                      st != 'concluido_com_venda' &&
-                      st != 'recusado';
+                  return st != 'concluido' && st != 'concluido_com_venda' && st != 'recusado';
                 }).toList();
               }
 
-// ----- vazio -----
               if (docs.isEmpty) {
                 final msg = _showArchived
                     ? 'Não há conversas concluídas'
                     : (_currentTab == ChatTab.novos
-                    ? 'Não há novos atendimentos'
-                    : 'Nenhum atendimento em andamento');
+                        ? 'Não há novos atendimentos'
+                        : 'Nenhum atendimento em andamento');
 
                 return Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        Icons.chat_bubble_outline,
-                        size: 56,
-                        color: theme.colorScheme.onSecondary, // <- ícone em onSecondary
-                      ),
+                      Icon(Icons.chat_bubble_outline, size: 56, color: theme.colorScheme.onSecondary),
                       const SizedBox(height: 12),
                       Text(
                         msg,
                         style: TextStyle(
-                          color: theme.colorScheme.onSecondary, // <- texto em onSecondary
+                          color: theme.colorScheme.onSecondary,
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
@@ -1286,10 +1232,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                 itemBuilder: (ctx, i) {
                   final data = docs[i].data() as Map<String, dynamic>;
                   final ids = List<String>.from(data['tags'] ?? const []);
-                  final tags = ids
-                      .where(_tagMap.containsKey)
-                      .map((id) => _tagMap[id]!)
-                      .toList();
+                  final tags = ids.where(_tagMap.containsKey).map((id) => _tagMap[id]!).toList();
 
                   final doc = docs[i];
                   final chatId = doc.id;
@@ -1298,25 +1241,21 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                   final unread = data['unreadCount'] as int? ?? 0;
                   final contactPhoto = data['contactPhoto'] as String? ?? '';
 
-                  // formata horário
                   String lastMsgTime = '';
                   final ts = data['timestamp'];
                   if (ts is Timestamp) {
                     final date = ts.toDate();
                     final now = DateTime.now();
 
-                    final bool sameDay = date.year == now.year &&
-                        date.month == now.month &&
-                        date.day == now.day;
+                    final bool sameDay =
+                        date.year == now.year && date.month == now.month && date.day == now.day;
 
                     if (sameDay) {
-                      // Ex.: 14:05
-                      lastMsgTime = '${date.hour.toString().padLeft(2, '0')}:'
-                          '${date.minute.toString().padLeft(2, '0')}';
+                      lastMsgTime =
+                          '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
                     } else {
-                      // Ex.: 09/06
-                      lastMsgTime = '${date.day.toString().padLeft(2, '0')}/'
-                          '${date.month.toString().padLeft(2, '0')}';
+                      lastMsgTime =
+                          '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}';
                     }
                   }
 
@@ -1336,46 +1275,35 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
           ),
         ),
 
-        // ==================== RODAPÉ – TELEFONE + BOTÃO CONVERSAR ====================
+        // ------------ RODAPÉ ------------
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
-              // ---------- Dropdown do país ----------
               Container(
                 height: 40,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.secondary, // fundo próprio
+                  color: theme.colorScheme.secondary,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 alignment: Alignment.center,
                 child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                  value: _countryCode,
-                  alignment: Alignment.center,
-                  style: TextStyle(
-                    color: theme.colorScheme.onSecondary,
+                  child: DropdownButton<String>(
+                    value: _countryCode,
+                    alignment: Alignment.center,
+                    style: TextStyle(color: theme.colorScheme.onSecondary),
+                    icon: Icon(Icons.arrow_drop_down,
+                        color: theme.colorScheme.onBackground.withOpacity(0.5)),
+                    items: const [
+                      DropdownMenuItem(value: '+55', child: Text('+55')),
+                      DropdownMenuItem(value: '+1', child: Text('+1')),
+                    ],
+                    onChanged: (v) => setState(() => _countryCode = v ?? '+55'),
                   ),
-                  icon: Icon(Icons.arrow_drop_down,
-                      color: theme.colorScheme.onBackground.withOpacity(0.5)),
-                  items: const [
-                    DropdownMenuItem(
-                      value: '+55',
-                      child: Text('+55'),
-                    ),
-                    DropdownMenuItem(
-                      value: '+1',
-                      child: Text('+1'),
-                    ),
-                  ],
-                  onChanged: (v) => setState(() => _countryCode = v ?? '+55'),
-                )),
+                ),
               ),
-
               const SizedBox(width: 8),
-
-              // ---------- Campo de telefone ----------
               Expanded(
                 child: Container(
                   height: 40,
@@ -1393,9 +1321,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                     style: TextStyle(color: theme.colorScheme.onSecondary),
                     decoration: InputDecoration(
                       hintText: '(00) 0000-0000',
-                      hintStyle: TextStyle(
-                          color:
-                              theme.colorScheme.onBackground.withOpacity(0.5)),
+                      hintStyle: TextStyle(color: theme.colorScheme.onBackground.withOpacity(0.5)),
                       isDense: true,
                       border: InputBorder.none,
                       contentPadding: EdgeInsets.zero,
@@ -1403,37 +1329,32 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                   ),
                 ),
               ),
-
               const SizedBox(width: 8),
-
-              // ---------- Botão "Conversar" ----------
               FittedBox(
                 fit: BoxFit.scaleDown,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: theme.colorScheme.primary,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   onPressed: _startConversation,
                   child: const Text(
                     'Conversar',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w700),
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
                   ),
                 ),
               ),
             ],
           ),
-        )
+        ),
       ],
     );
   }
 
+  // ========================= DESKTOP =========================
   Widget _buildLeftPaneDesktop(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
@@ -1441,7 +1362,6 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
       color: _paneBg,
       child: Column(
         children: [
-          // ------------ LINHA DE ABAS ------------
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: StreamBuilder<QuerySnapshot>(
@@ -1454,7 +1374,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                   .snapshots(),
               builder: (context, snap) {
                 int novosCount = 0;
-                int atendendoUnread = 0; // <<< NOVO
+                int atendendoUnread = 0;
 
                 if (snap.hasData) {
                   for (final d in snap.data!.docs) {
@@ -1465,7 +1385,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                     if (!opened) {
                       novosCount += 1;
                     } else if (unread > 0) {
-                      atendendoUnread += unread; // <<< NOVO
+                      atendendoUnread += unread;
                     }
                   }
                 }
@@ -1480,34 +1400,25 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                           children: [
                             _buildTab('Novos', ChatTab.novos, badge: novosCount),
                             const SizedBox(width: 8),
-                            _buildTab('Atendendo', ChatTab.atendendo, badge: atendendoUnread), // <<< NOVO
+                            _buildTab('Atendendo', ChatTab.atendendo, badge: atendendoUnread),
                           ],
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
-
-                    // Ações – botões compactos
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         _actionIcon(
-                          icon: _showArchived
-                              ? Icons.archive
-                              : Icons.archive_outlined,
+                          icon: _showArchived ? Icons.archive : Icons.archive_outlined,
                           color: _showArchived
                               ? Theme.of(context).colorScheme.primary
                               : Theme.of(context).colorScheme.onSecondary,
-                          tooltip: _showArchived
-                              ? 'Mostrar em andamento'
-                              : 'Mostrar concluídos',
-                          onPressed: () =>
-                              setState(() => _showArchived = !_showArchived),
+                          tooltip: _showArchived ? 'Mostrar em andamento' : 'Mostrar concluídos',
+                          onPressed: () => setState(() => _showArchived = !_showArchived),
                         ),
                         _actionIcon(
-                          icon: _filterTags.isEmpty
-                              ? Icons.filter_alt_outlined
-                              : Icons.filter_alt,
+                          icon: _filterTags.isEmpty ? Icons.filter_alt_outlined : Icons.filter_alt,
                           onPressed: _openFilterSheet,
                         ),
                         _actionIcon(
@@ -1515,15 +1426,12 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                           onPressed: _openSortSheet,
                         ),
                         _actionIcon(
-                          icon: _showUnreadOnly
-                              ? Icons.filter_list
-                              : Icons.filter_list_outlined,
+                          icon: _showUnreadOnly ? Icons.filter_list : Icons.filter_list_outlined,
                           color: _showUnreadOnly
                               ? Theme.of(context).colorScheme.primary
                               : Theme.of(context).colorScheme.onSecondary,
                           tooltip: 'Somente não lidas',
-                          onPressed: () => setState(
-                              () => _showUnreadOnly = !_showUnreadOnly),
+                          onPressed: () => setState(() => _showUnreadOnly = !_showUnreadOnly),
                         ),
                       ],
                     ),
@@ -1533,7 +1441,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
             ),
           ),
 
-          // ------------ CAMPO DE BUSCA ------------
+          // busca
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
@@ -1549,19 +1457,16 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                       children: [
                         const SizedBox(width: 12),
                         Icon(Icons.search,
-                            color: theme.colorScheme.onBackground
-                                .withOpacity(0.5)),
+                            color: theme.colorScheme.onBackground.withOpacity(0.5)),
                         const SizedBox(width: 8),
                         Expanded(
                           child: TextField(
-                            onChanged: (v) => setState(
-                                () => _searchTerm = v.trim().toLowerCase()),
+                            onChanged: (v) => setState(() => _searchTerm = v.trim().toLowerCase()),
                             textAlign: TextAlign.start,
                             decoration: InputDecoration(
                               hintText: 'Buscar atendimento',
                               hintStyle: TextStyle(
-                                color: theme.colorScheme.onBackground
-                                    .withOpacity(0.5),
+                                color: theme.colorScheme.onBackground.withOpacity(0.5),
                               ),
                               isDense: true,
                               border: InputBorder.none,
@@ -1579,7 +1484,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
           ),
           const SizedBox(height: 8),
 
-          // ------------ LISTA ------------
+          // lista
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -1588,8 +1493,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                   .collection('phones')
                   .doc(_phoneId)
                   .collection('whatsappChats')
-                  .orderBy('timestamp',
-                      descending: _sort == SortOption.newestFirst)
+                  .orderBy('timestamp', descending: _sort == SortOption.newestFirst)
                   .snapshots(),
               builder: (ctx, snap) {
                 if (!snap.hasData) {
@@ -1603,77 +1507,60 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                   return (map['opened'] as bool?) ?? false;
                 }
 
-// ----- filtro por ABA (só quando NÃO estamos vendo arquivados) -----
                 if (!_showArchived) {
                   if (_currentTab == ChatTab.novos) {
                     docs = docs.where((d) => !_isOpened(d)).toList();
                   } else {
-                    docs = docs.where(_isOpened).toList(); // Atendendo
+                    docs = docs.where(_isOpened).toList();
                   }
                 }
 
-// ----- filtro por texto -----
                 docs = docs.where((d) {
                   final name = (d['name'] as String? ?? '').toLowerCase();
                   return name.contains(_searchTerm);
                 }).toList();
 
-// ----- filtro por etiquetas -----
                 if (_filterTags.isNotEmpty) {
                   docs = docs.where((d) {
                     final map = d.data() as Map<String, dynamic>;
-                    final tagList =
-                        (map['tags'] as List?)?.cast<String>() ?? const [];
+                    final tagList = (map['tags'] as List?)?.cast<String>() ?? const [];
                     return tagList.any(_filterTags.contains);
                   }).toList();
                 }
 
-// ----- filtro “somente não-lidas” -----
                 if (_showUnreadOnly) {
-                  docs = docs
-                      .where((d) => ((d['unreadCount'] as int?) ?? 0) > 0)
-                      .toList();
+                  docs = docs.where((d) => ((d['unreadCount'] as int?) ?? 0) > 0).toList();
                 }
 
-// ----- filtro por STATUS (aqui entra o “arquivo”) -----
                 if (_showArchived) {
-                  // mostrar APENAS concluídos
                   docs = docs.where((d) {
                     final st = d['status'] as String? ?? '';
                     return st == 'concluido_com_venda' || st == 'recusado';
                   }).toList();
                 } else {
-                  // esconder concluídos
                   docs = docs.where((d) {
                     final st = d['status'] as String? ?? 'novo';
-                    return st != 'concluido' &&
-                        st != 'concluido_com_venda' &&
-                        st != 'recusado';
+                    return st != 'concluido' && st != 'concluido_com_venda' && st != 'recusado';
                   }).toList();
                 }
 
-// ----- vazio -----
                 if (docs.isEmpty) {
                   final msg = _showArchived
                       ? 'Não há conversas concluídas'
                       : (_currentTab == ChatTab.novos
-                      ? 'Não há novos atendimentos'
-                      : 'Nenhum atendimento em andamento');
+                          ? 'Não há novos atendimentos'
+                          : 'Nenhum atendimento em andamento');
 
                   return Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.chat_bubble_outline,
-                          size: 56,
-                          color: theme.colorScheme.onSecondary, // <- ícone em onSecondary
-                        ),
+                        Icon(Icons.chat_bubble_outline, size: 56, color: theme.colorScheme.onSecondary),
                         const SizedBox(height: 12),
                         Text(
                           msg,
                           style: TextStyle(
-                            color: theme.colorScheme.onSecondary, // <- texto em onSecondary
+                            color: theme.colorScheme.onSecondary,
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
@@ -1691,10 +1578,7 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                   itemBuilder: (ctx, i) {
                     final data = docs[i].data() as Map<String, dynamic>;
                     final ids = List<String>.from(data['tags'] ?? const []);
-                    final tags = ids
-                        .where(_tagMap.containsKey)
-                        .map((id) => _tagMap[id]!)
-                        .toList();
+                    final tags = ids.where(_tagMap.containsKey).map((id) => _tagMap[id]!).toList();
 
                     final doc = docs[i];
                     final chatId = doc.id;
@@ -1703,25 +1587,21 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                     final unread = data['unreadCount'] as int? ?? 0;
                     final contactPhoto = data['contactPhoto'] as String? ?? '';
 
-                    // formata horário
                     String lastMsgTime = '';
                     final ts = data['timestamp'];
                     if (ts is Timestamp) {
                       final date = ts.toDate();
                       final now = DateTime.now();
 
-                      final bool sameDay = date.year == now.year &&
-                          date.month == now.month &&
-                          date.day == now.day;
+                      final bool sameDay =
+                          date.year == now.year && date.month == now.month && date.day == now.day;
 
                       if (sameDay) {
-                        // Ex.: 14:05
-                        lastMsgTime = '${date.hour.toString().padLeft(2, '0')}:'
-                            '${date.minute.toString().padLeft(2, '0')}';
+                        lastMsgTime =
+                            '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
                       } else {
-                        // Ex.: 09/06
-                        lastMsgTime = '${date.day.toString().padLeft(2, '0')}/'
-                            '${date.month.toString().padLeft(2, '0')}';
+                        lastMsgTime =
+                            '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}';
                       }
                     }
 
@@ -1741,53 +1621,43 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
             ),
           ),
 
-          // ==================== RODAPÉ – TELEFONE + BOTÃO CONVERSAR ====================
+          // rodapé desktop
           Container(
             decoration: BoxDecoration(
               border: BoxBorder.fromSTEB(
-                  top: BorderSide(
-                color: theme.colorScheme.onSecondary.withOpacity(.08),
-                width: 1,
-              )),
+                top: BorderSide(
+                  color: theme.colorScheme.onSecondary.withOpacity(.08),
+                  width: 1,
+                ),
+              ),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
-                // ---------- Dropdown do país ----------
                 Container(
                   height: 44,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.secondary, // fundo próprio
+                    color: theme.colorScheme.secondary,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   alignment: Alignment.center,
                   child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                    value: _countryCode,
-                    alignment: Alignment.center,
-                    style: TextStyle(
-                      color: theme.colorScheme.onSecondary,
+                    child: DropdownButton<String>(
+                      value: _countryCode,
+                      alignment: Alignment.center,
+                      style: TextStyle(color: theme.colorScheme.onSecondary),
+                      icon: Icon(Icons.arrow_drop_down,
+                          color: theme.colorScheme.onBackground.withOpacity(0.5)),
+                      items: const [
+                        DropdownMenuItem(value: '+55', child: Text('+55')),
+                        DropdownMenuItem(value: '+1', child: Text('+1')),
+                      ],
+                      onChanged: (v) => setState(() => _countryCode = v ?? '+55'),
                     ),
-                    icon: Icon(Icons.arrow_drop_down,
-                        color: theme.colorScheme.onBackground.withOpacity(0.5)),
-                    items: const [
-                      DropdownMenuItem(
-                        value: '+55',
-                        child: Text('+55'),
-                      ),
-                      DropdownMenuItem(
-                        value: '+1',
-                        child: Text('+1'),
-                      ),
-                    ],
-                    onChanged: (v) => setState(() => _countryCode = v ?? '+55'),
-                  )),
+                  ),
                 ),
-
                 const SizedBox(width: 8),
-
-                // ---------- Campo de telefone ----------
                 Expanded(
                   child: Container(
                     height: 40,
@@ -1804,9 +1674,8 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                       style: TextStyle(color: theme.colorScheme.onSecondary),
                       decoration: InputDecoration(
                         hintText: '(00) 0000-0000',
-                        hintStyle: TextStyle(
-                            color: theme.colorScheme.onBackground
-                                .withOpacity(0.5)),
+                        hintStyle:
+                            TextStyle(color: theme.colorScheme.onBackground.withOpacity(0.5)),
                         isDense: true,
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.zero,
@@ -1814,33 +1683,27 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
                     ),
                   ),
                 ),
-
                 const SizedBox(width: 8),
-
-                // ---------- Botão "Conversar" ----------
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: theme.colorScheme.primary,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     onPressed: _startConversation,
                     child: const Text(
                       'Conversar',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.w700),
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
               ],
             ),
-          )
+          ),
         ],
       ),
     );
@@ -1856,19 +1719,11 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.chat_bubble_outline,
-                size: 100,
-                color: cs.onSecondary, // <- ajustado
-              ),
+              Icon(Icons.chat_bubble_outline, size: 100, color: cs.onSecondary),
               const SizedBox(height: 16),
               Text(
                 'Selecione uma conversa',
-                style: TextStyle(
-                  fontSize: 22,
-                  color: cs.onSecondary, // <- ajustado
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(fontSize: 22, color: cs.onSecondary, fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -1876,7 +1731,6 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
       );
     }
 
-    // conversa aberta
     return ChatDetail(
       chatId: _selected!.id,
       chatName: _selected!.name,
@@ -1885,9 +1739,9 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
   }
 
   Widget _softSeparator(BuildContext ctx) => Container(
-    width: 1,
-    color: Theme.of(ctx).colorScheme.onSecondary.withOpacity(0.08),
-  );
+        width: 1,
+        color: Theme.of(ctx).colorScheme.onSecondary.withOpacity(0.08),
+      );
 
   Widget _buildOverlayMenu(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -1896,7 +1750,6 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOut,
       left: 56,
-      // abre "por cima" da lista, à direita da rail
       top: 0,
       bottom: 0,
       width: _sideExpanded ? 280 : 0,
@@ -1951,19 +1804,13 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
     );
   }
 
-  Widget _vHairline(BuildContext ctx) => Container(
-        width: 1,
-        color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.08),
-      );
-
   Widget _buildDesktop(BuildContext context) {
     return Stack(
       children: [
         Row(
           children: [
-            // REMOVER o hairline da esquerda
             _buildLeftPaneDesktop(context),
-            _softSeparator(context), // separação suave
+            _softSeparator(context),
             Expanded(child: _buildRightPaneDesktop(context)),
           ],
         ),
@@ -1982,25 +1829,19 @@ class _WhatsAppChatsState extends State<WhatsAppChats> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: selected
-              ? theme.colorScheme.primary
-              : theme.colorScheme.secondary,
+          color: selected ? theme.colorScheme.primary : theme.colorScheme.secondary,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min, // <= não ocupar espaço extra
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               label,
               style: TextStyle(
                 fontSize: 14,
-                color: selected
-                    ? theme.colorScheme.onSurface
-                    : theme.colorScheme.onSecondary,
+                color: selected ? theme.colorScheme.onSurface : theme.colorScheme.onSecondary,
               ),
             ),
-
-            // ───── badge ─────
             if (badge > 0) ...[
               const SizedBox(width: 8),
               Container(

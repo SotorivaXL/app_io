@@ -1,6 +1,7 @@
 const {onRequest} = require("firebase-functions/v2/https");
 const {onSchedule} = require('firebase-functions/v2/scheduler');
 const { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } = require('firebase-functions/v2/firestore');
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 const functions = require("firebase-functions/v2");
 const admin = require('firebase-admin');
@@ -20,6 +21,8 @@ const normInstanceId = (s) => String(s || '').trim().toUpperCase(); // evita var
 const hashInstanceId = (s) => crypto.createHash('sha256').update(normInstanceId(s), 'utf8').digest('hex');
 const ZAPI_ENC_KEY = defineSecret('ZAPI_ENC_KEY');
 const ENCRYPTION_KEY = defineSecret('ENCRYPTION_KEY');
+const GOOGLE_OAUTH_CLIENT_ID = defineSecret('GOOGLE_OAUTH_CLIENT_ID');
+const GOOGLE_OAUTH_CLIENT_SECRET = defineSecret('GOOGLE_OAUTH_CLIENT_SECRET');
 const AWS_ACCESS_KEY_ID        = defineSecret('AWS_ACCESS_KEY_ID');
 const AWS_SECRET_ACCESS_KEY    = defineSecret('AWS_SECRET_ACCESS_KEY');
 const AWS_REGION               = defineSecret('AWS_REGION');
@@ -129,6 +132,51 @@ function decryptIfNeeded(value, fieldName = '') {
 
     return value; // não parecia cifrado de verdade
 }
+
+function getEncKey() {
+    let keyB64;
+    try {
+        keyB64 = ENCRYPTION_KEY.value();
+    } catch {
+        keyB64 = process.env.ENCRYPTION_KEY;
+    }
+    if (!keyB64) throw new Error('ENCRYPTION_KEY não configurada');
+    return Buffer.from(keyB64, 'base64');
+}
+
+function encryptValue(plain) {
+    if (!plain) return '';
+    const key = getEncKey();
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const ct = Buffer.concat([cipher.update(String(plain), 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    const buf = Buffer.concat([iv, ct, tag]);
+    return `enc:v1:${buf.toString('base64')}`;
+}
+
+function decryptValue(value) {
+    if (!value) return '';
+    const key = getEncKey();
+    const raw = String(value);
+    const b64 = raw.startsWith('enc:v1:') ? raw.slice(7) : raw;
+    const buf = Buffer.from(b64, 'base64');
+    if (buf.length < 12 + 16 + 1) throw new Error('cipher muito curto');
+    const iv = buf.subarray(0, 12);
+    const ct = buf.subarray(12, buf.length - 16);
+    const tag = buf.subarray(buf.length - 16);
+    const dec = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    dec.setAuthTag(tag);
+    return Buffer.concat([dec.update(ct), dec.final()]).toString('utf8');
+}
+
+const GOOGLE_CALENDAR_SCOPES = [
+    'https://www.googleapis.com/auth/calendar',
+    'https://www.googleapis.com/auth/calendar.events',
+    'openid',
+    'email',
+    'profile',
+];
 
 
 // Configuração centralizada
@@ -726,7 +774,6 @@ async function resolveChatIdForNumber({ empresaId, phoneId, phoneDigits }) {
     return `${digits}@s.whatsapp.net`;
 }
 
-// SUBSTITUA a função atual
 async function getPhoneCtxByInstance(instanceIdPlain) {
     const hashed = hashInstanceId(instanceIdPlain); // normaliza + SHA-256
     const snap = await db
@@ -757,6 +804,79 @@ function getChatRefs(empresaId, phoneId, chatId) {
     };
 }
 
+// Função auxiliar para enviar status "Digitando..." (Composing)
+async function sendZApiTyping(instanceId, token, clientToken, phone) {
+    try {
+        const headers = {};
+        if (clientToken) headers['client-token'] = clientToken;
+
+        // O endpoint da Z-API para presença
+        await axios.post(
+            `https://api.z-api.io/instances/${instanceId}/token/${token}/send-presence`,
+            {
+                phone: phone,
+                presence: 'composing' // 'composing' = digitando, 'recording' = gravando audio
+            },
+            { headers }
+        );
+    } catch (error) {
+        // Não queremos travar o fluxo se isso falhar, apenas logamos um aviso
+        console.warn(`[Z-API Presence] Falha ao enviar digitando para ${phone}:`, error.message);
+    }
+}
+
+function requireAuth(request) {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário.');
+}
+
+async function getPhoneGptConfig({ empresaId, phoneId }) {
+  const phoneDoc = await admin.firestore()
+    .collection('empresas').doc(empresaId)
+    .collection('phones').doc(phoneId)
+    .get();
+
+  if (!phoneDoc.exists) throw new HttpsError('not-found', 'Telefone não encontrado.');
+
+  const data = phoneDoc.data() || {};
+  const config = data.gpt_integration;
+
+  if (!config || !config.api_token) {
+    throw new HttpsError('failed-precondition', 'GPT Maker não configurado (api_token ausente).');
+  }
+
+  return {
+    token: config.api_token,
+    workspaceId: config.workspace_id || null,
+  };
+}
+
+
+const { CloudTasksClient } = require('@google-cloud/tasks');
+
+// Inicializa o cliente do Cloud Tasks
+const tasksClient = new CloudTasksClient();
+
+// Tenta pegar o Project ID automaticamente. Se falhar, use a string fixa 'app-io-1c16f'
+const PROJECT_ID = process.env.GCLOUD_PROJECT || (process.env.FIREBASE_CONFIG ? JSON.parse(process.env.FIREBASE_CONFIG).projectId : 'app-io-1c16f');
+
+const QUEUE_LOCATION = 'us-central1';
+const QUEUE_NAME = 'gpt-buffer'; // Certifique-se que esta fila existe no GCloud
+const WORKER_FUNCTION_URL = `https://${QUEUE_LOCATION}-${PROJECT_ID}.cloudfunctions.net/gptQueueWorker`; 
+
+const DEFAULT_DEBOUNCE_SECONDS = 10;
+const MIN_DEBOUNCE_SECONDS = 0;
+const MAX_DEBOUNCE_SECONDS = 30;
+
+function clampDebounceSeconds(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return DEFAULT_DEBOUNCE_SECONDS;
+  return Math.max(MIN_DEBOUNCE_SECONDS, Math.min(MAX_DEBOUNCE_SECONDS, Math.round(n)));
+}
+
+// =============================================================================
+// WEBHOOK Z-API (Gateway de Entrada)
+// =============================================================================
+
 exports.zApiWebhook = onRequest(async (req, res) => {
     try {
         res.set('Access-Control-Allow-Origin', '*');
@@ -766,30 +886,24 @@ exports.zApiWebhook = onRequest(async (req, res) => {
 
         const data = req.body;
 
-        /** ───────────────────────────────
-         *  ignore callbacks / sanity checks
-         *  ─────────────────────────────── */
+        // --- Sanity Checks ---
         if (!data || typeof data !== 'object') return res.status(200).send('OK');
         if (!data.phone && !data.participantPhone) return res.status(200).send('OK');
 
         const INBOUND_TYPES = new Set([
-            'ReceivedCallback',
-            'ReceivedCallbackChat',
-            'ReceivedCallbackAudio',
-            'ReceivedCallbackImage',
-            'ReceivedCallbackVideo',
-            'ReceivedCallbackSticker',
+            'ReceivedCallback', 'ReceivedCallbackChat', 'ReceivedCallbackAudio',
+            'ReceivedCallbackImage', 'ReceivedCallbackVideo', 'ReceivedCallbackSticker',
         ]);
 
         if (!INBOUND_TYPES.has(data.type)) return res.status(200).send('OK');
 
-        // normaliza números
+        // Normaliza números
         const remoteDigits = String(data.participantPhone || data.phone || '').replace(/\D/g, '');
         const serverDigits = String(data.connectedPhone || data.instanceId || '').replace(/\D/g, '');
 
         if (!remoteDigits) return res.status(200).send('OK');
 
-        // tenta achar phoneDoc pelo instanceId, se falhar cai pra busca por número do server
+        // Busca contexto do telefone (empresaId, phoneDoc)
         let empresaId, phoneDoc;
         try {
             ({ empresaId, phoneDoc } = await getPhoneCtxByInstance(String(data.instanceId || '')));
@@ -799,21 +913,20 @@ exports.zApiWebhook = onRequest(async (req, res) => {
         }
 
         const phoneId = phoneDoc.id;
+        const phoneData = phoneDoc.data() || {};
 
-        // resolve o chatId real (reaproveita se já existir, com ou sem 9, com ou sem @)
+        // Resolve chatId
         const chatId = await resolveChatIdForNumber({
-            empresaId,
-            phoneId,
-            phoneDigits: remoteDigits,
+            empresaId, phoneId, phoneDigits: remoteDigits,
         });
 
+        // Prepara dados da mensagem
         const chatName = data.chatName || data.senderName || remoteDigits;
         const incomingPhoto = String(data.senderPhoto || data.photo || '').trim();
         const photoPatch = incomingPhoto
             ? { contactPhoto: incomingPhoto, photoUpdatedAt: admin.firestore.FieldValue.serverTimestamp() }
             : {};
 
-        // tipo + conteúdo
         let messageContent = '';
         let messageType    = 'text';
         if      (data.text?.message)       { messageContent = data.text.message;       }
@@ -824,14 +937,15 @@ exports.zApiWebhook = onRequest(async (req, res) => {
 
         const { chatDocRef, msgsColRef } = getChatRefs(empresaId, phoneId, chatId);
 
-        // 1) grava a mensagem recebida
+        // 1) Grava a mensagem recebida no Firestore
         await msgsColRef.doc().set({
             content    : messageContent,
             type       : messageType,
             timestamp  : admin.firestore.FieldValue.serverTimestamp(),
             fromMe     : data.fromMe === true,
             sender     : data.participantPhone || data.phone,
-            senderName : data.senderName || '',
+            senderType : 'human',              // lead/contato
+            senderName : chatName || '',
             senderPhoto: data.senderPhoto || data.photo || '',
             zapiId     : data.id || null,
             read       : false,
@@ -839,7 +953,7 @@ exports.zApiWebhook = onRequest(async (req, res) => {
             saleValue  : null,
         });
 
-        // 2) atualiza o chat (em transação MINIMAL)
+        // 2) Atualiza o chat
         await admin.firestore().runTransaction(async (tx) => {
             const snap = await tx.get(chatDocRef);
             const cur  = snap.exists ? snap.data() : {};
@@ -847,7 +961,6 @@ exports.zApiWebhook = onRequest(async (req, res) => {
             const preserve = ['atendendo'];
             const newStatus = preserve.includes(curStatus) ? curStatus : 'novo';
 
-            // histórico se estava finalizado
             if (['concluido_com_venda', 'recusado'].includes(curStatus)) {
                 await chatDocRef.collection('history').add({
                     status    : curStatus,
@@ -872,11 +985,106 @@ exports.zApiWebhook = onRequest(async (req, res) => {
             }, { merge: true });
         });
 
-        // 3) bot fora da transação
+        // =========================================================================
+        // INTEGRAÇÃO GPT MAKER (DINÂMICA)
+        // =========================================================================
+        const isFromMe = data.fromMe === true;
+        const incomingMsgId = data.id || data.messageId || ('fallback_' + Date.now() + Math.random());
+
+        // A. Verifica Configurações no Documento do Telefone
+        const aiConfig = phoneData.ai_agent || {};         
+        const debounceSeconds = clampDebounceSeconds(aiConfig.debounceSeconds);
+        const gptCreds = phoneData.gpt_integration || {};  
+
+        const isAiEnabled = aiConfig.enabled === true && 
+                            !!aiConfig.agentId && 
+                            !!gptCreds.api_token;
+
+        // B. Condição de Disparo: IA Ativa + Texto + Não sou eu
+        if (isAiEnabled && messageType === 'text' && !isFromMe) {
+
+            // --- NOVO: Envia "Digitando..." IMEDIATAMENTE ---
+            // Como vamos esperar DEBOUNCE_SECONDS, é vital avisar o usuário que estamos "vivos"
+            const zInst = (typeof decryptIfNeeded === 'function') ? decryptIfNeeded(phoneData.instanceId) : (phoneData.instanceId);
+            const zTok  = (typeof decryptIfNeeded === 'function') ? decryptIfNeeded(phoneData.token) : (phoneData.token);
+            const zCTok = (typeof decryptIfNeeded === 'function') ? decryptIfNeeded(phoneData.clientToken) : (phoneData.clientToken);
+
+            if (zInst && zTok) {
+                 // Dispara sem await para não atrasar o fluxo, ou com await se preferir garantir
+                 sendZApiTyping(zInst, zTok, zCTok, remoteDigits);
+            }
+            // -----------------------------------------------
+
+            const executionToken = `token_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+            const bufferColRef = chatDocRef.collection('gpt_buffer');
+
+            try {
+                // 1. Salva no Buffer e Atualiza Token de Execução
+                await admin.firestore().runTransaction(async (t) => {
+                    const doc = await t.get(chatDocRef);
+                    const d = doc.data() || {};
+                    
+                    const st = (d.status || 'novo');
+                    const aiMode = (d.aiMode || 'ai'); // default: ai
+                    const pausedUntil = d.aiPausedUntil?.toDate?.() || null;
+
+                    const now = new Date();
+
+                    // se humano está atendendo, não agenda IA
+                    if (aiMode === 'human') return;
+
+                    // se está pausado ainda, não agenda
+                    if (pausedUntil && pausedUntil > now) return;
+
+                    // opcional: manter a regra “só responde em novo”
+                    if (st !== 'novo') return;
+
+                    const bufferDoc = bufferColRef.doc(String(incomingMsgId));
+                    t.set(bufferDoc, {
+                        content: messageContent,
+                        timestamp: admin.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+
+                    t.update(chatDocRef, { gptDebounceToken: executionToken });
+                });
+
+                // 2. Cria a Task no Cloud Tasks
+                const parent = tasksClient.queuePath(PROJECT_ID, QUEUE_LOCATION, QUEUE_NAME);
+                
+                const task = {
+                    httpRequest: {
+                        httpMethod: 'POST',
+                        url: WORKER_FUNCTION_URL, 
+                        headers: { 'Content-Type': 'application/json' },
+                        body: Buffer.from(JSON.stringify({
+                            empresaId,
+                            phoneId,
+                            chatId,
+                            executionToken,
+                            senderNumber: remoteDigits,
+                            agentId: aiConfig.agentId,
+                            gptToken: gptCreds.api_token
+                        })).toString('base64'),
+                    },
+                    scheduleTime: {
+                        seconds: Date.now() / 1000 + debounceSeconds,
+                    },
+                };
+
+                await tasksClient.createTask({ parent, task });
+                logger.info(`[GPT] Agendado para ${remoteDigits} (Agent: ${aiConfig.agentId})`);
+                
+                return res.status(200).send('Buffered & Scheduled');
+
+            } catch (e) {
+                logger.error('[GPT Webhook] Erro ao agendar:', e);
+            }
+        }
+        // =========================================================================
+
+        // 3) Robô Legado
         try {
-            logger.info('[zApiWebhook] chamando maybeHandleByBot', {
-                empresaId, phoneId, chatId, messageType, contentPreview: String(messageContent || '').slice(0, 120)
-            });
+            logger.info('[zApiWebhook] Fallback para bot legado', { empresaId, phoneId });
             await maybeHandleByBot({ empresaId, phoneDoc, chatId, messageContent });
         } catch (e) {
             logger.error('Bot handler falhou', e);
@@ -885,289 +1093,2243 @@ exports.zApiWebhook = onRequest(async (req, res) => {
         return res.status(200).send('OK');
     } catch (error) {
         logger.error('Erro no webhook Z-API:', error);
-        // devolvemos 200 mesmo em erro para não bloquear a Z-API
         return res.status(200).send('Erro interno, mas ACK enviado');
     }
 });
 
+// =============================================================================
+// 2. O WORKER (CONSUMIDOR) - FUNÇÃO QUE O CLOUD TASKS CHAMA
+// =============================================================================
+exports.gptQueueWorker = onRequest(
+    { secrets: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, ENCRYPTION_KEY] },
+    async (req, res) => {
+  const { empresaId, phoneId, chatId, executionToken, senderNumber, agentId, gptToken } = req.body;
+
+  logger.info(`[GPT Worker] Acordou para processar token: ${executionToken} (Agent: ${agentId})`);
+
+  if (!agentId || !gptToken) {
+    logger.error('[GPT Worker] Abortado: agentId ou gptToken ausentes no payload.');
+    return res.status(400).send('Missing GPT Credentials');
+  }
+
+  const { chatDocRef, msgsColRef, phoneDocRef } = getChatRefs(empresaId, phoneId, chatId);
+  const bufferColRef = chatDocRef.collection('gpt_buffer');
+
+  let textsToProcess = [];
+
+  // 2. VERIFICAÇÃO E CONSUMO ATÔMICO
+  try {
+    await admin.firestore().runTransaction(async (t) => {
+      const chatSnap = await t.get(chatDocRef);
+      const chatData = chatSnap.data() || {};
+
+      if (chatData.gptDebounceToken !== executionToken) {
+        return;
+      }
+
+      const bufferSnaps = await t.get(bufferColRef.orderBy('timestamp', 'asc'));
+
+      bufferSnaps.docs.forEach((d) => {
+        const val = d.data().content;
+        if (val) textsToProcess.push(val);
+        t.delete(d.ref);
+      });
+    });
+  } catch (e) {
+    logger.error('[GPT Worker] Erro Transação:', e);
+    return res.status(500).send('Transaction Error');
+  }
+
+  if (textsToProcess.length === 0) {
+    logger.info('[GPT Worker] Cancelado (Token antigo ou Buffer vazio).');
+    return res.status(200).send('Skipped');
+  }
+
+  // 3. PREPARA PROMPT
+  const uniqueTexts = [...new Set(textsToProcess)];
+  const fullPrompt = uniqueTexts.join(' ');
+
+  logger.info(`[GPT Worker] Enviando Prompt Agrupado: "${fullPrompt}"`);
+
+  const chatSnap2 = await chatDocRef.get();
+  const chat2 = chatSnap2.data() || {};
+
+  const aiMode = chat2.aiMode || 'ai';
+  const pausedUntil = chat2.aiPausedUntil?.toDate?.() || null;
+  const now = new Date();
+
+  if (aiMode === 'human') {
+    logger.info('[GPT Worker] Abortado: aiMode=human');
+    return res.status(200).send('AI Paused (human)');
+  }
+
+  if (pausedUntil && pausedUntil > now) {
+    logger.info('[GPT Worker] Abortado: aiPausedUntil ativo');
+    return res.status(200).send('AI Paused (time)');
+  }
+
+  // 4. CHAMA GPT E RESPONDE
+  try {
+    const pData = (await phoneDocRef.get()).data() || {};
+
+    const zInstance =
+      typeof decryptIfNeeded === 'function'
+        ? decryptIfNeeded(pData.instanceId)
+        : (pData.instanceId || process.env.ZAPI_ID);
+
+    const zToken =
+      typeof decryptIfNeeded === 'function'
+        ? decryptIfNeeded(pData.token)
+        : (pData.token || process.env.ZAPI_TOKEN);
+
+    const zClientToken =
+      typeof decryptIfNeeded === 'function'
+        ? decryptIfNeeded(pData.clientToken)
+        : (pData.clientToken || process.env.ZAPI_CLIENT_TOKEN);
+
+    if (!zInstance || !zToken) {
+      logger.error('[GPT Worker] Z-API Credenciais não encontradas no DB.');
+      return res.status(400).send('Z-API config missing');
+    }
+
+    // ✅ NOVO: nome do bot dinâmico (vem do doc do telefone)
+    // Prioriza: phone.ai_agent.name -> phone.ai_agent.agentName -> fallback "OPI"
+    const botName =
+      String(pData?.ai_agent?.name || pData?.ai_agent?.agentName || '').trim() || 'Agente de IA';
+
+    // --- Renova "Digitando..."
+    try {
+      await sendZApiTyping(zInstance, zToken, zClientToken, senderNumber);
+    } catch (e) {
+      logger.warn('[GPT Worker] Falhou typing (ignorado):', e?.message || e);
+    }
+
+    // --- CONTEXTO: Agendamento automático com horários reais ---
+    let scheduleContext = '';
+    const scheduleHandle = async (messageToSend) => {
+      const zHeaders = {};
+      if (zClientToken) zHeaders['client-token'] = zClientToken;
+
+      await axios.post(
+        `https://api.z-api.io/instances/${zInstance}/token/${zToken}/send-text`,
+        { phone: senderNumber, message: messageToSend },
+        { headers: zHeaders }
+      );
+
+      await msgsColRef.add({
+        content: messageToSend,
+        type: 'text',
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        fromMe: true,
+        sender: senderNumber,
+        status: 'sent',
+        read: false,
+        senderType: 'ai',
+        senderName: botName,
+        origin: 'ai',
+        zapiId: 'gpt_' + Date.now(),
+        clientMessageId: `gpt_${chatId}_${Date.now()}`,
+      });
+
+      const lastTimeStr = new Date().toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      await chatDocRef.set(
+        {
+          lastMessage: messageToSend,
+          lastMessageTime: lastTimeStr,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    };
+
+    try {
+      const leadsSnap = await db
+          .collection('empresas').doc(empresaId)
+          .collection('phones').doc(phoneId)
+          .collection('ai_agent_leads').doc(agentId)
+          .get();
+      const leadsData = leadsSnap.exists ? (leadsSnap.data() || {}) : {};
+      const scheduleEnabled = leadsData?.schedule?.enabled === true;
+
+      const lastUserMsg = uniqueTexts[uniqueTexts.length - 1] || fullPrompt;
+      const pref = parseUserSchedulePreference(lastUserMsg);
+
+      const chatStateSnap = await chatDocRef.get();
+      const chatState = chatStateSnap.data() || {};
+      const pending = chatState.schedulePending || null;
+      const pendingExpires = pending?.expiresAt?.toDate?.() || null;
+      const pendingValid = pending && pendingExpires && pendingExpires > new Date();
+
+      const wantsSchedule =
+        pendingValid ||
+        /agend|agenda|reuni[aã]o|call|hor[aá]rio|disponibil|data|marcar|marque|quando|hoje|amanh[aã]/i
+          .test(lastUserMsg) ||
+        pref.hour != null ||
+        pref.wantsTomorrow ||
+        pref.day != null ||
+        pref.weekday != null;
+
+      if (scheduleEnabled && wantsSchedule) {
+        const baseSlots = pendingValid
+          ? (pending.slots || [])
+          : await computeAvailableSlots({
+              empresaId,
+              calendarId: 'primary',
+              timeZone: 'America/Sao_Paulo',
+              daysAhead: 7,
+              durationMinutes: 60,
+              stepMinutes: 30,
+            });
+
+        const slots = baseSlots || [];
+        const fromPending = pendingValid
+          ? parseUserFromPending(slots, lastUserMsg, 'America/Sao_Paulo')
+          : null;
+
+        const match = fromPending ||
+          (slots.length ? findMatchingSlot(slots, pref, 'America/Sao_Paulo') : null);
+
+        if (match) {
+          const label = formatSlotLabel(match.start, 'America/Sao_Paulo');
+          await createGoogleCalendarEventInternal({
+            empresaId,
+            calendarId: 'primary',
+            timeZone: 'America/Sao_Paulo',
+            startIso: match.start,
+            endIso: match.end,
+            summary: 'Reunião de diagnóstico',
+            description: `Lead ${senderNumber}`,
+          });
+
+          await scheduleHandle(
+            `Perfeito! Agendei para ${label}. Está reservado.`
+          );
+          await chatDocRef.set(
+            { schedulePending: admin.firestore.FieldValue.delete() },
+            { merge: true }
+          );
+          return res.status(200).send('GPT Worker Done (scheduled)');
+        }
+
+        if (slots.length) {
+          const preferredDaySlots = filterSlotsByPreference(
+              slots, pref, 'America/Sao_Paulo'
+          );
+          const listSlots = preferredDaySlots.length ? preferredDaySlots : slots;
+
+          await chatDocRef.set(
+            {
+              schedulePending: {
+                slots: listSlots,
+                expiresAt: admin.firestore.Timestamp.fromDate(
+                  new Date(Date.now() + 2 * 60 * 60 * 1000)
+                ),
+              },
+            },
+            { merge: true }
+          );
+
+          if (pref.hour != null || pref.day != null || pref.weekday != null || pref.wantsTomorrow) {
+            const nearest = listSlots[0];
+            const nearestText = nearest
+              ? formatSlotNatural(nearest.start, 'America/Sao_Paulo')
+              : null;
+            await scheduleHandle(
+              nearestText
+                ? `Não tenho exatamente esse horário. O mais próximo disponível é ${nearestText}. Quer confirmar?`
+                : 'Não encontrei esse horário. Quer que eu sugira o mais próximo disponível?'
+            );
+          } else {
+            const s1 = listSlots[0];
+            const s2 = listSlots[1];
+            const s3 = listSlots[2];
+            const opts = [s1, s2, s3].filter(Boolean)
+              .map((s) => formatSlotNatural(s.start, 'America/Sao_Paulo'));
+            await scheduleHandle(
+              opts.length
+                ? `Tenho estes horários próximos disponíveis: ${opts.join(' ou ')}. Qual você prefere?`
+                : 'Tenho horários disponíveis em breve. Qual período você prefere (manhã ou tarde)?'
+            );
+          }
+          return res.status(200).send('GPT Worker Done (slots)');
+        }
+
+        await scheduleHandle(
+          'No momento não tenho horários disponíveis nos próximos dias úteis. ' +
+          'Se preferir, posso chamar um humano para organizar manualmente.'
+        );
+        return res.status(200).send('GPT Worker Done (no slots)');
+      }
+    } catch (e) {
+      const status = e?.response?.status;
+      const data = e?.response?.data;
+      const msg = e?.message || 'Falha ao acessar a agenda.';
+      logger.warn('[GPT Worker] Falha ao obter horários.', { err: msg, status, data });
+
+      const handoffMsg =
+        'Perfeito — vou chamar alguém do nosso time pra te atender e já te direcionar certinho. Só um instante 🙂';
+
+      await scheduleHandle(handoffMsg);
+
+      // pausar IA e marcar como atendendo/human
+      await chatDocRef.set(
+        {
+          lastMessage: handoffMsg,
+          lastMessageTime: new Date().toLocaleTimeString('pt-BR', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          status: 'atendendo',
+          aiMode: 'human',
+          humanStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      if (typeof persistSystemEventMessage === 'function') {
+        await persistSystemEventMessage({
+          empresaId,
+          phoneId,
+          chatId,
+          event: 'handoff',
+          label: 'IA Handoff (agenda)',
+          extra: { agentId: agentId, error: msg, status },
+        });
+      }
+
+      return res.status(200).send('GPT Worker Done (schedule error -> handoff)');
+    }
+
+    // CHAMADA AO GPT MAKER
+    const gptResponse = await axios.post(
+      `https://api.gptmaker.ai/v2/agent/${agentId}/conversation`,
+      {
+        contextId: senderNumber,
+        prompt:
+            fullPrompt +
+            scheduleContext +
+            '\n[INSTRUÇÕES]\nNão mencionar nomes de responsáveis. Diga apenas "alguém do nosso time".\n',
+      },
+      { headers: { Authorization: `Bearer ${gptToken}` } }
+    );
+
+    let rawResponse = gptResponse.data.response || gptResponse.data.message;
+    let aiMessage = rawResponse;
+    let isHandoff = false;
+
+    try {
+      const cleanJson = String(rawResponse || '')
+        .replace(/```json/g, '')
+        .replace(/```/g, '')
+        .trim();
+      if (cleanJson.startsWith('{')) {
+        const parsed = JSON.parse(cleanJson);
+        if (parsed.action === 'handoff') {
+          isHandoff = true;
+          aiMessage = parsed.message;
+        }
+      }
+    } catch (e) {
+      /* ignora */
+    }
+
+    aiMessage = String(aiMessage || '').trim();
+    if (!aiMessage) {
+      return res.status(200).send('GPT Worker Done (empty)');
+    }
+
+    // Envia via Z-API
+    const zHeaders = {};
+    if (zClientToken) zHeaders['client-token'] = zClientToken;
+
+    await axios.post(
+      `https://api.z-api.io/instances/${zInstance}/token/${zToken}/send-text`,
+      { phone: senderNumber, message: aiMessage },
+      { headers: zHeaders }
+    );
+
+    // ✅ Salva resposta no histórico com senderType/senderName (dinâmico)
+    await msgsColRef.add({
+      content: aiMessage,
+      type: 'text',
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      fromMe: true,
+      sender: senderNumber,
+      status: 'sent',
+
+      // "read" = lead leu? pra saída começa false
+      read: false,
+
+      // ✅ Campos novos pro badge no app
+      senderType: 'ai',
+      senderName: botName,
+
+      origin: 'ai',
+      zapiId: 'gpt_' + Date.now(),
+      clientMessageId: `gpt_${chatId}_${Date.now()}`,
+    });
+
+    const lastTimeStr = new Date().toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    if (isHandoff) {
+      // ✅ HANDOFF = pausar IA e marcar como atendendo/human
+      await chatDocRef.set(
+        {
+          lastMessage: aiMessage,
+          lastMessageTime: lastTimeStr,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          status: 'atendendo',
+          aiMode: 'human',
+          humanStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      if (typeof persistSystemEventMessage === 'function') {
+        await persistSystemEventMessage({
+          empresaId,
+          phoneId,
+          chatId,
+          event: 'handoff',
+          label: 'IA Handoff',
+          extra: { agentId: agentId },
+        });
+      }
+    } else {
+      await chatDocRef.set(
+        {
+          lastMessage: aiMessage,
+          lastMessageTime: lastTimeStr,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+
+    return res.status(200).send('GPT Worker Done');
+  } catch (err) {
+    logger.error('[GPT Worker] Erro final:', err?.message || err);
+    return res.status(500).send(err?.message || String(err));
+  }
+});
+
+
+
+
+
+
+// Função Callable que busca o Workspace ID dinamicamente e depois os agentes
+exports.getGptAgents = onCall(async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário.');
+
+    // Recebe empresaId E phoneId
+    const { empresaId, phoneId } = request.data; 
+    
+    if (!empresaId || !phoneId) {
+        throw new HttpsError('invalid-argument', 'Empresa ID e Phone ID são obrigatórios.');
+    }
+
+    try {
+        // 1. Busca configurações DENTRO DO TELEFONE
+        const phoneDoc = await admin.firestore()
+            .collection('empresas')
+            .doc(empresaId)
+            .collection('phones')
+            .doc(phoneId)
+            .get();
+
+        if (!phoneDoc.exists) throw new HttpsError('not-found', 'Telefone não encontrado.');
+
+        const data = phoneDoc.data();
+        // Acessa o mapa gpt_integration que criamos
+        const config = data.gpt_integration;
+
+        if (!config || !config.api_token || !config.workspace_id) {
+            // Retorna array vazio se não estiver configurado (sem estourar erro fatal na tela)
+            return []; 
+        }
+
+        const companyToken = config.api_token;
+        const companyWorkspace = config.workspace_id;
+
+        // 2. Chama API do GPT Maker
+        const response = await axios.get(
+            `https://api.gptmaker.ai/v2/workspace/${companyWorkspace}/agents`, 
+            { 
+                headers: { 
+                    'Authorization': `Bearer ${companyToken}`,
+                    'Content-Type': 'application/json'
+                } 
+            }
+        );
+
+        const agents = Array.isArray(response.data) ? response.data : (response.data.data || []);
+        
+        return agents.map(agent => ({
+            id: agent.id,
+            name: agent.name,
+            description: agent.description || '',
+            model: agent.model || 'gpt-4',
+            status: agent.status
+        }));
+
+    } catch (error) {
+        // Loga o erro mas tenta ser resiliente
+        logger.error(`Erro GPT [Empresa ${empresaId} / Phone ${phoneId}]:`, error.message);
+        throw new HttpsError('internal', `Erro ao buscar agentes: ${error.message}`);
+    }
+});
+
+exports.getGptAgentById = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário.');
+
+  const { empresaId, phoneId, agentId } = request.data || {};
+  if (!empresaId || !phoneId || !agentId) {
+    throw new HttpsError('invalid-argument', 'empresaId, phoneId e agentId são obrigatórios.');
+  }
+
+  const phoneDoc = await admin.firestore()
+    .collection('empresas').doc(empresaId)
+    .collection('phones').doc(phoneId).get();
+
+  if (!phoneDoc.exists) throw new HttpsError('not-found', 'Telefone não encontrado.');
+
+  const phoneData = phoneDoc.data() || {};
+  const config = phoneData.gpt_integration || {};
+  if (!config.api_token) throw new HttpsError('failed-precondition', 'GPT Maker não configurado neste telefone.');
+
+  const token = config.api_token;
+
+  try {
+    const r = await axios.get(
+      `https://api.gptmaker.ai/v2/agent/${agentId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    return r.data;
+  } catch (e) {
+    logger.error('[getGptAgentById] erro:', e.response?.data || e.message);
+    throw new HttpsError('internal', `Erro ao buscar agente: ${e.response?.status || ''}`);
+  }
+});
+
+
+
+exports.updateGptAgent = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário.');
+
+  const { empresaId, phoneId, agentId, patch } = request.data || {};
+  if (!empresaId || !phoneId || !agentId || !patch || typeof patch !== 'object') {
+    throw new HttpsError('invalid-argument', 'empresaId, phoneId, agentId e patch são obrigatórios.');
+  }
+
+  const phoneDoc = await admin.firestore()
+    .collection('empresas').doc(empresaId)
+    .collection('phones').doc(phoneId).get();
+
+  if (!phoneDoc.exists) throw new HttpsError('not-found', 'Telefone não encontrado.');
+
+  const phoneData = phoneDoc.data() || {};
+  const config = phoneData.gpt_integration || {};
+  if (!config.api_token) throw new HttpsError('failed-precondition', 'GPT Maker não configurado.');
+
+  const token = config.api_token;
+
+  // Campos que você quer preservar/gerenciar no app
+  const allowed = [
+    'name', 'communicationType', 'behavior', 'avatar',
+    'type', 'jobName', 'jobSite', 'jobDescription',
+  ];
+
+  // 1) Pega o estado atual do agente
+  let current = {};
+  try {
+    const g = await axios.get(`https://api.gptmaker.ai/v2/agent/${agentId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    current = g.data || {};
+  } catch (e) {
+    logger.error('[updateGptAgent] GET current failed:', e.response?.data || e.message);
+    throw new HttpsError('internal', 'Falha ao obter agente atual para merge.');
+  }
+
+  // 2) Monta payload final: current + patch (somente allowed)
+  const finalPayload = {};
+  for (const k of allowed) {
+    if (Object.prototype.hasOwnProperty.call(current, k)) finalPayload[k] = current[k];
+  }
+  for (const [k, v] of Object.entries(patch)) {
+    if (allowed.includes(k) && v !== undefined) {
+      finalPayload[k] = v;
+    }
+  }
+
+  // 3) PUT com payload completo (preserva o que não mudou)
+  try {
+    const r = await axios.put(
+      `https://api.gptmaker.ai/v2/agent/${agentId}`,
+      finalPayload,
+      { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+    );
+    return r.data;
+  } catch (e) {
+    logger.error('[updateGptAgent] PUT failed:', e.response?.data || e.message);
+    throw new HttpsError('internal', `Erro ao atualizar agente: ${e.response?.status || ''}`);
+  }
+});
+
+
+exports.getGptAgentSettings = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário.');
+
+  const { empresaId, phoneId, agentId } = request.data || {};
+  if (!empresaId || !phoneId || !agentId) {
+    throw new HttpsError('invalid-argument', 'empresaId, phoneId e agentId são obrigatórios.');
+  }
+
+  const phoneDoc = await admin.firestore()
+    .collection('empresas').doc(empresaId)
+    .collection('phones').doc(phoneId).get();
+
+  if (!phoneDoc.exists) throw new HttpsError('not-found', 'Telefone não encontrado.');
+
+  const phoneData = phoneDoc.data() || {};
+  const config = phoneData.gpt_integration || {};
+  if (!config.api_token) throw new HttpsError('failed-precondition', 'GPT Maker não configurado neste telefone.');
+
+  const token = config.api_token;
+
+  try {
+    const r = await axios.get(
+      `https://api.gptmaker.ai/v2/agent/${agentId}/settings`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    return r.data;
+  } catch (e) {
+    logger.error('[getGptAgentSettings] erro:', e.response?.data || e.message);
+    throw new HttpsError('internal', `Erro ao buscar settings: ${e.response?.status || ''}`);
+  }
+});
+
+exports.updateGptAgentSettings = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário.');
+
+  const { empresaId, phoneId, agentId, settings } = request.data || {};
+  if (!empresaId || !phoneId || !agentId || !settings || typeof settings !== 'object') {
+    throw new HttpsError('invalid-argument', 'empresaId, phoneId, agentId e settings são obrigatórios.');
+  }
+
+  const phoneDoc = await admin.firestore()
+    .collection('empresas').doc(empresaId)
+    .collection('phones').doc(phoneId).get();
+
+  if (!phoneDoc.exists) throw new HttpsError('not-found', 'Telefone não encontrado.');
+
+  const phoneData = phoneDoc.data() || {};
+  const config = phoneData.gpt_integration || {};
+  if (!config.api_token) throw new HttpsError('failed-precondition', 'GPT Maker não configurado neste telefone.');
+
+  const token = config.api_token;
+
+  // Whitelist (adicione/remova conforme você for habilitando no app)
+  const allowed = new Set([
+    'prefferModel', 'timezone',
+    'enabledHumanTransfer', 'enabledReminder',
+    'splitMessages', 'enabledEmoji', 'limitSubjects',
+    'messageGroupingTime', 'signMessages',
+    'maxDailyMessages', 'maxDailyMessagesLimitAction',
+    'knowledgeByFunction', 'onLackKnowLedge',
+  ]);
+
+  const safeSettings = {};
+  for (const [k, v] of Object.entries(settings)) {
+    if (allowed.has(k)) safeSettings[k] = v;
+  }
+
+  try {
+    const r = await axios.put(
+      `https://api.gptmaker.ai/v2/agent/${agentId}/settings`,
+      safeSettings,
+      { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+    );
+    return r.data;
+  } catch (e) {
+    logger.error('[updateGptAgentSettings] erro:', e.response?.data || e.message);
+    throw new HttpsError('internal', `Erro ao atualizar settings: ${e.response?.status || ''}`);
+  }
+});
+
+async function exchangeGoogleAuthCode({ authCode, redirectUri }) {
+    const clientId = GOOGLE_OAUTH_CLIENT_ID.value();
+    const clientSecret = GOOGLE_OAUTH_CLIENT_SECRET.value();
+
+    const body = new URLSearchParams({
+        code: authCode,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+    });
+
+    const resp = await axios.post(
+        'https://oauth2.googleapis.com/token',
+        body.toString(),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+
+    return resp.data || {};
+}
+
+async function fetchGoogleUserInfo(accessToken) {
+    if (!accessToken) return null;
+    const resp = await axios.get(
+        'https://openidconnect.googleapis.com/v1/userinfo',
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    return resp.data || null;
+}
+
+exports.connectGoogleCalendar = onCall(
+    { secrets: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, ENCRYPTION_KEY] },
+    async (request) => {
+        if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
+
+        const { empresaId, authCode, redirectUri } = request.data || {};
+        if (!empresaId || !authCode || !redirectUri) {
+            throw new HttpsError('invalid-argument', 'empresaId, authCode e redirectUri são obrigatórios.');
+        }
+
+        try {
+            const tokens = await exchangeGoogleAuthCode({ authCode, redirectUri });
+
+            const accessToken = tokens.access_token || '';
+            const refreshToken = tokens.refresh_token || '';
+            const expiresIn = Number(tokens.expires_in || 0);
+            const expiresAt = expiresIn ? Date.now() + (expiresIn * 1000) : null;
+
+            const userInfo = await fetchGoogleUserInfo(accessToken);
+
+            const ref = db
+                .collection('empresas')
+                .doc(String(empresaId))
+                .collection('integrations')
+                .doc('google_calendar');
+
+            const existing = await ref.get();
+            const existingData = existing.exists ? (existing.data() || {}) : {};
+            const existingRefresh = existingData.refreshToken || '';
+            const refreshEncrypted =
+                refreshToken ? encryptValue(refreshToken) : existingRefresh || '';
+
+            if (!refreshEncrypted) {
+                throw new HttpsError(
+                    'failed-precondition',
+                    'Google não retornou refresh_token. Confirme login com acesso offline (prompt=consent).'
+                );
+            }
+
+            await ref.set({
+                connected: true,
+                provider: 'google',
+                email: userInfo?.email || existingData.email || '',
+                displayName: userInfo?.name || existingData.displayName || '',
+                photoUrl: userInfo?.picture || existingData.photoUrl || '',
+                accessToken: accessToken ? encryptValue(accessToken) : admin.firestore.FieldValue.delete(),
+                refreshToken: refreshEncrypted,
+                scope: tokens.scope || existingData.scope || '',
+                tokenType: tokens.token_type || existingData.tokenType || '',
+                expiresAt: expiresAt || existingData.expiresAt || null,
+                updatedBy: request.auth.uid,
+                connectedAt: existingData.connectedAt || admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            }, { merge: true });
+
+            return {
+                ok: true,
+                email: userInfo?.email || existingData.email || '',
+                displayName: userInfo?.name || existingData.displayName || '',
+            };
+        } catch (e) {
+            const msg = e?.response?.data?.error_description || e?.message || 'Erro ao conectar Google Agenda';
+            logger.error('[connectGoogleCalendar] erro', { err: msg });
+            throw new HttpsError('internal', msg);
+        }
+    }
+);
+
+exports.getGoogleCalendarOAuthUrl = onCall(async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
+    const { empresaId } = request.data || {};
+    if (!empresaId) {
+        throw new HttpsError('invalid-argument', 'empresaId é obrigatório.');
+    }
+
+    const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT;
+    const region = process.env.FUNCTION_REGION || 'us-central1';
+    if (!projectId) {
+        throw new HttpsError('internal', 'Project ID não encontrado.');
+    }
+
+    const url = `https://${region}-${projectId}.cloudfunctions.net/googleCalendarOAuthStart?empresaId=${encodeURIComponent(empresaId)}`;
+    return { url };
+});
+
+exports.googleCalendarOAuthStart = onRequest(
+    { secrets: [GOOGLE_OAUTH_CLIENT_ID] },
+    async (req, res) => {
+        try {
+            const empresaId = String(req.query.empresaId || '').trim();
+            if (!empresaId) {
+                return res.status(400).send('empresaId é obrigatório');
+            }
+
+            const clientId = GOOGLE_OAUTH_CLIENT_ID.value();
+            const host = req.get('host');
+            const redirectUri = `https://${host}/googleCalendarOAuthCallback`;
+
+            const state = `${empresaId}:${crypto.randomUUID()}`;
+
+            const ref = db
+                .collection('empresas')
+                .doc(empresaId)
+                .collection('integrations')
+                .doc('google_calendar');
+
+            await ref.set({
+                oauthState: state,
+                oauthStateCreatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            }, { merge: true });
+
+            const scope = encodeURIComponent(GOOGLE_CALENDAR_SCOPES.join(' '));
+            const authUrl =
+                'https://accounts.google.com/o/oauth2/v2/auth' +
+                `?client_id=${encodeURIComponent(clientId)}` +
+                `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+                '&response_type=code' +
+                '&access_type=offline' +
+                '&prompt=consent' +
+                `&scope=${scope}` +
+                `&state=${encodeURIComponent(state)}`;
+
+            return res.redirect(authUrl);
+        } catch (e) {
+            logger.error('[googleCalendarOAuthStart] erro', { err: e?.message });
+            return res.status(500).send('Erro ao iniciar OAuth');
+        }
+    }
+);
+
+exports.googleCalendarOAuthCallback = onRequest(
+    { secrets: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, ENCRYPTION_KEY] },
+    async (req, res) => {
+        try {
+            const error = String(req.query.error || '').trim();
+            if (error) {
+                return res.status(400).send(`Erro OAuth: ${error}`);
+            }
+
+            const code = String(req.query.code || '').trim();
+            const state = String(req.query.state || '').trim();
+            if (!code || !state) {
+                return res.status(400).send('code/state ausentes');
+            }
+
+            const parts = state.split(':');
+            const empresaId = parts[0] || '';
+            if (!empresaId) {
+                return res.status(400).send('state inválido');
+            }
+
+            const ref = db
+                .collection('empresas')
+                .doc(empresaId)
+                .collection('integrations')
+                .doc('google_calendar');
+
+            const snap = await ref.get();
+            const data = snap.exists ? (snap.data() || {}) : {};
+            if (data.oauthState !== state) {
+                return res.status(400).send('state inválido');
+            }
+
+            const host = req.get('host');
+            const redirectUri = `https://${host}/googleCalendarOAuthCallback`;
+
+            const tokens = await exchangeGoogleAuthCode({
+                authCode: code,
+                redirectUri,
+            });
+
+            const accessToken = tokens.access_token || '';
+            const refreshToken = tokens.refresh_token || '';
+            const expiresIn = Number(tokens.expires_in || 0);
+            const expiresAt = expiresIn ? Date.now() + (expiresIn * 1000) : null;
+
+            const userInfo = await fetchGoogleUserInfo(accessToken);
+
+            if (!refreshToken) {
+                return res.status(400).send('Google não retornou refresh_token.');
+            }
+
+            await ref.set({
+                connected: true,
+                provider: 'google',
+                email: userInfo?.email || data.email || '',
+                displayName: userInfo?.name || data.displayName || '',
+                photoUrl: userInfo?.picture || data.photoUrl || '',
+                accessToken: accessToken ? encryptValue(accessToken) : admin.firestore.FieldValue.delete(),
+                refreshToken: encryptValue(refreshToken),
+                scope: tokens.scope || data.scope || '',
+                tokenType: tokens.token_type || data.tokenType || '',
+                expiresAt: expiresAt || data.expiresAt || null,
+                oauthState: admin.firestore.FieldValue.delete(),
+                oauthStateCreatedAt: admin.firestore.FieldValue.delete(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            }, { merge: true });
+
+            return res.status(200).send(
+                '<html><body style="font-family:Arial,sans-serif;">' +
+                '<h3>Agenda conectada com sucesso.</h3>' +
+                '<p>Você já pode voltar para o app.</p>' +
+                '<script>window.close();</script>' +
+                '</body></html>'
+            );
+        } catch (e) {
+            logger.error('[googleCalendarOAuthCallback] erro', { err: e?.message });
+            return res.status(500).send('Erro ao finalizar OAuth');
+        }
+    }
+);
+
+async function getGoogleCalendarTokens(empresaId) {
+    const ref = db
+        .collection('empresas')
+        .doc(String(empresaId))
+        .collection('integrations')
+        .doc('google_calendar');
+
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError('failed-precondition', 'Google Agenda não conectada.');
+
+    const data = snap.data() || {};
+    if (data.connected !== true || !data.refreshToken) {
+        throw new HttpsError('failed-precondition', 'Google Agenda não conectada.');
+    }
+
+    return { ref, data };
+}
+
+async function refreshGoogleAccessToken(refreshToken) {
+    const clientId = GOOGLE_OAUTH_CLIENT_ID.value();
+    const clientSecret = GOOGLE_OAUTH_CLIENT_SECRET.value();
+
+    const body = new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+    });
+
+    const resp = await axios.post(
+        'https://oauth2.googleapis.com/token',
+        body.toString(),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+    return resp.data || {};
+}
+
+async function ensureGoogleAccessToken({ empresaId }) {
+    const { ref, data } = await getGoogleCalendarTokens(empresaId);
+    const now = Date.now();
+    const expiresAt = Number(data.expiresAt || 0);
+    let accessToken = data.accessToken ? decryptValue(data.accessToken) : '';
+
+    if (!accessToken || (expiresAt && now > (expiresAt - 60000))) {
+        const refreshToken = decryptValue(data.refreshToken);
+        const refreshed = await refreshGoogleAccessToken(refreshToken);
+        accessToken = refreshed.access_token || accessToken;
+        const newExpiresAt = refreshed.expires_in
+            ? now + (Number(refreshed.expires_in) * 1000)
+            : expiresAt || null;
+
+        await ref.set({
+            accessToken: accessToken ? encryptValue(accessToken) : admin.firestore.FieldValue.delete(),
+            expiresAt: newExpiresAt,
+            tokenType: refreshed.token_type || data.tokenType || '',
+            scope: refreshed.scope || data.scope || '',
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+    }
+
+    if (!accessToken) throw new HttpsError('internal', 'Falha ao obter access token.');
+    return accessToken;
+}
+
+function getLocalDateParts(date, timeZone) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        weekday: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+    }).formatToParts(date);
+
+    const get = (type) => parts.find(p => p.type === type)?.value;
+    const weekday = get('weekday'); // Mon, Tue...
+    return {
+        year: Number(get('year')),
+        month: Number(get('month')),
+        day: Number(get('day')),
+        weekday,
+    };
+}
+
+function getLocalParts(date, timeZone) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        weekday: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }).formatToParts(date);
+
+    const get = (type) => parts.find(p => p.type === type)?.value;
+    return {
+        year: Number(get('year')),
+        month: Number(get('month')),
+        day: Number(get('day')),
+        weekday: get('weekday'),
+        hour: Number(get('hour')),
+        minute: Number(get('minute')),
+    };
+}
+
+function getTimeZoneOffsetMinutes(date, timeZone) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+    }).formatToParts(date);
+
+    const get = (type) => parts.find(p => p.type === type)?.value;
+    const y = Number(get('year'));
+    const m = Number(get('month'));
+    const d = Number(get('day'));
+    const h = Number(get('hour'));
+    const min = Number(get('minute'));
+    const s = Number(get('second'));
+
+    const asUtc = Date.UTC(y, m - 1, d, h, min, s);
+    return (asUtc - date.getTime()) / 60000;
+}
+
+function makeDateInTimeZone({ year, month, day, hour, minute, timeZone }) {
+    const utcDate = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+    const offset = getTimeZoneOffsetMinutes(utcDate, timeZone);
+    return new Date(utcDate.getTime() - offset * 60000);
+}
+
+function rangesOverlap(aStart, aEnd, bStart, bEnd) {
+    return aStart < bEnd && aEnd > bStart;
+}
+
+function formatSlotLabel(isoStart, timeZone) {
+    const dt = new Date(isoStart);
+    const dateFmt = new Intl.DateTimeFormat('pt-BR', {
+        timeZone,
+        weekday: 'short',
+        day: '2-digit',
+        month: '2-digit',
+    });
+    const timeFmt = new Intl.DateTimeFormat('pt-BR', {
+        timeZone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+    return `${dateFmt.format(dt)} às ${timeFmt.format(dt)}`.replace('.', '');
+}
+
+function parseUserSchedulePreference(text) {
+    const t = String(text || '').toLowerCase();
+
+    const timeMatch = t.match(/\b(\d{1,2})(?:[:h](\d{2}))?\b/);
+    const hour = timeMatch ? Number(timeMatch[1]) : null;
+    const minute = timeMatch ? Number(timeMatch[2] || '0') : null;
+
+    const dateMatch = t.match(/\b(\d{1,2})[\/\-](\d{1,2})\b/);
+    const day = dateMatch ? Number(dateMatch[1]) : null;
+    const month = dateMatch ? Number(dateMatch[2]) : null;
+
+    const weekdayMap = {
+        'segunda': 'Mon', 'seg': 'Mon',
+        'terça': 'Tue', 'terca': 'Tue', 'ter': 'Tue',
+        'quarta': 'Wed', 'qua': 'Wed',
+        'quinta': 'Thu', 'qui': 'Thu',
+        'sexta': 'Fri', 'sex': 'Fri',
+        'sábado': 'Sat', 'sabado': 'Sat', 'sab': 'Sat',
+        'domingo': 'Sun', 'dom': 'Sun',
+    };
+
+    let weekday = null;
+    for (const [key, val] of Object.entries(weekdayMap)) {
+        if (t.includes(key)) { weekday = val; break; }
+    }
+
+    const wantsTomorrow = t.includes('amanhã') || t.includes('amanha');
+
+    return { hour, minute, day, month, weekday, wantsTomorrow };
+}
+
+function parseSlotLabelToParts(text) {
+    const t = String(text || '').toLowerCase();
+    const dateMatch = t.match(/\b(\d{1,2})\/(\d{1,2})\b/);
+    const timeMatch = t.match(/\b(\d{1,2}):(\d{2})\b/);
+    const day = dateMatch ? Number(dateMatch[1]) : null;
+    const month = dateMatch ? Number(dateMatch[2]) : null;
+    const hour = timeMatch ? Number(timeMatch[1]) : null;
+    const minute = timeMatch ? Number(timeMatch[2]) : null;
+    return { day, month, hour, minute };
+}
+
+function filterSlotsByPreference(slots, preference, timeZone) {
+    const { day, month, weekday, wantsTomorrow } = preference;
+    const now = new Date();
+    const tomorrow = new Date(now.getTime() + 86400000);
+    const tomorrowParts = getLocalDateParts(tomorrow, timeZone);
+
+    return slots.filter((s) => {
+        const p = getLocalParts(new Date(s.start), timeZone);
+
+        if (wantsTomorrow) {
+            if (p.day !== tomorrowParts.day || p.month !== tomorrowParts.month) return false;
+        }
+
+        if (day != null && month != null) {
+            if (p.day !== day || p.month !== month) return false;
+        } else if (day != null) {
+            if (p.day !== day) return false;
+        }
+
+        if (weekday && p.weekday !== weekday) return false;
+        return true;
+    });
+}
+
+function formatSlotList(slots, timeZone, limit = 8) {
+    return slots.slice(0, limit).map((s) =>
+        `- ${formatSlotLabel(s.start, timeZone)}`
+    ).join('\n');
+}
+
+function formatSlotNatural(isoStart, timeZone) {
+    const dt = new Date(isoStart);
+    const dateFmt = new Intl.DateTimeFormat('pt-BR', {
+        timeZone,
+        weekday: 'long',
+        day: '2-digit',
+        month: '2-digit',
+    }).format(dt);
+    const timeFmt = new Intl.DateTimeFormat('pt-BR', {
+        timeZone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }).format(dt);
+    return `${dateFmt} às ${timeFmt}`.replace('-feira', '');
+}
+
+function parseUserFromPending(slots, messageText, timeZone) {
+    if (!slots || !slots.length) return null;
+    const msg = String(messageText || '').trim();
+    for (const s of slots) {
+        const label = formatSlotLabel(s.start, timeZone);
+        if (msg.toLowerCase().includes(label.toLowerCase())) return s;
+    }
+
+    const parsed = parseSlotLabelToParts(msg);
+    if (parsed.hour == null) return null;
+
+    const match = slots.find((s) => {
+        const p = getLocalParts(new Date(s.start), timeZone);
+        if (parsed.day != null && parsed.month != null) {
+            if (p.day !== parsed.day || p.month !== parsed.month) return false;
+        }
+        if (p.hour !== parsed.hour) return false;
+        if (parsed.minute != null && p.minute !== parsed.minute) return false;
+        return true;
+    });
+    return match || null;
+}
+
+function findMatchingSlot(slots, preference, timeZone) {
+    const { hour, minute, day, month, weekday, wantsTomorrow } = preference;
+    if (hour == null) return null;
+
+    const now = new Date();
+    const tomorrow = new Date(now.getTime() + 86400000);
+    const tomorrowParts = getLocalDateParts(tomorrow, timeZone);
+
+    for (const s of slots) {
+        const p = getLocalParts(new Date(s.start), timeZone);
+
+        if (wantsTomorrow) {
+            if (p.day !== tomorrowParts.day || p.month !== tomorrowParts.month) continue;
+        }
+
+        if (day != null && month != null) {
+            if (p.day !== day || p.month !== month) continue;
+        }
+
+        if (weekday && p.weekday !== weekday) continue;
+        if (p.hour !== hour) continue;
+        if (minute != null && p.minute !== minute) continue;
+
+        return s;
+    }
+    return null;
+}
+
+async function createGoogleCalendarEventInternal({
+    empresaId,
+    calendarId = 'primary',
+    timeZone = 'America/Sao_Paulo',
+    startIso,
+    endIso,
+    summary,
+    description,
+}) {
+    const accessToken = await ensureGoogleAccessToken({ empresaId });
+    const event = {
+        summary: summary || 'Reunião de diagnóstico',
+        description: description || '',
+        start: { dateTime: startIso, timeZone },
+        end: { dateTime: endIso, timeZone },
+    };
+    const resp = await axios.post(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+        event,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    return resp.data || {};
+}
+
+async function computeAvailableSlots({
+    empresaId,
+    calendarId = 'primary',
+    timeZone = 'America/Sao_Paulo',
+    daysAhead = 7,
+    durationMinutes = 60,
+    stepMinutes = 30,
+}) {
+    const accessToken = await ensureGoogleAccessToken({ empresaId });
+
+    const now = new Date();
+    const todayLocal = getLocalDateParts(now, timeZone);
+    const baseUtc = new Date(Date.UTC(todayLocal.year, todayLocal.month - 1, todayLocal.day, 12, 0, 0));
+
+    const windows = [
+        { start: { h: 8, m: 0 }, end: { h: 12, m: 0 } },
+        { start: { h: 13, m: 30 }, end: { h: 16, m: 0 } },
+    ];
+
+    const weekdaySet = new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+    const slots = [];
+
+    for (let i = 1; i <= Number(daysAhead); i++) {
+        const dayUtc = new Date(baseUtc.getTime() + i * 86400000);
+        const dayParts = getLocalDateParts(dayUtc, timeZone);
+        if (!weekdaySet.has(dayParts.weekday)) continue;
+
+        for (const w of windows) {
+            const startMinutes = w.start.h * 60 + w.start.m;
+            const endMinutes = w.end.h * 60 + w.end.m;
+            for (let t = startMinutes; t + durationMinutes <= endMinutes; t += stepMinutes) {
+                const h = Math.floor(t / 60);
+                const m = t % 60;
+                const start = makeDateInTimeZone({
+                    year: dayParts.year,
+                    month: dayParts.month,
+                    day: dayParts.day,
+                    hour: h,
+                    minute: m,
+                    timeZone,
+                });
+                const end = new Date(start.getTime() + durationMinutes * 60000);
+                slots.push({ start, end });
+            }
+        }
+    }
+
+    if (!slots.length) return [];
+
+    const timeMin = slots[0].start.toISOString();
+    const timeMax = slots[slots.length - 1].end.toISOString();
+
+    let fbResp;
+    try {
+        fbResp = await axios.post(
+            'https://www.googleapis.com/calendar/v3/freeBusy',
+            {
+                timeMin,
+                timeMax,
+                timeZone,
+                items: [{ id: calendarId }],
+            },
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+    } catch (e) {
+        const status = e?.response?.status;
+        const data = e?.response?.data;
+        logger.warn('[GoogleCalendar] freeBusy falhou', { status, data });
+        if (status === 401 || status === 403) {
+            throw new HttpsError(
+                'failed-precondition',
+                'Sem permissão para acessar a agenda. Reconecte o Google Agenda.'
+            );
+        }
+        throw e;
+    }
+
+    const busy = (fbResp.data?.calendars?.[calendarId]?.busy || []).map((b) => ({
+        start: new Date(b.start),
+        end: new Date(b.end),
+    }));
+
+    return slots
+        .filter((s) => !busy.some((b) => rangesOverlap(s.start, s.end, b.start, b.end)))
+        .map((s) => ({
+            start: s.start.toISOString(),
+            end: s.end.toISOString(),
+        }));
+}
+
+exports.suggestGoogleCalendarSlots = onCall(
+    { secrets: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, ENCRYPTION_KEY] },
+    async (request) => {
+        if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
+
+        const {
+            empresaId,
+            calendarId = 'primary',
+            timeZone = 'America/Sao_Paulo',
+            daysAhead = 7,
+            durationMinutes = 60,
+            stepMinutes = 30,
+        } = request.data || {};
+
+        if (!empresaId) {
+            throw new HttpsError('invalid-argument', 'empresaId é obrigatório.');
+        }
+
+        const slots = await computeAvailableSlots({
+            empresaId,
+            calendarId,
+            timeZone,
+            daysAhead,
+            durationMinutes,
+            stepMinutes,
+        });
+
+        return { timeZone, slots };
+    }
+);
+
+exports.listGoogleCalendarEvents = onCall(
+    { secrets: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, ENCRYPTION_KEY] },
+    async (request) => {
+        if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
+
+        const { empresaId, timeMin, timeMax, calendarId = 'primary' } = request.data || {};
+        if (!empresaId || !timeMin || !timeMax) {
+            throw new HttpsError('invalid-argument', 'empresaId, timeMin e timeMax são obrigatórios.');
+        }
+
+        const accessToken = await ensureGoogleAccessToken({ empresaId });
+
+        const resp = await axios.get(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+            {
+                headers: { Authorization: `Bearer ${accessToken}` },
+                params: {
+                    timeMin,
+                    timeMax,
+                    singleEvents: true,
+                    orderBy: 'startTime',
+                },
+            }
+        );
+
+        return resp.data || {};
+    }
+);
+
+exports.createGoogleCalendarEvent = onCall(
+    { secrets: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, ENCRYPTION_KEY] },
+    async (request) => {
+        if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
+
+        const { empresaId, calendarId = 'primary', event } = request.data || {};
+        if (!empresaId || !event) {
+            throw new HttpsError('invalid-argument', 'empresaId e event são obrigatórios.');
+        }
+
+        const accessToken = await ensureGoogleAccessToken({ empresaId });
+
+        const resp = await axios.post(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+            event,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+
+        return resp.data || {};
+    }
+);
+
+exports.updateGoogleCalendarEvent = onCall(
+    { secrets: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, ENCRYPTION_KEY] },
+    async (request) => {
+        if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
+
+        const { empresaId, calendarId = 'primary', eventId, event } = request.data || {};
+        if (!empresaId || !eventId || !event) {
+            throw new HttpsError('invalid-argument', 'empresaId, eventId e event são obrigatórios.');
+        }
+
+        const accessToken = await ensureGoogleAccessToken({ empresaId });
+
+        const resp = await axios.patch(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+            event,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+
+        return resp.data || {};
+    }
+);
+
+exports.deleteGoogleCalendarEvent = onCall(
+    { secrets: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, ENCRYPTION_KEY] },
+    async (request) => {
+        if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
+
+        const { empresaId, calendarId = 'primary', eventId } = request.data || {};
+        if (!empresaId || !eventId) {
+            throw new HttpsError('invalid-argument', 'empresaId e eventId são obrigatórios.');
+        }
+
+        const accessToken = await ensureGoogleAccessToken({ empresaId });
+
+        await axios.delete(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+
+        return { ok: true };
+    }
+);
+
+exports.disconnectGoogleCalendar = onCall(
+    { secrets: [ENCRYPTION_KEY] },
+    async (request) => {
+        if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
+
+        const { empresaId } = request.data || {};
+        if (!empresaId) {
+            throw new HttpsError('invalid-argument', 'empresaId é obrigatório.');
+        }
+
+        const ref = db
+            .collection('empresas')
+            .doc(String(empresaId))
+            .collection('integrations')
+            .doc('google_calendar');
+
+        const snap = await ref.get();
+        const data = snap.exists ? (snap.data() || {}) : {};
+        const refreshEnc = data.refreshToken || '';
+
+        try {
+            if (refreshEnc) {
+                const refreshToken = decryptValue(refreshEnc);
+                await axios.post(
+                    'https://oauth2.googleapis.com/revoke',
+                    new URLSearchParams({ token: refreshToken }).toString(),
+                    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+                );
+            }
+        } catch (e) {
+            logger.warn('[disconnectGoogleCalendar] revoke falhou', { err: e?.message });
+        }
+
+        await ref.set({
+            connected: false,
+            accessToken: admin.firestore.FieldValue.delete(),
+            refreshToken: admin.firestore.FieldValue.delete(),
+            scope: admin.firestore.FieldValue.delete(),
+            tokenType: admin.firestore.FieldValue.delete(),
+            expiresAt: admin.firestore.FieldValue.delete(),
+            email: admin.firestore.FieldValue.delete(),
+            displayName: admin.firestore.FieldValue.delete(),
+            photoUrl: admin.firestore.FieldValue.delete(),
+            updatedBy: request.auth.uid,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        return { ok: true };
+    }
+);
+
+
+
+
+
+exports.listWorkspacesForSetup = onCall(async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sem permissão.');
+
+    const { apiToken } = request.data;
+    if (!apiToken) throw new HttpsError('invalid-argument', 'Token é obrigatório.');
+
+    try {
+        // Chama a API usando o token fornecido na hora (não o global)
+        const response = await axios.get(
+            `https://api.gptmaker.ai/v2/workspaces`, 
+            { 
+                headers: { 
+                    'Authorization': `Bearer ${apiToken}`,
+                    'Content-Type': 'application/json'
+                } 
+            }
+        );
+
+        const list = Array.isArray(response.data) ? response.data : (response.data.data || []);
+        
+        return list.map(ws => ({
+            id: ws.id,
+            name: ws.name
+        }));
+
+    } catch (error) {
+        logger.error("Erro setup GPT:", error.message);
+        throw new HttpsError('internal', 'Token inválido ou erro na API.');
+    }
+});
+
+exports.getGptWorkspaceCredits = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário.');
+
+  const { empresaId, phoneId } = request.data || {};
+  if (!empresaId || !phoneId) {
+    throw new HttpsError('invalid-argument', 'empresaId e phoneId são obrigatórios.');
+  }
+
+  const phoneDoc = await admin.firestore()
+    .collection('empresas').doc(empresaId)
+    .collection('phones').doc(phoneId).get();
+
+  if (!phoneDoc.exists) throw new HttpsError('not-found', 'Telefone não encontrado.');
+
+  const phoneData = phoneDoc.data() || {};
+  const cfg = phoneData.gpt_integration || {};
+  if (!cfg.api_token || !cfg.workspace_id) {
+    throw new HttpsError('failed-precondition', 'GPT Maker não configurado neste telefone.');
+  }
+
+  try {
+    const r = await axios.get(
+      `https://api.gptmaker.ai/v2/workspace/${cfg.workspace_id}/credits`,
+      { headers: { Authorization: `Bearer ${cfg.api_token}` } }
+    );
+    return r.data; // retorna como vier
+  } catch (e) {
+    logger.error('[getGptWorkspaceCredits] erro:', e.response?.data || e.message);
+    throw new HttpsError('internal', 'Erro ao buscar créditos do workspace.');
+  }
+});
+
+
+exports.listGptTrainings = onCall(async (request) => {
+  requireAuth(request);
+
+  const { empresaId, phoneId, agentId, page = 1, pageSize = 10 } = request.data || {};
+  if (!empresaId || !phoneId || !agentId) {
+    throw new HttpsError('invalid-argument', 'empresaId, phoneId e agentId são obrigatórios.');
+  }
+
+  const { token } = await getPhoneGptConfig({ empresaId, phoneId });
+
+  try {
+    const r = await axios.get(
+      `https://api.gptmaker.ai/v2/agent/${agentId}/trainings`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { page, pageSize },
+      }
+    );
+
+    // A API pode devolver formatos diferentes
+    // Tentamos normalizar:
+    const raw = r.data || {};
+    const items = raw.data || raw.items || raw.trainings || (Array.isArray(raw) ? raw : []);
+    const meta = raw.meta || raw.pagination || {};
+
+    return {
+      items,
+      page: meta.page || page,
+      pageSize: meta.pageSize || pageSize,
+      total: meta.total || raw.total || null,
+      hasNext: meta.hasNext ?? null,
+    };
+  } catch (e) {
+    throw new HttpsError('internal', `Erro ao listar trainings: ${e.response?.data?.message || e.message}`);
+  }
+});
+
+/**
+ * CRIAR training TEXT
+ * POST /v2/agent/{agentId}/trainings
+ */
+exports.createGptTrainingText = onCall(async (request) => {
+  requireAuth(request);
+
+  const { empresaId, phoneId, agentId, text } = request.data || {};
+  if (!empresaId || !phoneId || !agentId || !text) {
+    throw new HttpsError('invalid-argument', 'empresaId, phoneId, agentId e text são obrigatórios.');
+  }
+
+  const cleaned = String(text).trim();
+  if (!cleaned) throw new HttpsError('invalid-argument', 'Texto vazio.');
+  if (cleaned.length > 1000) throw new HttpsError('invalid-argument', 'Texto excede 1000 caracteres.');
+
+  const { token } = await getPhoneGptConfig({ empresaId, phoneId });
+
+  try {
+    const r = await axios.post(
+      `https://api.gptmaker.ai/v2/agent/${agentId}/trainings`,
+      { type: 'TEXT', text: cleaned },
+      { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+    );
+
+    return r.data;
+  } catch (e) {
+    throw new HttpsError('internal', `Erro ao criar training: ${e.response?.data?.message || e.message}`);
+  }
+});
+
+/**
+ * UPDATE training TEXT
+ * PUT /v2/training/{trainingId}
+ * (Se der 404, troque para /v2/trainings/{trainingId})
+ */
+// update training (somente TEXT)
+exports.updateGptTrainingText = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário.');
+
+  const { empresaId, phoneId, trainingId, text } = request.data || {};
+  if (!empresaId || !phoneId || !trainingId) {
+    throw new HttpsError('invalid-argument', 'empresaId, phoneId e trainingId são obrigatórios.');
+  }
+  if (typeof text !== 'string' || !text.trim()) {
+    throw new HttpsError('invalid-argument', 'text é obrigatório.');
+  }
+
+  // limite que você quer no app (ex: 1000)
+  const finalText = text.trim().slice(0, 1000);
+
+  try {
+    // 1) pega token do phone
+    const phoneDoc = await admin.firestore()
+      .collection('empresas').doc(empresaId)
+      .collection('phones').doc(phoneId)
+      .get();
+    if (!phoneDoc.exists) throw new HttpsError('not-found', 'Telefone não encontrado.');
+
+    const cfg = phoneDoc.data()?.gpt_integration;
+    if (!cfg?.api_token) return { ok: false, error: 'Sem integração GPT configurada.' };
+
+    const token = cfg.api_token;
+
+    // 2) chama GPT Maker - UPDATE TRAINING
+    // ATENÇÃO: endpoint pode ser /training/{id} ou /trainings/{id}
+    // Se o seu DELETE usa um deles, use o mesmo aqui.
+    const url = `https://api.gptmaker.ai/v2/training/${trainingId}`;
+
+    const resp = await axios.put(
+      url,
+      {
+        type: 'TEXT',     // <<< OBRIGATÓRIO (se não, 400)
+        text: finalText,  // texto do treinamento
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    return resp.data;
+  } catch (err) {
+    logger.error(
+      '[updateGptTrainingText] fail',
+      err?.response?.status,
+      err?.response?.data || err.message
+    );
+    throw new HttpsError(
+      'internal',
+      `Erro ao atualizar treinamento: ${JSON.stringify(err?.response?.data || err.message)}`
+    );
+  }
+});
+
+
+/**
+ * DELETE training
+ * DELETE /v2/training/{trainingId}
+ * (Se der 404, troque para /v2/trainings/{trainingId})
+ */
+exports.deleteGptTraining = onCall(async (request) => {
+  requireAuth(request);
+
+  const { empresaId, phoneId, trainingId } = request.data || {};
+  if (!empresaId || !phoneId || !trainingId) {
+    throw new HttpsError('invalid-argument', 'empresaId, phoneId e trainingId são obrigatórios.');
+  }
+
+  const { token } = await getPhoneGptConfig({ empresaId, phoneId });
+
+  try {
+    const r = await axios.delete(
+      `https://api.gptmaker.ai/v2/training/${trainingId}`, // <- ajuste se necessário
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    return r.data ?? { success: true };
+  } catch (e) {
+    throw new HttpsError('internal', `Erro ao deletar training: ${e.response?.data?.message || e.message}`);
+  }
+});
+
+
+
+
 exports.sendMessage = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req, res) => {
+  // CORS
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.status(204).send("");
+
+  logger.info("sendMessage function called");
+
+  // Ignora callbacks da Z-API (payloads com "type")
+  if (req.body?.type) return res.status(200).send("Callback ignorado");
+  if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
+
+  try {
+    const {
+      empresaId,
+      phoneId,
+      chatId,
+      message,
+      caption,
+      fileType,
+      fileData,
+      clientMessageId,
+
+      // ✅ opcionais
+      senderType: senderTypeRaw,
+      senderName: senderNameRaw,
+      senderUid,
+    } = req.body;
+
+    const finalCaption = (
+      typeof caption === "string"
+        ? caption
+        : (typeof message === "string" ? message : "")
+    ).trim();
+
+    const viewOnce = req.body.viewOnce === true;
+
+    const { phoneDocRef, chatDocRef, msgsColRef } = getChatRefs(empresaId, phoneId, chatId);
+
+    // Validação mínima
+    if (!chatId || (!message && !fileData && fileType !== "read")) {
+      logger.warn("Parâmetros ausentes", { chatId, hasMessage: !!message, hasFile: !!fileData, fileType });
+      return res.status(400).send("Faltam parâmetros");
+    }
+
+    // Idempotência (se cliente não mandar, geramos um)
+    const uniqueId = clientMessageId || `${chatId}_${Date.now()}`;
+
+    // Sempre enviar phone apenas com dígitos
+    const phoneDigits = (chatId || "").toString().replace(/\D/g, "");
+
+    // Credenciais Z-API (descriptografa ou cai nas envs)
+    const phoneData = (await phoneDocRef.get()).data() || {};
+    const instanceId  = decryptIfNeeded(phoneData.instanceId)  || process.env.ZAPI_ID;
+    const token       = decryptIfNeeded(phoneData.token)       || process.env.ZAPI_TOKEN;
+    const clientToken = decryptIfNeeded(phoneData.clientToken) || process.env.ZAPI_CLIENT_TOKEN;
+
+    if (!instanceId || !token || !clientToken) {
+      logger.error("Credenciais Z-API ausentes (verifique doc phones ou variáveis de ambiente)");
+      return res.status(500).send("Configuração do backend incorreta");
+    }
+
+    logger.info("Credenciais Z-API obtidas", {
+      instanceId: instanceId?.slice?.(0, 6) + "…",
+      token: "***",
+      clientToken: "***",
+    });
+
+    // Headers exigidos pela Z-API (use 'client-token' em minúsculas)
+    const headers = { "client-token": clientToken };
+
+    /* ─────────────────────────────
+     *  SUPORTE A fileType === "read"
+     * ───────────────────────────── */
+    if (fileType === "read") {
+      const modifyPayload = { phone: phoneDigits, action: "read" };
+      logger.info("Marcando chat como lido via Z-API");
+
+      await callZ(instanceId, token, "/modify-chat", modifyPayload, headers, 15000);
+
+      const unreadSnap = await msgsColRef.where("read", "==", false).get();
+      const batch = admin.firestore().batch();
+      unreadSnap.docs.forEach((d) => batch.set(d.ref, { read: true }, { merge: true }));
+      batch.set(chatDocRef, { unreadCount: 0 }, { merge: true });
+      await batch.commit();
+
+      return res.status(200).send({ value: true });
+    }
+
+   // ✅ helper: resolve nome real (human) e nome do bot (ai)
+    const resolveSenderName = async ({ senderType, senderUid, senderNameRaw }) => {
+    const explicit = String(senderNameRaw || "").trim();
+    if (explicit) return explicit;
+
+    // Nome dinâmico do BOT pelo phoneData (se você já salva isso lá)
+    if (senderType === "ai") {
+        const botName =
+        String(phoneData?.ai_agent?.name || phoneData?.ai_agent?.agentName || "").trim() || "OPI";
+        return botName;
+    }
+
+    // ✅ Nome real do HUMANO pelo UID: users/{uid}.name
+    if (senderType === "human" && senderUid) {
+        const uid = String(senderUid).trim();
+        if (!uid) return "Atendente";
+
+        try {
+        const snap = await admin.firestore().doc(`users/${uid}`).get();
+        if (snap.exists) {
+            const d = snap.data() || {};
+            const name = String(d.name || "").trim();
+            if (name) return name;
+        }
+        } catch (e) {
+        logger.warn("[sendMessage] Falha ao buscar nome do user", { uid, err: e?.message || e });
+        }
+
+        return "Atendente";
+    }
+
+    if (senderType === "system") return "Sistema";
+    return "";
+    };
+
+
+    // ✅ Resolve senderType/senderName com defaults seguros
+    const normalizedSenderType = String(senderTypeRaw || "").trim().toLowerCase();
+    const normalizedSenderName = String(senderNameRaw || "").trim();
+
+    const isManualSend = fileType !== "read";
+
+    // Se não veio senderType:
+    // - envios manuais => human
+    // - automações => ai
+    const senderType =
+      (normalizedSenderType === "human" ||
+        normalizedSenderType === "ai" ||
+        normalizedSenderType === "lead" ||
+        normalizedSenderType === "system")
+        ? normalizedSenderType
+        : (isManualSend ? "human" : "ai");
+
+    // ✅ Nome final: humano pega do UID, bot pega do phone, ou usa senderName do req se veio
+    const senderName = await resolveSenderName({
+      senderType,
+      senderUid,
+      senderNameRaw: normalizedSenderName,
+    });
+
+    const chatSnap = await chatDocRef.get();
+    const chatData = chatSnap.data() || {};
+
+    // ✅ flip pra human somente se a mensagem for HUMANA
+    const curAiMode = (chatData.aiMode || "ai");
+    const curStatus = (chatData.status || "novo");
+
+    const shouldFlipToHuman =
+      isManualSend &&
+      senderType === "human" &&
+      (curAiMode !== "human" || curStatus !== "atendendo");
+
+    if (shouldFlipToHuman) {
+      await admin.firestore().runTransaction(async (tx) => {
+        const fresh = await tx.get(chatDocRef);
+        const d = fresh.data() || {};
+        const aiModeNow = d.aiMode || "ai";
+        const statusNow = d.status || "novo";
+
+        if (aiModeNow === "human" && statusNow === "atendendo") return;
+
+        tx.set(
+          chatDocRef,
+          {
+            aiMode: "human",
+            status: "atendendo",
+            humanStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        // system marker (aparece no chat)
+        tx.set(msgsColRef.doc(), {
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          fromMe: false,
+          type: "system",
+          content: "🧑‍💼 Atendimento iniciado — IA desativada",
+          senderType: "system",
+          senderName: "Sistema",
+          event: "human_took_over",
+          read: true,
+          status: "sent",
+        });
+      });
+    }
+
+    // Escolhe endpoint + payload conforme fileType
+    let endpoint = "";
+    let payload = {};
+    let kind = "text";
+
+    if (fileType === "image") {
+      endpoint = "/send-image";
+      kind = "image";
+      let imageData = fileData || "";
+      if (imageData && !/^data:image\//i.test(imageData)) {
+        imageData = "data:image/jpeg;base64," + imageData;
+      }
+      payload = { phone: phoneDigits, image: imageData, caption: finalCaption, viewOnce };
+    } else if (fileType === "audio") {
+      endpoint = "/send-audio";
+      kind = "audio";
+      let audioData = fileData || "";
+      if (audioData && !/^data:audio\//i.test(audioData)) {
+        audioData = "data:audio/mp4;base64," + audioData;
+      }
+      payload = { phone: phoneDigits, audio: audioData, message: message || "" };
+    } else if (fileType === "video") {
+      endpoint = "/send-video";
+      kind = "video";
+      let videoData = fileData || "";
+      if (videoData && !/^data:video\//i.test(videoData)) {
+        videoData = "data:video/mp4;base64," + videoData;
+      }
+      payload = { phone: phoneDigits, video: videoData, caption: finalCaption, viewOnce };
+    } else if (fileType === "file" || fileType === "document") {
+      endpoint = "/send-document";
+      kind = "file";
+      const fileName = req.body.fileName || "arquivo";
+      let docData = fileData || "";
+      if (docData && !/^data:/i.test(docData)) {
+        docData = "data:application/octet-stream;base64," + docData;
+      }
+      payload = { phone: phoneDigits, document: docData, fileName, caption: finalCaption };
+    } else {
+      endpoint = "/send-text";
+      kind = "text";
+      payload = { phone: phoneDigits, message: message || "" };
+    }
+
+    logger.info("Enviando mensagem via Z-API", { kind, chatId, senderType, senderName });
+
+    // Envia via callZ (tenta api-v2 depois api)
+    const { resp: zResp } = await callZ(instanceId, token, endpoint, payload, headers, 15000);
+    const zData = zResp?.data || {};
+
+    // De-dup
+    if (clientMessageId) {
+      const dup = await msgsColRef.where("clientMessageId", "==", uniqueId).limit(1).get();
+      if (!dup.empty) {
+        logger.warn("Mensagem duplicada detectada", { clientMessageId: uniqueId });
+        return res.status(200).send(zData);
+      }
+    }
+
+    // ID da mensagem retornado
+    const zMsgId = zData.messageId || zData.msgId || zData.id || zData.zaapId || null;
+
+    let contentToStore = (kind === "text") ? (message || "") : "";
+    let mediaMeta = null;
+
+    if (kind !== "text") {
+      const upload = await uploadBase64ToStorage({
+        empresaId,
+        phoneId,
+        chatId,
+        uniqueId,
+        kind,
+        data:
+          fileType === "video"
+            ? payload.video
+            : fileType === "audio"
+              ? payload.audio
+              : (fileType === "file" || fileType === "document")
+                ? payload.document
+                : payload.image,
+        fileName: req.body.fileName || null,
+        defaultMime:
+          fileType === "video"
+            ? "video/mp4"
+            : fileType === "audio"
+              ? "audio/mp4"
+              : (fileType === "file" || fileType === "document")
+                ? "application/octet-stream"
+                : "image/jpeg",
+      });
+
+      contentToStore = upload.url;
+
+      let thumbMeta = null;
+
+      if (req.body.thumbData) {
+        let t = String(req.body.thumbData || "");
+        if (t && !/^data:image\//i.test(t)) {
+          const mime = String(req.body.thumbMime || "image/jpeg");
+          t = `data:${mime};base64,${t}`;
+        }
+
+        const thumbUp = await uploadBase64ToStorage({
+          empresaId,
+          phoneId,
+          chatId,
+          uniqueId,
+          kind: "video_thumb",
+          data: t,
+          fileName: "thumb.jpg",
+          defaultMime: String(req.body.thumbMime || "image/jpeg"),
+        });
+
+        thumbMeta = {
+          thumbUrl: thumbUp.url,
+          thumbMime: thumbUp.contentType,
+          thumbSizeBytes: thumbUp.sizeBytes,
+          thumbStoragePath: thumbUp.path,
+        };
+      }
+
+      mediaMeta = {
+        url: upload.url,
+        mime: upload.contentType,
+        sizeBytes: upload.sizeBytes,
+        fileName: upload.fileName,
+        storagePath: upload.path,
+        ...(thumbMeta ? thumbMeta : {}),
+      };
+    }
+
+    // Monta doc Firestore
+    const firestoreData = {
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      fromMe: true,
+
+      // ⚠️ este "sender" era zData.sender (às vezes vem vazio/inesperado).
+      // Mantive seu padrão: zData.sender, com fallback melhor:
+      sender: zData.sender || phoneDigits || null,
+
+      clientMessageId: uniqueId,
+      zapiId: zMsgId,
+      status: "sent",
+      read: false,
+      type: kind,
+      content: contentToStore,
+
+      // ✅ identifica quem enviou (badge)
+      senderType,
+      senderName,
+      ...(senderUid ? { senderUid: String(senderUid) } : {}),
+    };
+
+    if (kind !== "text") {
+      firestoreData.caption = finalCaption;
+      firestoreData.media = mediaMeta;
+    }
+
+    await msgsColRef.add(firestoreData);
+
+    await chatDocRef.set(
+      {
+        chatId,
+        lastMessage:
+          kind === "text"
+            ? (message || "")
+            : (finalCaption ? finalCaption : (kind === "video" ? "📹 Vídeo" : kind === "audio" ? "🎤 Áudio" : "📎 Arquivo")),
+        lastMessageTime: admin.firestore.FieldValue.serverTimestamp(),
+        type: kind,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    return res.status(200).send(zData);
+  } catch (error) {
+    const status = error?.status || error?.response?.status || 500;
+    const data = error?.data || error?.response?.data;
+
+    logger.error("sendMessage failed", {
+      status,
+      message: String(error?.message || error),
+      code: error?.code || null,
+      dataPreview:
+        typeof data === "string"
+          ? data.slice(0, 500)
+          : (data ? JSON.stringify(data).slice(0, 500) : null),
+    });
+
+    return res.status(status).send(data || String(error));
+  }
+});
+
+
+
+
+
+exports.logChatSystemEvent = onCall(async (request) => {
+  // ✅ exige usuário logado
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Login obrigatório.");
+  }
+
+  const { empresaId, phoneId, chatId, content, event, extra } = request.data || {};
+
+  // validação mínima
+  if (!empresaId || !phoneId || !chatId || !content) {
+    throw new HttpsError("invalid-argument", "Parâmetros ausentes.");
+  }
+
+  const uid = request.auth.uid;
+
+  // (Opcional) pega nome do usuário logado (se existir no token)
+  const actorName =
+    request.auth.token?.name ||
+    request.auth.token?.email ||
+    "Operador";
+
+  const chatDocRef = admin
+    .firestore()
+    .collection("empresas")
+    .doc(String(empresaId))
+    .collection("phones")
+    .doc(String(phoneId))
+    .collection("whatsappChats")
+    .doc(String(chatId));
+
+  const msgsColRef = chatDocRef.collection("messages");
+
+  // ✅ grava mensagem de sistema com auditoria
+  await msgsColRef.add({
+    type: "system",
+    origin: "system",
+    content: String(content),
+    event: event || null,
+    extra: extra || null,
+
+    actorUid: uid,
+    actorName: String(actorName),
+
+    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { ok: true };
+});
+
+// =============================================================================
+// ENVIAR STATUS "DIGITANDO..." (Para uso do Front-end Humano)
+// =============================================================================
+exports.sendTypingStatus = onRequest(async (req, res) => {
     // CORS
     res.set("Access-Control-Allow-Origin", "*");
     res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
     res.set("Access-Control-Allow-Headers", "Content-Type");
     if (req.method === "OPTIONS") return res.status(204).send("");
 
-    logger.info("sendMessage function called");
-
-    // Ignora callbacks da Z-API (payloads com "type")
-    if (req.body?.type) return res.status(200).send("Callback ignorado");
-    if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
-
     try {
-        const { empresaId, phoneId, chatId, message, caption, fileType, fileData, clientMessageId } = req.body;
+        const { empresaId, phoneId, chatId, status } = req.body; // status: 'composing' ou 'recording'
 
-        const finalCaption = (typeof caption === 'string' ? caption : (typeof message === 'string' ? message : '')).trim();
-
-        const viewOnce = req.body.viewOnce === true;
-
-
-        const { phoneDocRef, chatDocRef, msgsColRef } = getChatRefs(empresaId, phoneId, chatId);
-
-        // Validacão mínima
-        if (!chatId || (!message && !fileData && fileType !== "read")) {
-            logger.warn("Parâmetros ausentes", { chatId, hasMessage: !!message, hasFile: !!fileData, fileType });
-            return res.status(400).send("Faltam parâmetros");
+        if (!empresaId || !phoneId || !chatId) {
+            return res.status(400).send("Faltam parâmetros.");
         }
 
-        // Idempotência (se cliente não mandar, geramos um)
-        const uniqueId = clientMessageId || `${chatId}_${Date.now()}`;
-
-        // Credenciais (descriptografa ou cai nas envs)
+        // Recupera credenciais do banco
+        const { phoneDocRef } = getChatRefs(empresaId, phoneId, chatId);
         const phoneData = (await phoneDocRef.get()).data() || {};
-        const instanceId  = decryptIfNeeded(phoneData.instanceId)  || process.env.ZAPI_ID;
-        const token       = decryptIfNeeded(phoneData.token)       || process.env.ZAPI_TOKEN;
+
+        const instanceId = decryptIfNeeded(phoneData.instanceId) || process.env.ZAPI_ID;
+        const token = decryptIfNeeded(phoneData.token) || process.env.ZAPI_TOKEN;
         const clientToken = decryptIfNeeded(phoneData.clientToken) || process.env.ZAPI_CLIENT_TOKEN;
 
-        if (!instanceId || !token || !clientToken) {
-            logger.error("Credenciais Z-API ausentes (verifique doc phones ou variáveis de ambiente)");
-            return res.status(500).send("Configuração do backend incorreta");
+        if (!instanceId || !token) {
+            return res.status(400).send("Credenciais Z-API não encontradas.");
         }
 
-        logger.info("Credenciais Z-API obtidas", {
-            instanceId: instanceId?.slice?.(0, 6) + '…',
-            token: '***',
-            clientToken: '***'
-        });
+        const phoneDigits = chatId.replace(/\D/g, ''); // Garante só números
+        const presenceType = status === 'recording' ? 'recording' : 'composing';
 
-        // Sempre enviar phone apenas com dígitos
-        const phoneDigits = (chatId || '').toString().replace(/\D/g, '');
+        // Usa a nossa função auxiliar (que você já tem ou eu passei antes)
+        // Se não tiver, chama o axios direto aqui
+        const headers = {};
+        if (clientToken) headers['client-token'] = clientToken;
 
-        // Headers exigidos pela Z-API (use 'client-token' em minúsculas)
-        const headers = { 'client-token': clientToken };
-
-        /* ─────────────────────────────
-         *  SUPORTE A fileType === "read"
-         * ───────────────────────────── */
-        if (fileType === "read") {
-            const modifyPayload = { phone: phoneDigits, action: "read" };
-            logger.info("Marcando chat como lido via Z-API");
-
-            // chama via callZ (fallback de host)
-            await callZ(instanceId, token, '/modify-chat', modifyPayload, headers, 15000);
-
-            // zera contador + marca mensagens como lidas no Firestore
-            const unreadSnap = await msgsColRef.where("read","==",false).get();
-            const batch = admin.firestore().batch();
-            unreadSnap.docs.forEach(d => batch.set(d.ref, { read: true }, { merge: true }));
-            batch.set(chatDocRef, { unreadCount: 0 }, { merge: true });
-            await batch.commit();
-
-            return res.status(200).send({ value: true });
-        }
-
-        // Escolhe endpoint + payload conforme fileType (sempre phone: phoneDigits)
-        let endpoint = "";
-        let payload = {};
-        let kind = "text";
-
-        if (fileType === "image") {
-            endpoint = "/send-image";
-            kind = "image";
-            let imageData = fileData || "";
-            if (imageData && !/^data:image\//i.test(imageData)) {
-                imageData = "data:image/jpeg;base64," + imageData;
-            }
-            payload = {
+        await axios.post(
+            `https://api.z-api.io/instances/${instanceId}/token/${token}/send-presence`,
+            {
                 phone: phoneDigits,
-                image: imageData,
-                caption: finalCaption,     // ✅ Z-API
-                viewOnce: viewOnce,        // ✅ opcional
-            };
+                presence: presenceType
+            },
+            { headers }
+        );
 
-        } else if (fileType === "audio") {
-            endpoint = "/send-audio";
-            kind = "audio";
-            let audioData = fileData || "";
-            if (audioData && !/^data:audio\//i.test(audioData)) {
-                audioData = "data:audio/mp4;base64," + audioData;
-            }
-            payload = { phone: phoneDigits, audio: audioData, message: message || "" };
+        return res.status(200).send({ success: true });
 
-        } else if (fileType === "video") {
-            endpoint = "/send-video";
-            kind = "video";
-
-            let videoData = fileData || "";
-            // ✅ padroniza base64 no formato que a Z-API costuma aceitar melhor
-            if (videoData && !/^data:video\//i.test(videoData)) {
-                videoData = "data:video/mp4;base64," + videoData;
-            }
-
-            payload = {
-                phone: phoneDigits,
-                video: videoData,
-                caption: finalCaption,     // ✅ Z-API
-                viewOnce: viewOnce,        // ✅ opcional
-            };
-
-        } else if (fileType === "file" || fileType === "document") {
-            endpoint = "/send-document";
-            kind = "file";
-
-            const fileName = req.body.fileName || "arquivo";
-            let docData = fileData || "";
-
-            // data uri genérico (serve pra pdf/docx/xlsx etc)
-            if (docData && !/^data:/i.test(docData)) {
-                docData = "data:application/octet-stream;base64," + docData;
-            }
-
-            payload = { phone: phoneDigits, document: docData, fileName, caption: finalCaption };
-
-        } else {
-            endpoint = "/send-text";
-            kind = "text";
-            payload = { phone: phoneDigits, message: message || "" };
-        }
-
-        logger.info("Enviando mensagem via Z-API", { kind, chatId });
-
-        // Envia via callZ (tenta api-v2 depois api)
-        const { host: usedHost, resp: zResp } =
-            await callZ(instanceId, token, endpoint, payload, headers, 15000);
-
-        const zData = zResp?.data || {};
-
-        // De-dup (se cliente mandou um id)
-        if (clientMessageId) {
-            const dup = await msgsColRef.where("clientMessageId","==", uniqueId).limit(1).get();
-            if (!dup.empty) {
-                logger.warn("Mensagem duplicada detectada", { clientMessageId: uniqueId });
-                return res.status(200).send(zData);
-            }
-        }
-
-        // ID da mensagem retornado
-        const zMsgId =
-            zData.messageId || zData.msgId || zData.id || zData.zaapId || null;
-
-        let contentToStore = (kind === 'text') ? (message || '') : '';
-        let mediaMeta = null;
-
-        if (kind !== 'text') {
-            // Para vídeo/áudio/documento: SEMPRE Storage
-            // Para imagem você pode decidir por tamanho, mas pode padronizar também
-            const upload = await uploadBase64ToStorage({
-                empresaId,
-                phoneId,
-                chatId,
-                uniqueId,
-                kind,
-                data: fileType === 'video'
-                    ? (payload.video)         // já está "data:video/mp4;base64,..."
-                    : fileType === 'audio'
-                        ? (payload.audio)
-                        : (fileType === 'file' || fileType === 'document')
-                            ? (payload.document)
-                            : (payload.image),
-                fileName: req.body.fileName || null,
-                defaultMime:
-                    fileType === 'video' ? 'video/mp4' :
-                        fileType === 'audio' ? 'audio/mp4' :
-                            (fileType === 'file' || fileType === 'document') ? 'application/octet-stream' :
-                                'image/jpeg'
-            });
-
-            contentToStore = upload.url;
-
-            let thumbUrl = null;
-            let thumbMeta = null;
-
-            if (req.body.thumbData) {
-                let t = String(req.body.thumbData || '');
-                // se vier só base64, prefixa data-uri
-                if (t && !/^data:image\//i.test(t)) {
-                    const mime = String(req.body.thumbMime || 'image/jpeg');
-                    t = `data:${mime};base64,${t}`;
-                }
-
-                const thumbUp = await uploadBase64ToStorage({
-                    empresaId,
-                    phoneId,
-                    chatId,
-                    uniqueId,
-                    kind: 'video_thumb',
-                    data: t,
-                    fileName: 'thumb.jpg',
-                    defaultMime: String(req.body.thumbMime || 'image/jpeg'),
-                });
-
-                thumbUrl = thumbUp.url;
-                thumbMeta = {
-                    thumbUrl: thumbUp.url,
-                    thumbMime: thumbUp.contentType,
-                    thumbSizeBytes: thumbUp.sizeBytes,
-                    thumbStoragePath: thumbUp.path,
-                };
-            }
-
-            mediaMeta = {
-                url: upload.url,
-                mime: upload.contentType,
-                sizeBytes: upload.sizeBytes,
-                fileName: upload.fileName,
-                storagePath: upload.path,
-                ...(thumbMeta ? thumbMeta : {}),
-            };
-        }
-
-        // Monta doc Firestore
-        const firestoreData = {
-            timestamp       : admin.firestore.FieldValue.serverTimestamp(),
-            fromMe          : true,
-            sender          : zData.sender || null,
-            clientMessageId : uniqueId,
-            zapiId          : zMsgId,
-            status          : 'sent',
-            read            : false,
-            type            : kind,
-            content         : contentToStore, // URL (mídia) ou texto
-        };
-
-        if (kind !== 'text') {
-            firestoreData.caption = finalCaption;
-            firestoreData.media   = mediaMeta;
-        }
-
-        await msgsColRef.add(firestoreData);
-
-        await chatDocRef.set({
-            chatId,
-            lastMessage: kind === 'text'
-                ? (message || '')
-                : (finalCaption ? finalCaption : (kind === 'video' ? '📹 Vídeo' : kind === 'audio' ? '🎤 Áudio' : '📎 Arquivo')),
-            lastMessageTime: admin.firestore.FieldValue.serverTimestamp(),
-            type: kind,
-            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
-
-        return res.status(200).send(zData);
     } catch (error) {
-        const status = error?.status || error?.response?.status || 500;
-        const data = error?.data || error?.response?.data;
-
-        logger.error("sendMessage failed", {
-            status,
-            message: String(error?.message || error),
-            code: error?.code || null,
-            dataPreview: typeof data === 'string'
-                ? data.slice(0, 500)
-                : (data ? JSON.stringify(data).slice(0, 500) : null),
-        });
-
-        return res.status(status).send(data || String(error));
+        logger.warn(`[sendTypingStatus] Erro: ${error.message}`);
+        // Retorna 200 para não quebrar o front, já que é um recurso visual opcional
+        return res.status(200).send({ success: false, error: error.message });
     }
 });
+
+
 
 exports.deleteMessage = functions.https.onRequest(async (req, res) => {
     // Configura CORS
@@ -1380,31 +3542,51 @@ exports.whatsappWebhook = onRequest(
         res.sendStatus(405); // Método não permitido
     });
 
-exports.enableReadReceipts = onRequest(async (req, res) => {
+exports.enableReadReceipts = onRequest(
+  {
+    region: "us-central1",
+    cpu: 0.25,
+    memory: "256MiB",
+    maxInstances: 1,
+    minInstances: 0,
+    timeoutSeconds: 60
+  },
+  async (req, res) => {
     // CORS pre-flight
-    if (req.method === 'OPTIONS') return res.status(204).send('');
+    if (req.method === "OPTIONS") {
+      return res.status(204).send("");
+    }
 
-    const {ZAPI_ID, ZAPI_TOKEN, ZAPI_CLIENT_TOKEN} = process.env;
-    if (!ZAPI_ID || !ZAPI_TOKEN || !ZAPI_CLIENT_TOKEN)
-        return res.status(500).send('Variáveis de ambiente faltando');
+    const { ZAPI_ID, ZAPI_TOKEN, ZAPI_CLIENT_TOKEN } = process.env;
+
+    if (!ZAPI_ID || !ZAPI_TOKEN || !ZAPI_CLIENT_TOKEN) {
+      return res.status(500).send("Variáveis de ambiente faltando");
+    }
 
     try {
-        const url =
-            `https://api.z-api.io/instances/${ZAPI_ID}/token/${ZAPI_TOKEN}` +
-            `/privacy/read-receipts?value=enable`;
+      const url =
+        `https://api.z-api.io/instances/${ZAPI_ID}/token/${ZAPI_TOKEN}` +
+        `/privacy/read-receipts?value=enable`;
 
-        const r = await axios.post(
-            url,
-            {},
-            {headers: {'Client-Token': ZAPI_CLIENT_TOKEN}},
-        );
+      const r = await axios.post(
+        url,
+        {},
+        { headers: { "Client-Token": ZAPI_CLIENT_TOKEN } }
+      );
 
-        return res.status(200).json(r.data);      // { success:true }
+      return res.status(200).json(r.data);
     } catch (err) {
-        console.error('Z-API read-receipts error', err.response?.data || err);
-        return res.status(err.response?.status || 500).send(err.toString());
+      console.error(
+        "Z-API read-receipts error",
+        err.response?.data || err
+      );
+      return res
+        .status(err.response?.status || 500)
+        .send(err.toString());
     }
-});
+  }
+);
+
 
 /* util: carrega credenciais salvas em /phones/{phoneId} */
 /* SUBSTITUA este helper */

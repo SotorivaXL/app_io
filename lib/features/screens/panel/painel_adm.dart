@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import '../chatbot/manage_chatbots.dart';
+import '../ai_agents/manage_agents.dart';
 import '../products/manage_products.dart';
 import '../requests/request_metting.dart';
 import '../requests/requests.dart';
@@ -564,6 +565,16 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                           ),
                           _buildCardOption(
                             context,
+                            title: 'Agente de IA',
+                            subtitle:
+                            'Configure seus agentes de IA',
+                            icon: Icons.psychology_outlined,
+                            onTap: () => _navigateWithFade(
+                                context, ManageAgenteIAPage()),
+                            isDesktop: isDesktop,
+                          ),
+                          _buildCardOption(
+                            context,
                             title: 'Sair da conta',
                             subtitle:
                             'Encerrar sessão neste dispositivo',
@@ -703,6 +714,15 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                     icon: Icons.smart_toy_outlined,
                     onTap: () =>
                         _navigateWithFade(context, ManageChatbotsPage()),
+                    isDesktop: isDesktop,
+                  ),
+                  _buildCardOption(
+                    context,
+                    title: 'Agente de IA',
+                    subtitle: 'Configure seus agentes de IA',
+                    icon: Icons.psychology_outlined,
+                    onTap: () =>
+                        _navigateWithFade(context, ManageAgenteIAPage()),
                     isDesktop: isDesktop,
                   ),
                   _buildCardOption(

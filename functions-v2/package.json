@@ -15,11 +15,12 @@
   "main": "index.js",
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.777.0",
+    "@google-cloud/tasks": "^6.2.1",
     "axios": "^1.7.9",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "firebase-admin": "^13.4.0",
-    "firebase-functions": "^6.4.0",
+    "firebase-functions": "^7.0.3",
     "firebase-tools": "^13.30.0",
     "mysql2": "^3.14.0",
     "punycode": "^2.3.1"
