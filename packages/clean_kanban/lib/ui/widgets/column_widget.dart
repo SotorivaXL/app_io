@@ -131,6 +131,7 @@ class ColumnHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final headerBg = theme.columnBackgroundColor; // Trello: header igual à coluna
     final accent = theme.columnHeaderColor;       // Trello: detalhe em cor
+    final cs = Theme.of(context).colorScheme;
 
     return Container(
       height: KanbanColumnLayout.headerHeight,
@@ -151,8 +152,12 @@ class ColumnHeader extends StatelessWidget {
             width: 10,
             height: 10,
             decoration: BoxDecoration(
-              color: accent,
               shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [cs.primary, cs.tertiary],
+              ),
             ),
           ),
           const SizedBox(width: 10),
@@ -176,7 +181,7 @@ class ColumnHeader extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: accent.withOpacity(.14),
+              color: accent.withOpacity(.25),
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
@@ -186,7 +191,7 @@ class ColumnHeader extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: accent,
+                color: cs.tertiary,
               ),
             ),
           ),

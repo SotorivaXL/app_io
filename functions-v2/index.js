@@ -1468,12 +1468,31 @@ exports.getConnectionStatus = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req,
 const MAX_PHOTO_AGE_HOURS = 4;                      // ↺ a cada 4 h
 const MAX_PHOTO_AGE_MS    = MAX_PHOTO_AGE_HOURS * 3600 * 1_000;
 
-exports.updateContactPhotos = onRequest({ secrets: [ZAPI_ENC_KEY] }, async (req, res) => {
-    /* ──────────────────────────── 1. CORS ───────────────────────────── */
-    res.set('Access-Control-Allow-Origin',  '*');
-    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type');
-    if (req.method === 'OPTIONS') return res.status(204).send('');
+const allowOrigins = [
+    "https://ioconnect.com.br",
+];
+
+function corsOrigin(origin, cb) {
+    // requests sem Origin (curl/postman) devem passar
+    if (!origin) return cb(null, true);
+
+    // libera qualquer localhost (qualquer porta)
+    if (/^http:\/\/localhost:\d+$/.test(origin)) return cb(null, true);
+
+    // libera domínios fixos
+    if (allowOrigins.includes(origin)) return cb(null, true);
+
+    return cb(new Error("Not allowed by CORS"), false);
+}
+
+exports.updateContactPhotos = onRequest(
+    {
+        cors: corsOrigin,
+        invoker: "public",
+        region: "us-central1",
+        secrets: [ZAPI_ENC_KEY],
+    },
+    async (req, res) => {
 
     /* ──────────────────────────── 2. Entrada ─────────────────────────── */
     const { empresaId, phoneId } = req.body || {};
